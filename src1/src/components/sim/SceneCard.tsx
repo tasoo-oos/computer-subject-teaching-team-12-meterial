@@ -11,6 +11,19 @@ const CHANNEL: Record<Scene['channel'], { icon: typeof BellRing; label: string }
 
 export function SceneCard({ event, scene, compact = false }: { event: GameEvent; scene: Scene; compact?: boolean }) {
   const showTitle = !(scene.channel === 'news' && scene.title);
+  if (compact) {
+    return (
+      <article className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-panel bg-sheet px-4 py-2.5 shadow-[0_0_0_1px_var(--color-rule)]">
+        <span className="rounded-[4px] bg-ink px-1.5 py-0.5 text-[11px] font-semibold text-white">{EVENT_TYPE_LABEL[event.type]}</span>
+        <span className="rounded-[4px] border border-rule px-1.5 py-0.5 text-[11px] font-semibold text-ink-2">사건 {event.code}</span>
+        <h2 className="min-w-0 flex-1 truncate text-[15px] font-bold">{scene.title ?? event.title}</h2>
+        <span className="flex items-center gap-1.5 text-[11px] text-ink-3">
+          <ChannelIcon channel={scene.channel} />
+          {CHANNEL[scene.channel].label}
+        </span>
+      </article>
+    );
+  }
   return (
     <article aria-labelledby="scene-title" className="overflow-hidden rounded-panel bg-sheet shadow-[0_0_0_1px_var(--color-rule)]">
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-rule-soft px-4 py-2.5 sm:px-5">
@@ -26,7 +39,7 @@ export function SceneCard({ event, scene, compact = false }: { event: GameEvent;
           </h2>
         ) : null}
       </header>
-      <ChannelBody scene={scene} compact={compact} />
+      <ChannelBody scene={scene} event={event} compact={compact} />
       {scene.reveal?.length && !compact ? <Reveal items={scene.reveal} /> : null}
     </article>
   );
@@ -37,8 +50,8 @@ function ChannelIcon({ channel }: { channel: Scene['channel'] }) {
   return <Icon size={14} aria-hidden />;
 }
 
-function ChannelBody({ scene, compact }: { scene: Scene; compact: boolean }) {
-  if (compact) return <CompactBody scene={scene} />;
+function ChannelBody({ scene, event, compact }: { scene: Scene; event: GameEvent; compact: boolean }) {
+  if (compact) return <CompactBody scene={scene} event={event} />;
   switch (scene.channel) {
     case 'messenger':
       return (
@@ -105,14 +118,14 @@ function ChannelBody({ scene, compact }: { scene: Scene; compact: boolean }) {
 }
 
 /** 이 장면에서 공개된 숫자. 사실 정보라 크게 보여 준다 */
-/** 지불 패널을 열었을 때 장면은 한 줄로 접어 둔다. 맥락은 남기고 높이를 줄인다 */
-function CompactBody({ scene }: { scene: Scene }) {
+/** 지불 패널을 열었을 때 장면은 요약 한 줄로 접어 둔다. 맥락은 남기고 높이를 줄인다 */
+function CompactBody({ scene, event }: { scene: Scene; event: GameEvent }) {
   return (
     <div className="flex items-center gap-2.5 px-4 py-2.5 sm:px-5">
       <ChannelIcon channel={scene.channel} />
       <p className="min-w-0 flex-1 truncate text-[13px] text-ink-2">
         {scene.speaker ? <span className="font-semibold text-ink">{scene.speaker}: </span> : null}
-        {scene.text}
+        {event.summary}
       </p>
     </div>
   );

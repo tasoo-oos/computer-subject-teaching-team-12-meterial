@@ -17,7 +17,7 @@ export function FlowHeader({ current, nickname }: { current: ScreenId; nickname?
       <div className="mx-auto flex max-w-[1200px] items-center gap-3 px-4 py-2.5 sm:px-6">
         <p className="display text-[15px] text-ink sm:text-[17px]">내 첫 월급, 1년 살아 보기</p>
         <p className="num ml-auto text-[12px] font-semibold text-ink-2 sm:hidden">
-          {idx + 1}/6 {SHORT[current]}
+          {idx + 1}단계 {SHORT[current]}
         </p>
         <ol className="ml-auto hidden items-center gap-1 sm:flex" aria-label="수업 단계">
           {SCREEN_ORDER.map((s, i) => {

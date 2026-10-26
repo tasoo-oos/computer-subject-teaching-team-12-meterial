@@ -69,10 +69,10 @@ function RevealStage({ state, onNext }: { state: ScreenProps['state']; onNext: (
         <p className="text-[17px] font-semibold text-ink-2">축하합니다!</p>
         <h1 className="mt-2 text-[26px] font-bold leading-snug sm:text-[33px]">
           {nickname}님의 첫 월급은
-          <span className="num mt-1 block text-[44px] font-bold tracking-tight text-in sm:text-[64px]" aria-live="polite">
+          <span className="num mt-1 block text-[42px] font-bold tracking-tight text-in sm:text-[62px]" aria-live="polite">
             {formatWon(shown)}
+            <span className="ml-1 align-baseline text-[0.42em] font-bold tracking-normal text-ink">입니다</span>
           </span>
-          입니다
         </h1>
         <div className="mt-8 max-w-[30rem]">
           <p className="text-[15px] text-ink-2">

@@ -13,7 +13,7 @@ export function GuideScreen({ state, ui, go, goScreen }: ScreenProps) {
   return (
     <div className="paper-texture min-h-dvh">
       <FlowHeader current="guide" nickname={state.profile.nickname} />
-      <main className="mx-auto max-w-[1100px] px-5 py-6 sm:px-8 sm:py-8">
+      <main className="mx-auto flex min-h-[calc(100dvh-96px)] max-w-[1100px] flex-col justify-center px-5 py-6 sm:px-8 sm:py-8">
         <nav aria-label="안내 카드" className="flex flex-wrap items-center gap-2">
           {GUIDE_CARDS.map((c, i) => (
             <button
@@ -33,7 +33,7 @@ export function GuideScreen({ state, ui, go, goScreen }: ScreenProps) {
 
         <article
           key={card.id}
-          className="sheet-in mt-4 rounded-panel bg-sheet p-5 shadow-[0_0_0_1px_var(--color-rule),0_20px_40px_-30px_rgba(24,38,74,.5)] sm:p-8"
+          className="sheet-in mt-4 rounded-panel bg-sheet p-5 shadow-[0_0_0_1px_var(--color-rule),0_20px_40px_-30px_rgba(24,38,74,.5)] sm:p-8 lg:p-10"
           aria-labelledby="guide-title"
         >
           <div className={isSplit ? '' : 'grid gap-8 md:grid-cols-[1fr_1.1fr]'}>
@@ -41,10 +41,10 @@ export function GuideScreen({ state, ui, go, goScreen }: ScreenProps) {
               <p className="num text-[15px] font-semibold text-ink-2">
                 {index + 1} / {GUIDE_CARDS.length}
               </p>
-              <h1 id="guide-title" className="display mt-1 text-[42px] sm:text-[56px]">
+              <h1 id="guide-title" className="display mt-1 text-[42px] sm:text-[56px] lg:text-[64px]">
                 {card.title}
               </h1>
-              <p className="mt-3 max-w-[34em] text-[19px] leading-relaxed font-medium">{card.lead}</p>
+              <p className="mt-3 max-w-[34em] text-[19px] leading-relaxed font-medium lg:text-[21px]">{card.lead}</p>
             </header>
             {isSplit ? (
               <AccountShelf />

@@ -10,6 +10,7 @@ const KIND_NOTE: Record<string, string> = {
 /** 1~12월 진행. 이벤트가 있는 달과 없는 달을 구분한다 */
 export function MonthStrip({ month }: { month: number }) {
   return (
+    <div>
     <ol className="flex items-end gap-1" aria-label={`12개월 중 ${month}월`}>
       {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
         const kind = monthKind(m);
@@ -21,7 +22,15 @@ export function MonthStrip({ month }: { month: number }) {
             <span
               aria-hidden
               className={`h-1.5 w-full rounded-full ${
-                now ? 'bg-ink' : done ? 'bg-ink/45' : kind === 'quiet' || kind === 'settlement' ? 'bg-rule-soft' : 'bg-rule'
+                now
+                  ? 'bg-ink'
+                  : done
+                    ? 'bg-ink/45'
+                    : kind === 'settlement'
+                      ? 'bg-seal/70'
+                      : kind === 'quiet'
+                        ? 'bg-rule-soft'
+                        : 'bg-rule'
               }`}
             />
             <span
@@ -36,5 +45,11 @@ export function MonthStrip({ month }: { month: number }) {
         );
       })}
     </ol>
+      <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px] leading-none text-ink-3">
+        <span className="flex items-center gap-1"><span aria-hidden className="h-1 w-3 rounded-full bg-rule" />사건 있는 달</span>
+        <span className="flex items-center gap-1"><span aria-hidden className="h-1 w-3 rounded-full bg-rule-soft" />조용한 달</span>
+        <span className="flex items-center gap-1"><span aria-hidden className="h-1 w-3 rounded-full bg-seal/70" />12월 결산</span>
+      </p>
+    </div>
   );
 }

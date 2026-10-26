@@ -2,11 +2,10 @@ import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import {
   emergencyMonths,
-  formatWon,
   getScene,
+  monthKind,
   netWorth,
   type AccountId,
-  type Budget,
   type Choice,
   type GameState,
 } from '@gagyebu/core';
@@ -77,7 +76,14 @@ export function SimScreen({ state, ui, fixture, go, goScreen }: ScreenProps) {
                   {state.profile.nickname}님의 1년 <span className="num text-ink-2">· {state.month}월</span>
                 </p>
                 <p className="text-[11px] text-ink-3">
-                  {state.month === 12 ? '결산' : state.month === 1 ? '연습 달' : step === 'report' ? '월말 정리' : '진행 중'}
+                  {state.month === 1
+                    ? '연습 달'
+                    : monthKind(state.month) === 'settlement'
+                      ? '12월 결산'
+                      : monthKind(state.month) === 'quiet'
+                        ? '조용한 달'
+                        : '사건 있는 달'}
+                  {step === 'report' ? ' · 월말 정리' : ''}
                 </p>
               </div>
               <MonthStrip month={state.month} />
@@ -157,10 +163,3 @@ function highlightAccounts(choice: Choice | null): AccountId[] | undefined {
   if (choice.pay) return choice.pay.sources.filter((s): s is AccountId => s !== 'card');
   return undefined;
 }
-
-/** 금액을 사람이 읽는 문장으로 (보조) */
-export function paySummary(amount: number) {
-  return formatWon(amount);
-}
-
-export type { Budget };

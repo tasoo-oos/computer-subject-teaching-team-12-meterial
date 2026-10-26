@@ -1,4 +1,4 @@
-import { ACCOUNTS, EXPENSES, TRANSFER_ORDER, type ExpenseId, type GameState, type Settlement, type TransferAccountId } from '@gagyebu/core';
+import { ACCOUNTS, EXPENSES, TRANSFER_ORDER, type ExpenseId, type Settlement, type TransferAccountId } from '@gagyebu/core';
 import { Money } from '../Money.tsx';
 
 type DiffKey = ExpenseId | TransferAccountId | 'livingBuffer';

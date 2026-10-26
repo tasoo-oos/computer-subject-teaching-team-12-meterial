@@ -14,7 +14,7 @@ export function NetWorthChart({ state, large = false, height }: Props) {
     : [{ month: state.month, value: 0 }];
   const W = 720;
   const H = height ?? (large ? 340 : 232);
-  const pad = { l: large ? 8 : 68, r: large ? 8 : 12, t: large ? 34 : 22, b: 26 };
+  const pad = { l: large ? 8 : 58, r: large ? 8 : 12, t: large ? 34 : 22, b: 26 };
   const max = Math.max(...pts.map((p) => p.value), 1);
   const min = 0;
   const x = (i: number) => pad.l + (i * (W - pad.l - pad.r)) / Math.max(1, pts.length - 1);
@@ -36,8 +36,8 @@ export function NetWorthChart({ state, large = false, height }: Props) {
           <g key={t}>
             <line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="var(--color-rule-soft)" strokeWidth="1" />
             {!large ? (
-              <text x={pad.l - 6} y={y(t) + 4} textAnchor="end" fontSize="16" fill="var(--color-ink-3)" className="num hidden sm:inline">
-                {t === 0 ? '0' : formatMan(t)}
+              <text x={pad.l - 6} y={y(t) + 4} textAnchor="end" fontSize="15" fill="var(--color-ink-3)" className="num hidden sm:inline">
+                {t === 0 ? '0' : `${new Intl.NumberFormat('ko-KR').format(Math.round(t / 10_000))}만`}
               </text>
             ) : null}
           </g>
@@ -66,10 +66,10 @@ export function NetWorthChart({ state, large = false, height }: Props) {
           </g>
         ))}
         <text
-          x={x(pts.length - 1) - 8}
-          y={Math.max(pad.t + (large ? 20 : 12), y(last.value) - (large ? 16 : 10))}
+          x={x(pts.length - 1) - (large ? 18 : 10)}
+          y={Math.max(pad.t + (large ? 26 : 14), y(last.value) - (large ? 24 : 14))}
           textAnchor="end"
-          fontSize={large ? 26 : 14}
+          fontSize={large ? 26 : 19}
           fontWeight="700"
           fill="var(--color-ink)"
           stroke="var(--color-sheet)"

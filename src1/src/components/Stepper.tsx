@@ -25,7 +25,7 @@ export function Stepper({ value, onChange, step = 10_000, min = 0, max = Number.
   // 1만 원 단위가 아닌 값(예: 626,400원)도 한 번 누르면 1만 원 눈금에 맞춘다
   const down = () => onChange(clamp(value % step === 0 ? value - step : Math.floor(value / step) * step));
   const up = () => onChange(clamp(value % step === 0 ? value + step : Math.ceil(value / step) * step));
-  const h = size === 'sm' ? 'h-10' : 'h-11';
+  const h = 'h-11';
   return (
     <div className={`inline-flex ${h} items-stretch overflow-hidden rounded-[8px] bg-white shadow-[inset_0_0_0_1.5px_var(--color-rule)]`}>
       <button

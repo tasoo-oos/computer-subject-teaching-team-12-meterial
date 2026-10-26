@@ -61,6 +61,18 @@ export function PayPanel({ state, choice, onClose, onConfirm, confirmLabel }: Pa
           </button>
         </header>
         <p className="mt-3 rounded-[8px] bg-paper px-3.5 py-3 text-[15px] font-semibold">{fp.label}</p>
+        {fp.source === 'savings' ? (
+          <p className="mt-2 flex gap-1.5 rounded-[6px] bg-seal-soft px-3 py-2 text-[12px] leading-snug text-seal">
+            <TriangleAlert size={13} className="mt-0.5 flex-none" aria-hidden />
+            적금에서 꺼내면 적금 전체가 해지되고, 이자가 연 0.5%로 줄어듭니다. 12월 만기 이자도 받지 못합니다.
+          </p>
+        ) : null}
+        {fp.source === 'housing' ? (
+          <p className="mt-2 flex gap-1.5 rounded-[6px] bg-seal-soft px-3 py-2 text-[12px] leading-snug text-seal">
+            <TriangleAlert size={13} className="mt-0.5 flex-none" aria-hidden />
+            청약 통장을 해지하면 가입 기간이 0으로 초기화됩니다.
+          </p>
+        ) : null}
         <dl className="mt-3 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-[14px]">
           <dt className="text-ink-2">총액</dt>
           <dd className="text-right">
@@ -125,23 +137,13 @@ export function PayPanel({ state, choice, onClose, onConfirm, confirmLabel }: Pa
             const p = isCard && value > 0 ? cardPlan(value, cardMonths, 'interestFree' in pay ? !!pay.interestFree : false) : null;
             return (
               <li key={o.source} className={`rounded-[8px] px-3 py-2 ${value > 0 ? 'bg-mark/35 shadow-[inset_0_0_0_1.5px_var(--color-ink-3)]' : 'bg-paper'}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <div className="min-w-0 flex-1 basis-32">
                     <p className="text-[14px] font-semibold leading-tight">{name}</p>
                     <p className="num text-[12px] leading-tight text-ink-2">
                       {isCard ? '한도 없음 · 다음 달 생활비에서 빠짐' : `잔액 ${formatWon(o.max ?? 0)}`}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setPart(o.source, Math.min(isCard ? amount : (o.max ?? 0), remaining + value))}
-                    className="btn btn-quiet h-8 min-h-8 px-2 text-[12px]"
-                    disabled={remaining === 0}
-                  >
-                    남은 금액
-                  </button>
-                </div>
-                <div className="mt-1.5">
                   <Stepper
                     label={name}
                     value={value}
@@ -151,6 +153,15 @@ export function PayPanel({ state, choice, onClose, onConfirm, confirmLabel }: Pa
                     max={isCard ? amount : (o.max ?? 0)}
                     size="sm"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setPart(o.source, Math.min(isCard ? amount : (o.max ?? 0), remaining + value))}
+                    className="btn btn-quiet hidden min-h-11 px-2 text-[12px] sm:inline-flex"
+                    disabled={remaining === 0}
+                    title="남은 금액 채우기"
+                  >
+                    채우기
+                  </button>
                 </div>
                 {o.warning ? (
                   <p className="mt-1 flex gap-1.5 text-[11.5px] leading-snug text-ink-2">
@@ -158,7 +169,7 @@ export function PayPanel({ state, choice, onClose, onConfirm, confirmLabel }: Pa
                     {o.warning}
                   </p>
                 ) : null}
-                {isCard && cardAllowed && value > 0 ? (
+                {isCard && cardAllowed ? (
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     {(Array.isArray(pay.cardMonths) ? pay.cardMonths : [1]).map((m) => (
                       <button
@@ -166,7 +177,7 @@ export function PayPanel({ state, choice, onClose, onConfirm, confirmLabel }: Pa
                         type="button"
                         onClick={() => setCardMonths(m)}
                         aria-pressed={cardMonths === m}
-                        className={`btn h-8 min-h-8 px-2 text-[12px] ${cardMonths === m ? 'bg-ink text-white' : 'btn-quiet'}`}
+                        className={`btn min-h-11 px-2 text-[12px] ${cardMonths === m ? 'bg-ink text-white' : 'btn-quiet'}`}
                       >
                         {m === 1 ? '일시불' : `${m}개월`}
                       </button>
@@ -176,7 +187,9 @@ export function PayPanel({ state, choice, onClose, onConfirm, confirmLabel }: Pa
                         매달 <strong className="text-[13px] text-ink">{formatMan(p.monthly)}</strong>
                         {p.fee > 0 ? ` · 수수료 ${formatMan(p.fee)}` : ' · 무이자'}
                       </span>
-                    ) : null}
+                    ) : (
+                      <span className="text-[11.5px] text-ink-3">금액을 넣으면 매달 갚을 돈을 계산합니다.</span>
+                    )}
                   </div>
                 ) : null}
               </li>
@@ -204,7 +217,7 @@ export function PayPanel({ state, choice, onClose, onConfirm, confirmLabel }: Pa
           type="button"
           disabled={remaining !== 0}
           onClick={confirm}
-          className="btn btn-primary px-5"
+          className="btn btn-primary w-full px-5 sm:w-auto"
           title={remaining !== 0 ? '합계가 맞아야 확정할 수 있어요' : undefined}
         >
           {confirmLabel ?? (to ? '이대로 옮기기' : '이렇게 내기')}

@@ -7,7 +7,6 @@ import {
   formatMan,
   formatPct,
   totalDebt,
-  type GameState,
 } from '@gagyebu/core';
 import type { ScreenProps } from '@gagyebu/draft-kit';
 import { FlowHeader } from '../components/FlowHeader.tsx';
@@ -64,12 +63,18 @@ export function ResultScreen({ state, ui, go }: ScreenProps) {
             {debt > 0 ? (
               <p className="mt-3 flex items-start gap-2 rounded-[8px] bg-seal-soft px-3.5 py-2.5 text-[14px] leading-relaxed text-seal">
                 <TrendingDown size={16} className="mt-0.5 flex-none" aria-hidden />
-                아직 갚을 돈이 <strong className="num whitespace-nowrap">{formatMan(debt)}</strong> 남았습니다. 내년 월급에서 매달 조금씩 빠집니다.
+                <span>
+                  아직 갚을 돈이 <strong className="num whitespace-nowrap">{formatMan(debt)}</strong> 남았습니다. 내년 월급에서 매달 조금씩
+                  빠집니다.
+                </span>
               </p>
             ) : (
               <p className="mt-3 flex items-start gap-2 rounded-[8px] bg-in-soft px-3.5 py-2.5 text-[14px] leading-relaxed text-in">
                 <TrendingUp size={16} className="mt-0.5 flex-none" aria-hidden />
-                부채 없이 1년을 마쳤습니다. 이자·수익으로만 <strong className="num whitespace-nowrap">{formatMan(earned)}</strong>이 붙었어요.
+                <span>
+                  부채 없이 1년을 마쳤습니다. 이자와 수익으로 <strong className="num whitespace-nowrap">{formatMan(earned)}</strong>이
+                  붙었어요.
+                </span>
               </p>
             )}
 
@@ -191,9 +196,4 @@ export function ResultScreen({ state, ui, go }: ScreenProps) {
       </main>
     </div>
   );
-}
-
-export function resultStats(state: GameState) {
-  const s = state.settlement;
-  return { netWorth: s?.netWorth ?? 0 };
 }

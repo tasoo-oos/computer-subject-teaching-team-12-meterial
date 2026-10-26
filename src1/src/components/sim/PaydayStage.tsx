@@ -1,7 +1,6 @@
-import { TRANSFER_ORDER, ACCOUNTS, formatMan, formatWon, type GameState } from '@gagyebu/core';
+import { TRANSFER_ORDER, ACCOUNTS, formatMan, type GameState } from '@gagyebu/core';
 import { useSequence } from '../../lib/motion.ts';
 import { Money } from '../Money.tsx';
-import { Spine } from '../Spine.tsx';
 
 /** 월급날: 통장에 거래가 한 줄씩 인쇄된다 */
 export function PaydayStage({ state, onNext, step }: { state: GameState; onNext: () => void; step: string }) {
@@ -99,25 +98,4 @@ function TutorialNote({ onNext }: { onNext: () => void }) {
       </div>
     </section>
   );
-}
-
-/** 통장 6권 미리보기 (월급날 강조용) */
-export function AccountRise({ state, highlight }: { state: GameState; highlight?: string[] }) {
-  return (
-    <ul className="grid grid-cols-3 gap-2">
-      {(['emergency', 'savings', 'invest'] as const).map((id) => (
-        <li key={id} className="rounded-[8px] bg-sheet px-2.5 py-2 shadow-[0_0_0_1px_var(--color-rule)]">
-          <p className="flex items-center gap-1.5 text-[12px] text-ink-2">
-            <Spine id={id} className="h-4" />
-            {ACCOUNTS[id].label}
-          </p>
-          <Money value={state.accounts[id].balance} unit="man" className={`block text-[15px] font-bold ${highlight?.includes(id) ? 'text-in' : ''}`} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-export function won(n: number) {
-  return formatWon(n);
 }

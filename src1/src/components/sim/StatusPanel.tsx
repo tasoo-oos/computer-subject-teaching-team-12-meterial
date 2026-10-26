@@ -41,7 +41,7 @@ export function StatusPanel({ state, onSellSneakers }: { state: GameState; onSel
                   {s.note ? ` · 팔면 ${formatWon(sneakerValue(state))}` : ''}
                 </p>
                 {def.actions?.length && s.id === 'sneakers' ? (
-                  <button type="button" onClick={onSellSneakers} className="btn btn-quiet mt-1.5 h-9 min-h-9 px-2.5 text-[12px]">
+                  <button type="button" onClick={onSellSneakers} className="btn btn-quiet mt-1.5 min-h-11 px-2.5 text-[12px]">
                     {def.actions[0]!.label}
                   </button>
                 ) : null}
@@ -64,7 +64,9 @@ export function StatusPanel({ state, onSellSneakers }: { state: GameState; onSel
             ))}
           </ul>
         </div>
-      ) : null}
+      ) : (
+        <p className="mt-2 border-t border-rule-soft pt-2 text-[12px] text-ink-3">예약된 장면은 없습니다.</p>
+      )}
     </section>
   );
 }
