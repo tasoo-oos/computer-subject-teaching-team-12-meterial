@@ -34,6 +34,7 @@ export function StartScreen({ state, ui, go, goScreen }: ScreenProps) {
             <p className="mt-5 max-w-[34em] text-[17px] leading-relaxed text-mute">
               입사 첫 달, 통장에 월급이 들어왔습니다. 이 돈을 목적별 통장으로 나누고, 1년 동안 생기는 일마다 어느 돈을 어떻게 쓸지 직접 정해 봅니다.
             </p>
+            <YearTeaser />
           </div>
           <ol className="grid grid-cols-1 gap-1.5 sm:grid-cols-5">
             {STEPS.map(([title, sub], i) => (
@@ -81,6 +82,36 @@ export function StartScreen({ state, ui, go, goScreen }: ScreenProps) {
         </section>
       </div>
     </AppFrame>
+  );
+}
+
+/** 1년 12컷 미리보기: 결과 화면의 인화 띠와 같은 문법 */
+function YearTeaser() {
+  const events: Record<number, string> = { 2: 'A2', 3: 'C5', 5: 'D2', 6: 'B1', 7: 'G4', 8: 'F3', 9: 'B5', 11: 'E3' };
+  return (
+    <div className="mt-8">
+      <div className="flex items-baseline justify-between">
+        <p className="text-xs font-bold text-mute">1년 인화 띠</p>
+        <p className="text-xs text-mute">12컷 · 지금은 1월</p>
+      </div>
+      <ol className="mt-2 grid grid-cols-6 gap-1 sm:grid-cols-12" aria-label="1월부터 12월까지 12컷">
+        {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+          <li
+            key={m}
+            className={`flex h-16 flex-col justify-between rounded-[2px] border px-1 py-0.5 ${
+              m === 1 ? 'border-ink bg-flash' : 'border-line bg-paper-2'
+            }`}
+            title={m === 1 ? '1월 · 첫 월급' : m === 12 ? '12월 · 결산' : `${m}월`}
+          >
+            <span className="num text-[10px] font-bold text-mute">{String(m).padStart(2, '0')}</span>
+            <span className={`text-[8px] leading-tight font-semibold ${m === 1 ? 'text-ink' : 'text-mute'}`}>
+              {m === 1 ? '월급' : m === 12 ? '결산' : events[m] ?? (m === 4 || m === 10 ? '조용' : '')}
+            </span>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-2 text-xs leading-relaxed text-mute">1월은 튜토리얼, 2월부터는 예상하지 못한 일이 생깁니다.</p>
+    </div>
   );
 }
 

@@ -106,6 +106,7 @@
   .cut-2 {
     background: var(--color-paper-2);
     border-radius: var(--radius-cut);
+    color: var(--color-text);
   }
 }
 

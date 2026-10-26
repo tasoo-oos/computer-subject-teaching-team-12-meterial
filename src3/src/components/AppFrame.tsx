@@ -25,7 +25,7 @@ export function AppFrame({
   const at = SCREEN_ORDER.indexOf(screen);
   return (
     <div className="flex min-h-dvh flex-col bg-ink text-frame">
-      <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 pt-3 pb-2.5 sm:px-6">
+      <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1.5 px-4 pt-2 pb-2 sm:px-6">
         <p className="text-[15px] font-bold tracking-[-0.01em]">내 첫 월급, 1년 살아 보기</p>
         <nav aria-label="진행 단계">
           <ol className="flex gap-1">
@@ -36,7 +36,7 @@ export function AppFrame({
                   key={id}
                   aria-current={state === 'now' ? 'step' : undefined}
                   title={SCREEN_LABEL[id]}
-                  className={`flex h-7 min-w-11 items-center justify-center rounded-[3px] px-2 text-xs font-semibold ${
+                  className={`flex h-11 min-w-11 items-center justify-center rounded-[3px] px-2 text-xs font-semibold sm:h-7 ${
                     state === 'now'
                       ? 'bg-flash text-ink'
                       : state === 'done'

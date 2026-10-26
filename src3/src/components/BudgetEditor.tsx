@@ -106,13 +106,13 @@ function Row({
   const v = get(budget, k);
   const diff = before ? v - get(before, k) : 0;
   return (
-    <li className="grid grid-cols-[1fr_minmax(150px,176px)] items-center gap-3 py-1.5">
+    <li className="grid grid-cols-[minmax(0,1fr)_164px] items-center gap-2 py-1.5">
       <div className="flex min-w-0 items-center gap-2.5">
         {mark}
         <div className="min-w-0">
-          <p className="truncate text-[15px] font-semibold">{labelOf(k)}</p>
+          <p className="text-[14px] leading-tight font-semibold">{labelOf(k)}</p>
           {(sub || diff !== 0) && (
-            <p className="truncate text-xs text-mute">
+            <p className="text-[11px] leading-snug text-mute">
               {diff !== 0 ? (
                 <span className={`num font-semibold ${diff > 0 ? 'text-warn' : 'text-text'}`}>
                   처음 {formatMan(get(before!, k))} → {diff > 0 ? '+' : ''}
@@ -172,7 +172,7 @@ export function BudgetEditor({ budget, salary, onChange, before, resetTo, resetL
       <div className="cut flex flex-col gap-6 p-5">
         <Group title="월급날 자동이체" total={sum.transferTotal} note="월급이 들어오면 먼저 떼어 각 통장으로 보냅니다.">
           {TRANSFER_ORDER.map((id) => (
-            <Row key={id} k={id} budget={budget} before={before} onChange={onChange} mark={<AccountMark id={id} />} sub={ACCOUNTS[id].guide !== '' ? `권장 ${ACCOUNTS[id].guide}` : undefined} />
+            <Row key={id} k={id} budget={budget} before={before} onChange={onChange} mark={<AccountMark id={id} />} sub={`권장 ${ACCOUNTS[id].guide.split(' (')[0]}`} />
           ))}
         </Group>
         <Group title="생활비 통장 여유분" total={budget.livingBuffer} note="쓰고 남으면 다음 달로 넘어갑니다. 갑자기 오른 지출을 받아 줍니다.">
