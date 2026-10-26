@@ -65,7 +65,7 @@ function Question({
   return (
     <main className="mx-auto max-w-[44rem] px-5 py-8 sm:px-8 sm:py-12">
       <Progress index={index} />
-      <p className="mt-8 text-[15px] font-semibold text-ink-2">{q.linkedTo}와 이어지는 질문</p>
+      <p className="mt-8 text-[15px] font-semibold text-ink-2">이 답은 {q.linkedTo} 예산에 반영됩니다</p>
       <h1 className="display mt-2 text-[33px] sm:text-[42px]">{q.text}</h1>
       <fieldset className="mt-7">
         <legend className="sr-only">{q.text}</legend>

@@ -93,3 +93,45 @@ export function BudgetTotals({ budget, salary, children }: { budget: Budget; sal
     </div>
   );
 }
+
+
+/** 조정 단계용 한 줄 요약. 편집기 위에 얹어 남은 금액만 크게 본다 */
+export function InlineTotals({ budget, salary, children }: { budget: Budget; salary: Won; children?: ReactNode }) {
+  const s = budgetSummary(budget, salary);
+  const issues = budgetIssues(budget, salary);
+  const ok = issues.length === 0;
+  return (
+    <div className="rounded-panel bg-sheet px-4 py-3 shadow-[0_0_0_1px_var(--color-rule)]">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <dl className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px]">
+          <div className="flex items-baseline gap-1.5">
+            <dt className="text-ink-2">월급</dt>
+            <dd className="num font-semibold">{formatMan(salary)}</dd>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <dt className="text-ink-2">자동이체</dt>
+            <dd className="num font-semibold">{formatMan(s.transferTotal)}</dd>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <dt className="text-ink-2">생활비 입금</dt>
+            <dd className="num font-semibold">{formatMan(s.livingIn)}</dd>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <dt className="text-ink-2">저축률</dt>
+            <dd className="num font-semibold">{formatPct(s.savingsRate)}</dd>
+          </div>
+        </dl>
+        <p className={`ml-auto flex items-baseline gap-2 rounded-[6px] px-3 py-1 ${ok ? 'bg-in-soft' : 'bg-seal-soft'}`} aria-live="polite">
+          <span className={`text-[13px] font-semibold ${ok ? 'text-in' : 'text-seal'}`}>{ok ? '남은 금액' : s.remaining < 0 ? '초과' : '아직 남은 돈'}</span>
+          <span className={`num text-[22px] font-bold leading-none ${ok ? 'text-in' : 'text-seal'}`}>
+            {s.remaining === 0 ? '0원' : formatMan(Math.abs(s.remaining))}
+          </span>
+        </p>
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+        {ok ? <p className="text-[13px] text-ink-2">합계가 맞았습니다. 이대로 다음 달부터 적용됩니다.</p> : <p className="text-[13px] text-seal">{issueText(issues[0]!)}</p>}
+        {children ? <div className="ml-auto flex items-center gap-2">{children}</div> : null}
+      </div>
+    </div>
+  );
+}

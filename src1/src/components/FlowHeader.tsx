@@ -14,9 +14,12 @@ export function FlowHeader({ current, nickname }: { current: ScreenId; nickname?
   const idx = SCREEN_ORDER.indexOf(current);
   return (
     <header className="border-b border-rule bg-sheet/80">
-      <div className="mx-auto flex max-w-[1200px] items-center gap-4 px-4 py-2.5 sm:px-6">
-        <p className="display hidden text-[17px] text-ink sm:block">내 첫 월급, 1년 살아 보기</p>
-        <ol className="ml-auto flex items-center gap-1" aria-label="수업 단계">
+      <div className="mx-auto flex max-w-[1200px] items-center gap-3 px-4 py-2.5 sm:px-6">
+        <p className="display text-[15px] text-ink sm:text-[17px]">내 첫 월급, 1년 살아 보기</p>
+        <p className="num ml-auto text-[12px] font-semibold text-ink-2 sm:hidden">
+          {idx + 1}/6 {SHORT[current]}
+        </p>
+        <ol className="ml-auto hidden items-center gap-1 sm:flex" aria-label="수업 단계">
           {SCREEN_ORDER.map((s, i) => {
             const state = i < idx ? 'done' : i === idx ? 'now' : 'todo';
             return (
@@ -35,6 +38,11 @@ export function FlowHeader({ current, nickname }: { current: ScreenId; nickname?
           })}
         </ol>
         {nickname ? <p className="hidden text-[13px] text-ink-2 lg:block">{nickname}님</p> : null}
+      </div>
+      <div className="mx-auto flex max-w-[1200px] gap-1 px-4 pb-2 sm:hidden" aria-hidden>
+        {SCREEN_ORDER.map((s, i) => (
+          <span key={s} className={`h-1 flex-1 rounded-full ${i <= idx ? 'bg-ink' : 'bg-rule'}`} />
+        ))}
       </div>
     </header>
   );

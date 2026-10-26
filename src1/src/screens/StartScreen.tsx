@@ -125,30 +125,32 @@ function Payslip({ nickname, amount }: { nickname: string | null; amount: number
             </div>
           ))}
         </dl>
-        <div className="mt-5 flex items-end justify-between">
-          <p className="text-[15px] font-semibold">실수령액</p>
-          {amount === null ? (
-            <p className="flex gap-1" aria-label="아직 공개되지 않음">
-              {Array.from({ length: 7 }, (_, i) => (
-                <span key={i} className="h-8 w-5 rounded-[3px] bg-ink/85" />
-              ))}
-            </p>
-          ) : (
-            <p className="num text-[28px] font-bold text-ink">{formatWon(amount)}</p>
-          )}
+        <div className="mt-5 flex items-end justify-between gap-3">
+          <div>
+            <p className="text-[15px] font-semibold">실수령액</p>
+            {amount === null ? (
+              <p className="mt-1 flex gap-1" aria-label="아직 공개되지 않음">
+                {Array.from({ length: 7 }, (_, i) => (
+                  <span key={i} className="h-8 w-5 rounded-[3px] bg-ink/85" />
+                ))}
+              </p>
+            ) : (
+              <p className="num text-[27px] font-bold text-ink sm:text-[28px]">{formatWon(amount)}</p>
+            )}
+          </div>
+          {amount !== null ? (
+            <span
+              aria-hidden
+              className="stamp-in grid size-[68px] flex-none place-items-center rounded-full border-[3px] border-seal text-center text-[14px] leading-tight font-bold text-seal"
+              style={{ transform: 'rotate(-6deg)' }}
+            >
+              첫 월급
+              <br />
+              지급
+            </span>
+          ) : null}
         </div>
       </div>
-      {amount !== null ? (
-        <span
-          aria-hidden
-          className="stamp-in absolute -right-2 -bottom-6 grid size-24 place-items-center rounded-full border-[3px] border-seal text-center text-[15px] leading-tight font-bold text-seal sm:-right-6"
-          style={{ transform: 'rotate(-6deg)' }}
-        >
-          첫 월급
-          <br />
-          지급
-        </span>
-      ) : null}
     </figure>
   );
 }

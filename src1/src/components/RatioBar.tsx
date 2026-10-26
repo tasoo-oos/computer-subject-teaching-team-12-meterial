@@ -31,12 +31,12 @@ export function RatioBar({
         )}
       </div>
       {legend ? (
-        <ul className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1 text-[13px] sm:grid-cols-6">
+        <ul className="mt-2 flex flex-wrap gap-x-3.5 gap-y-1 text-[12.5px]">
           {ACCOUNT_ORDER.map((id) => (
-            <li key={id} className="flex items-center gap-1.5">
+            <li key={id} className="flex items-center gap-1 whitespace-nowrap">
               <CoverDot id={id} />
               <span className="text-ink-2">{ACCOUNT_SHORT[id]}</span>
-              <span className="num ml-auto font-semibold sm:ml-0">{formatPct(shares[id])}</span>
+              <span className="num font-semibold">{formatPct(shares[id])}</span>
             </li>
           ))}
         </ul>

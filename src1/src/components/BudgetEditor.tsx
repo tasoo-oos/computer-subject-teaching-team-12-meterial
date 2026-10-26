@@ -18,6 +18,8 @@ export type BudgetKey = TransferAccountId | ExpenseId | 'livingBuffer';
 interface BudgetEditorProps {
   budget: Budget;
   onChange: (b: Budget) => void;
+  /** split: 넓은 화면에서 두 단으로 나눠 세로 길이를 줄인다 */
+  layout?: 'stack' | 'split';
   /** 항목 옆에 붙일 짧은 표시 (예: 이번 이벤트로 바뀐 항목) */
   marks?: Partial<Record<BudgetKey, string>>;
 }
@@ -31,7 +33,7 @@ function setKey(b: Budget, key: BudgetKey, v: number): Budget {
 const GROUP_LABEL: Record<ExpenseGroup, string> = { fixed: '고정비', variable: '변동비' };
 
 /** 가계부 편집기. 가계부 작성 화면과 시뮬레이션 조정 단계에서 함께 쓴다 */
-export function BudgetEditor({ budget, onChange, marks = {} }: BudgetEditorProps) {
+export function BudgetEditor({ budget, onChange, marks = {}, layout = 'stack' }: BudgetEditorProps) {
   const row = (key: BudgetKey, title: string, sub: string, value: number, lead?: ReactNode) => (
     <li key={key} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2">
       {lead}
@@ -51,35 +53,61 @@ export function BudgetEditor({ budget, onChange, marks = {} }: BudgetEditorProps
   const groupTotal = (g: ExpenseGroup) =>
     EXPENSE_ORDER.filter((id) => EXPENSES[id].group === g).reduce((a, id) => a + budget.expenses[id], 0);
 
+  const transfers = (
+    <section aria-labelledby="be-transfers">
+      <SectionHead id="be-transfers" title="월급날 자동이체" note="월급이 들어오자마자 먼저 떼어 두는 돈" />
+      <ul className="divide-y divide-rule-soft">
+        {TRANSFER_ORDER.map((id) =>
+          row(id, ACCOUNTS[id].label, `${ACCOUNTS[id].product}, 권장 ${ACCOUNTS[id].guide}`, budget.transfers[id], <Spine id={id} />),
+        )}
+      </ul>
+    </section>
+  );
+
+  const expenseSection = (g: ExpenseGroup) => (
+    <section key={g} aria-labelledby={`be-${g}`}>
+      <SectionHead
+        id={`be-${g}`}
+        title={`생활비 통장에서 나가는 돈: ${GROUP_LABEL[g]}`}
+        note={g === 'fixed' ? '매달 거의 같은 돈' : '내가 조절할 수 있는 돈'}
+        total={groupTotal(g)}
+      />
+      <ul className="divide-y divide-rule-soft">
+        {EXPENSE_ORDER.filter((id) => EXPENSES[id].group === g).map((id) =>
+          row(id, EXPENSES[id].label, EXPENSES[id].example, budget.expenses[id]),
+        )}
+      </ul>
+    </section>
+  );
+
+  const buffer = (
+    <section aria-labelledby="be-buffer">
+      <SectionHead id="be-buffer" title="생활비 여유분" note="쓰지 않으면 다음 달로 넘어가는 완충 돈" />
+      <ul>{row('livingBuffer', '생활비 통장에 남겨 둘 돈', '예상 못 한 작은 지출 대비', budget.livingBuffer, <Spine id="living" />)}</ul>
+    </section>
+  );
+
+  if (layout === 'split') {
+    return (
+      <div className="grid gap-x-8 gap-y-5 lg:grid-cols-2">
+        <div className="space-y-5">
+          {transfers}
+          {expenseSection('fixed')}
+        </div>
+        <div className="space-y-5">
+          {expenseSection('variable')}
+          {buffer}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
-      <section aria-labelledby="be-transfers">
-        <SectionHead id="be-transfers" title="월급날 자동이체" note="월급이 들어오자마자 먼저 떼어 두는 돈" />
-        <ul className="divide-y divide-rule-soft">
-          {TRANSFER_ORDER.map((id) =>
-            row(id, ACCOUNTS[id].label, `${ACCOUNTS[id].product}, 권장 ${ACCOUNTS[id].guide}`, budget.transfers[id], <Spine id={id} />),
-          )}
-        </ul>
-      </section>
-      {(['fixed', 'variable'] as const).map((g) => (
-        <section key={g} aria-labelledby={`be-${g}`}>
-          <SectionHead
-            id={`be-${g}`}
-            title={`생활비 통장에서 나가는 돈: ${GROUP_LABEL[g]}`}
-            note={g === 'fixed' ? '매달 거의 같은 돈' : '내가 조절할 수 있는 돈'}
-            total={groupTotal(g)}
-          />
-          <ul className="divide-y divide-rule-soft">
-            {EXPENSE_ORDER.filter((id) => EXPENSES[id].group === g).map((id) =>
-              row(id, EXPENSES[id].label, EXPENSES[id].example, budget.expenses[id]),
-            )}
-          </ul>
-        </section>
-      ))}
-      <section aria-labelledby="be-buffer">
-        <SectionHead id="be-buffer" title="생활비 여유분" note="쓰지 않으면 다음 달로 넘어가는 완충 돈" />
-        <ul>{row('livingBuffer', '생활비 통장에 남겨 둘 돈', '예상 못 한 작은 지출 대비', budget.livingBuffer, <Spine id="living" />)}</ul>
-      </section>
+      {transfers}
+      {expenseSection('fixed')}
+      {expenseSection('variable')}
+      {buffer}
     </div>
   );
 }
