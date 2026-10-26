@@ -28,6 +28,7 @@ export function ReportView({ state, onNext, nextLabel }: { state: GameState; onN
   const nextMonth = state.month + 1;
   const nextEvent = SCHEDULE[nextMonth] ? EVENTS[SCHEDULE[nextMonth]!] : null;
   const quiet = monthKind(state.month) === 'quiet';
+  const thisMonth = state.decisions.filter((d) => d.month === state.month);
 
   return (
     <section className="cut flex flex-1 flex-col p-4" aria-labelledby="report-title">
@@ -112,10 +113,7 @@ export function ReportView({ state, onNext, nextLabel }: { state: GameState; onN
         <p className="text-[11px] font-bold text-mute">통장별 이번 달</p>
         <ul className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-6">
           {ACCOUNT_ORDER.map((id) => {
-            const d =
-              id === 'living'
-                ? (p?.livingIn ?? 0) - (p?.spending ?? 0) - (p?.debtPayments ?? 0)
-                : (p?.transfers[id] ?? 0) + (p?.earnings[id] ?? 0);
+            const d = state.accounts[id].balance - (prev ? prev.balances[id] : 0);
             return (
               <li key={id} className="rounded-[4px] border border-line px-2.5 py-2">
                 <div className="flex items-center gap-1.5">
@@ -135,6 +133,25 @@ export function ReportView({ state, onNext, nextLabel }: { state: GameState; onN
           <span className="font-bold">생활비 부족</span> 이번 달 생활비가 {formatMan(short)} 모자라 카드값으로 넘어갔습니다. 다음 달 생활비에서 빠지고 만족도가 떨어집니다.
         </p>
       )}
+
+      <div className="mt-2.5 rounded-[4px] bg-paper-2 px-3 py-2.5">
+        <p className="text-[11px] font-bold text-mute">이번 달의 선택</p>
+        {thisMonth.length === 0 ? (
+          <p className="mt-0.5 text-[12px] text-mute">이번 달에는 선택이 없었습니다.</p>
+        ) : (
+          <ol className="mt-1 grid gap-1">
+            {thisMonth.map((d, i) => (
+              <li key={`${d.eventCode}-${d.choiceId}-${i}`} className="flex flex-wrap items-baseline gap-x-2 text-[12px]">
+                <span className="num text-[10px] font-bold text-mute">{d.eventCode}</span>
+                <span className="font-semibold">{d.choiceLabel}</span>
+                <span className="text-[10px] text-mute">
+                  {d.kind === 'free' ? '돈 쓰지 않음' : d.kind === 'deposit' ? '입금' : d.kind === 'gamble' ? '결과는 나중에' : d.kind === 'budget' ? '가계부 변경' : '지불'}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
 
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
         <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-mute">

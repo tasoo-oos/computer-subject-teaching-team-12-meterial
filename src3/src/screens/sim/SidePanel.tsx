@@ -3,7 +3,6 @@ import {
   ACCOUNTS,
   ACCOUNT_ORDER,
   STATUSES,
-  creditGrade,
   describeScheduled,
   formatMan,
   formatWon,
@@ -17,18 +16,13 @@ import { AccountMark, Button, Delta, Money, Tag } from '../../components/ui.tsx'
 import { stamp } from '../../lib/meta.ts';
 
 function monthDelta(state: GameState, id: (typeof ACCOUNT_ORDER)[number]): Won {
-  const p = state.payday;
-  if (id === 'living') {
-    if (!p) return 0;
-    return p.livingIn - p.spending - p.debtPayments;
-  }
-  if (!p) return 0;
-  return (p.transfers[id] ?? 0) + (p.earnings[id] ?? 0);
+  const prev = state.history.at(-1);
+  const before = prev ? prev.balances[id] : 0;
+  return state.accounts[id].balance - before;
 }
 
 export function SidePanel({ state, onSellSneakers }: { state: GameState; onSellSneakers: (s: StatusInstance) => void }) {
   const debt = totalDebt(state);
-  const grade = creditGrade(state.credit);
   const short = typeof state.flags.livingShortfall === 'number' ? state.flags.livingShortfall : 0;
 
   return (
@@ -38,8 +32,7 @@ export function SidePanel({ state, onSellSneakers }: { state: GameState; onSellS
           <h2 className="text-[15px] font-bold">통장 {ACCOUNT_ORDER.length}개</h2>
           <span className="text-xs text-mute">{stamp(state.month)}</span>
         </header>
-        <div className="mt-2 flex items-center justify-between text-[10px] font-semibold text-mute">
-          <span>잔고</span>
+        <div className="mt-2 flex justify-end text-[10px] font-semibold text-mute">
           <span>이번 달 변화</span>
         </div>
         <ul className="mt-0.5 grid gap-0.5">
@@ -120,17 +113,6 @@ export function SidePanel({ state, onSellSneakers }: { state: GameState; onSellS
         </section>
       )}
 
-      <section className="cut-2 px-4 py-3">
-        <div className="flex items-center justify-between text-[12px]">
-          <span className="flex items-center gap-1.5 font-semibold text-mute">
-            <Info size={13} aria-hidden /> 신용점수
-          </span>
-          <span className="num font-bold">
-            {state.credit} <span className="font-medium text-mute">· {grade.label}</span>
-          </span>
-        </div>
-        <p className="mt-1.5 text-[10px] leading-relaxed text-mute">금리와 수익률은 수업을 위한 가정값입니다. 실제 상품 조건과 다릅니다.</p>
-      </section>
     </aside>
   );
 }
@@ -156,7 +138,7 @@ function StatusRow({ st, month, onSell }: { st: StatusInstance; month: number; o
           <p className="mt-0.5 text-[11px] leading-snug text-mute">{st.note ?? def.description}</p>
         </div>
         {def.actions?.length ? (
-          <Button size="sm" className="!min-h-9 shrink-0 !px-2 !text-[11px]" onClick={() => (open ? onSell(st) : setOpen(true))}>
+          <Button size="sm" className="!min-h-11 shrink-0 !px-2 !text-[11px] sm:!min-h-9" onClick={() => (open ? onSell(st) : setOpen(true))}>
             {open ? '팔기' : '팔까?'} <ArrowRight size={12} />
           </Button>
         ) : null}

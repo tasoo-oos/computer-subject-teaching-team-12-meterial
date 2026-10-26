@@ -99,7 +99,7 @@ export function PayPanel({
           const balance = state.accounts[id].balance;
           const value = parts[id] ?? 0;
           return (
-            <div key={id} className="rounded-[4px] border border-line p-2.5">
+            <div key={id} className="rounded-[4px] border border-line p-2">
               <div className="flex items-center gap-2">
                 <AccountMark id={id} size={22} />
                 <p className="text-[13px] font-semibold">{sourceLabel(id)}</p>
@@ -112,7 +112,7 @@ export function PayPanel({
                     aria-label={`${sourceLabel(id)} 1만 원 줄이기`}
                     disabled={value === 0}
                     onClick={() => setPart(id, value - STEP)}
-                    className="h-9 w-9 shrink-0 text-mute hover:text-text disabled:opacity-30"
+                    className="h-11 w-11 shrink-0 text-mute hover:text-text disabled:opacity-30 sm:h-8 sm:w-8"
                   >
                     −
                   </button>
@@ -121,7 +121,7 @@ export function PayPanel({
                     aria-label={`${sourceLabel(id)}에서 낼 금액 (만 원)`}
                     value={Math.round((value / 10_000) * 10) / 10}
                     onChange={(e) => setPart(id, (Number.parseFloat(e.target.value) || 0) * 10_000)}
-                    className="num h-9 w-full min-w-0 bg-transparent text-right text-[13px] font-semibold focus:outline-none"
+                    className="num h-11 w-full min-w-0 bg-transparent text-right text-[13px] font-semibold focus:outline-none sm:h-8"
                   />
                   <span className="mr-1 shrink-0 text-[10px] text-mute">만</span>
                   <button
@@ -129,7 +129,7 @@ export function PayPanel({
                     aria-label={`${sourceLabel(id)} 1만 원 늘리기`}
                     disabled={value >= balance}
                     onClick={() => setPart(id, value + STEP)}
-                    className="h-9 w-9 shrink-0 text-mute hover:text-text disabled:opacity-30"
+                    className="h-11 w-11 shrink-0 text-mute hover:text-text disabled:opacity-30 sm:h-8 sm:w-8"
                   >
                     +
                   </button>
@@ -138,7 +138,7 @@ export function PayPanel({
                   type="button"
                   onClick={() => setPart(id, balance)}
                   disabled={balance === 0}
-                  className="h-9 shrink-0 rounded-[4px] border border-line-strong px-2 text-[11px] font-semibold text-mute hover:bg-paper-2 hover:text-text disabled:opacity-40"
+                  className="h-11 shrink-0 rounded-[4px] border border-line-strong px-2 text-[11px] font-semibold text-mute hover:bg-paper-2 hover:text-text disabled:opacity-40 sm:h-8"
                 >
                   최대
                 </button>
@@ -153,7 +153,7 @@ export function PayPanel({
         })}
 
         {cardOptions.length > 0 && (
-          <div className="rounded-[4px] border border-line p-2.5">
+          <div className="rounded-[4px] border border-line p-2">
             <div className="flex items-center gap-2">
               <span className="flex size-[22px] items-center justify-center rounded-[4px] bg-ink text-frame" aria-hidden>
                 <CreditCard size={13} />
@@ -163,7 +163,7 @@ export function PayPanel({
             </div>
             <div className="mt-1.5 flex items-center gap-1.5">
               <div className="flex flex-1 items-center rounded-[4px] border border-line-strong bg-paper">
-                <button type="button" aria-label="카드 금액 1만 원 줄이기" disabled={cardAmount === 0} onClick={() => setCardAmount(Math.max(0, cardAmount - STEP))} className="h-9 w-9 shrink-0 text-mute hover:text-text disabled:opacity-30">
+                <button type="button" aria-label="카드 금액 1만 원 줄이기" disabled={cardAmount === 0} onClick={() => setCardAmount(Math.max(0, cardAmount - STEP))} className="h-11 w-11 shrink-0 text-mute hover:text-text disabled:opacity-30 sm:h-8 sm:w-8">
                   −
                 </button>
                 <input
@@ -171,7 +171,7 @@ export function PayPanel({
                   aria-label="카드로 낼 금액 (만 원)"
                   value={Math.round((cardAmount / 10_000) * 10) / 10}
                   onChange={(e) => setCardAmount(Math.max(0, Math.round((Number.parseFloat(e.target.value) || 0) * 10) * 1_000))}
-                  className="num h-9 w-full min-w-0 bg-transparent text-right text-[13px] font-semibold focus:outline-none"
+                  className="num h-11 w-full min-w-0 bg-transparent text-right text-[13px] font-semibold focus:outline-none sm:h-8"
                 />
                 <span className="mr-1 shrink-0 text-[10px] text-mute">만</span>
                 <button type="button" aria-label="카드 금액 1만 원 늘리기" onClick={() => setCardAmount(cardAmount + STEP)} className="h-9 w-9 shrink-0 text-mute hover:text-text">
@@ -186,7 +186,7 @@ export function PayPanel({
                     role="radio"
                     aria-checked={months === m}
                     onClick={() => setMonths(m)}
-                    className={`h-9 rounded-[3px] border px-2 text-[11px] font-semibold ${months === m ? 'border-ink bg-ink text-frame' : 'border-line-strong text-mute'}`}
+                    className={`h-11 rounded-[3px] border px-2 text-[11px] font-semibold sm:h-9 ${months === m ? 'border-ink bg-ink text-frame' : 'border-line-strong text-mute'}`}
                   >
                     {m === 1 ? '일시불' : `${m}개월`}
                   </button>
@@ -198,10 +198,34 @@ export function PayPanel({
                 ? months === 1
                   ? `다음 달 생활비에서 ${formatMan(cardAmount)}이 빠집니다.`
                   : `매달 ${formatWon(perMonth)} × ${months}개월, 총 ${formatMan(perMonth * months)}입니다.`
-                : '카드는 다음 달 월급을 미리 쓰는 것입니다. 할부는 총액과 기간으로 판단하세요.'}
+                : '카드는 다음 달 월급을 미리 쓰는 것입니다.'}
             </p>
           </div>
         )}
+
+        <div className="rounded-[4px] border border-dashed border-line-strong p-2">
+          <p className="text-[11px] font-bold text-mute">낼 곳</p>
+          {chosen.length === 0 && cardAmount === 0 ? (
+            <p className="mt-1 text-[11px] leading-snug text-mute">아직 고른 통장이 없습니다. 통장마다 낼 금액을 정하세요.</p>
+          ) : (
+            <ul className="mt-1 grid gap-0.5">
+              {chosen.map((x) => (
+                <li key={x.id} className="flex items-center gap-1.5 text-[11px]">
+                  <AccountMark id={x.id} size={14} />
+                  <span className="text-mute">{sourceLabel(x.id)}</span>
+                  <span className="num ml-auto font-semibold">{formatMan(x.amount)}</span>
+                </li>
+              ))}
+              {cardAmount > 0 && (
+                <li className="flex items-center gap-1.5 text-[11px]">
+                  <CreditCard size={13} aria-hidden />
+                  <span className="text-mute">카드 {months === 1 ? '일시불' : `${months}개월`}</span>
+                  <span className="num ml-auto font-semibold">{formatMan(cardAmount)}</span>
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">

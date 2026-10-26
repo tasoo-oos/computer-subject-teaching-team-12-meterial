@@ -29,7 +29,7 @@ export function MonthStrip({ state }: { state: GameState }) {
           <li
             key={m}
             aria-current={now ? 'step' : undefined}
-            className={`flex min-w-0 flex-1 flex-col rounded-[3px] px-1 py-0.5 ${
+            className={`flex h-full min-w-0 flex-1 flex-col rounded-[3px] px-1 py-0.5 ${
               now ? 'bg-flash text-ink' : past ? 'bg-ink-3 text-frame' : 'border border-ink-4 text-frame-mute'
             }`}
             title={`${m}월 · ${event ? event.title : KIND_LABEL[kind]}`}

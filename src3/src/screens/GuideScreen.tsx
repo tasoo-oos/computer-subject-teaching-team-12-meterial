@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
-import { ACCOUNTS, ACCOUNT_ORDER, GUIDE_CARDS } from '@gagyebu/core';
+import { ACCOUNTS, ACCOUNT_ORDER, GUIDE_CARDS, formatMan } from '@gagyebu/core';
 import type { ScreenProps } from '@gagyebu/draft-kit';
 import { AppFrame } from '../components/AppFrame.tsx';
 import { Button } from '../components/ui.tsx';
@@ -40,7 +40,7 @@ export function GuideScreen({ state, ui, go, goScreen }: ScreenProps) {
             </div>
 
             <div className="cut-2 flex flex-col p-4">
-              {card.id === 'split-accounts' ? <AccountBoard /> : <CardSketch index={index} />}
+              {card.id === 'split-accounts' ? <AccountBoard /> : <CardSketch index={index} salary={state.profile.salary} />}
             </div>
           </div>
 
@@ -94,7 +94,7 @@ function AccountBoard() {
 }
 
 /** 나머지 카드의 도해: 50/30/20 비율, 고정비/변동비, 비상금 3~6개월, 저축/투자, 제도 */
-function CardSketch({ index }: { index: number }) {
+function CardSketch({ index, salary }: { index: number; salary: number }) {
   if (index === 0) {
     const rows = [
       { label: '필수 지출', pct: 50, color: 'var(--color-acc-living)', note: '월세, 식비, 교통' },
@@ -103,7 +103,10 @@ function CardSketch({ index }: { index: number }) {
     ];
     return (
       <div className="flex flex-1 flex-col justify-center">
-        <p className="text-xs font-semibold text-mute">50 / 30 / 20, 출발점으로만</p>
+        <div className="flex items-baseline justify-between">
+          <p className="text-xs font-semibold text-mute">50 / 30 / 20, 출발점으로만</p>
+          <p className="num text-[11px] text-mute">월급 {formatMan(salary)} 기준</p>
+        </div>
         <div className="mt-4 flex h-6 overflow-hidden rounded-[3px]" aria-hidden>
           {rows.map((r) => (
             <span key={r.label} style={{ width: `${r.pct}%`, background: r.color }} />
@@ -115,7 +118,8 @@ function CardSketch({ index }: { index: number }) {
               <span className="size-2.5 rounded-[2px]" style={{ background: r.color }} aria-hidden />
               <span className="font-semibold">{r.label}</span>
               <span className="num text-mute">{r.pct}%</span>
-              <span className="ml-auto text-xs text-mute">{r.note}</span>
+              <span className="num ml-auto text-xs font-semibold">{formatMan((salary * r.pct) / 100)}</span>
+              <span className="w-24 text-right text-[10px] text-mute">{r.note}</span>
             </li>
           ))}
         </ul>

@@ -10,6 +10,8 @@ import {
   formatMan,
   formatSignedWon,
   formatWon,
+  EXPENSE_ORDER,
+  TRANSFER_ORDER,
   type AccountId,
   type GameState,
   type MonthRecord,
@@ -39,6 +41,9 @@ export function ResultScreen({ state, ui, go }: ScreenProps) {
   const ending = ENDINGS[s.ending];
   const unlocked = s.achievements.filter((a) => a.unlocked).length;
   const [zoomed, setZoomed] = useState(false);
+  const unchanged = [...TRANSFER_ORDER, ...EXPENSE_ORDER, 'livingBuffer'].filter(
+    (k) => !s.budgetDiff.some((d) => d.key === k),
+  ) as string[];
 
   if (ui.presentation || zoomed) {
     return <Presentation state={state} settlement={s} onExit={() => (ui.presentation ? go('result-balanced') : setZoomed(false))} />;
@@ -52,8 +57,8 @@ export function ResultScreen({ state, ui, go }: ScreenProps) {
             <p className="text-[11px] font-bold text-mute">12월 결산 · {state.profile.nickname}의 1년</p>
             <h1 className="mt-1 text-[40px] leading-[1.05] font-extrabold tracking-[-0.04em] text-balance sm:text-[54px]">{ending.title}</h1>
             <p className="mt-2 text-[17px] leading-relaxed text-mute">{ending.tagline}</p>
-            <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-2">
-              <div>
+            <div className="mt-4 grid grid-cols-2 items-end gap-x-8 gap-y-3 sm:flex sm:flex-wrap">
+              <div className="col-span-2 sm:col-auto">
                 <p className="text-[11px] font-bold text-mute">최종 순자산</p>
                 <p className="num text-[32px] leading-tight font-extrabold tracking-[-0.02em]">{formatWon(s.netWorth)}</p>
                 <p className="num text-[11px] text-mute">월급의 {(s.netWorth / state.profile.salary).toFixed(1)}배</p>
@@ -173,8 +178,20 @@ export function ResultScreen({ state, ui, go }: ScreenProps) {
                 </tbody>
               </table>
             )}
+            {unchanged.length > 0 && (
+              <div className="mt-3">
+                <p className="text-[11px] font-bold text-mute">그대로 둔 항목</p>
+                <ul className="mt-1 flex flex-wrap gap-1">
+                  {unchanged.map((k) => (
+                    <li key={k} className="rounded-[3px] bg-paper-2 px-1.5 py-0.5 text-[10px] text-mute">
+                      {diffLabel(k)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <p className="mt-2 text-[11px] leading-relaxed text-mute">
-              처음과 달라진 항목만 표시합니다. 가계부를 {state.budgetEdits}번 조정했습니다. 고정비는 한 번 바뀌면 매달 따라옵니다.
+              가계부를 {state.budgetEdits}번 조정했습니다. 고정비는 한 번 바뀌면 매달 따라옵니다.
             </p>
           </section>
 

@@ -3,6 +3,7 @@ import { Check, Copy, Lock, Sparkles } from 'lucide-react';
 import {
   EVENT_TYPE_LABEL,
   choiceAvailability,
+  formatMan,
   resolveAmount,
   type Choice,
   type GameEvent,
@@ -20,10 +21,11 @@ export function SceneCard({ event, scene, state }: { event: GameEvent; scene: Sc
   return (
     <section className="cut overflow-hidden" aria-labelledby="scene-title">
       <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line px-4 py-2.5">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <Tag tone="line">{EVENT_TYPE_LABEL[event.type]}</Tag>
           <span className="num text-xs font-bold text-mute">{event.code}</span>
           <span className="truncate text-xs text-mute">{event.title}</span>
+          {state.decisions.some((d) => d.month === state.month) && <Tag tone="flash">이 달 {state.decisions.filter((d) => d.month === state.month).length + 1}번째 장면</Tag>}
         </div>
         <span className="flex items-center gap-1.5 text-xs font-semibold text-mute">
           <ChannelIcon size={14} aria-hidden /> {channel.label}
@@ -193,7 +195,9 @@ export function ChoiceList({
               </div>
               <p className={`mt-1.5 text-[15px] leading-snug font-semibold ${av.enabled ? '' : 'text-mute'}`}>{choice.label}</p>
               <p className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[12px] text-mute">
-                {amount !== null && !choice.detail && <Money value={amount} mode="man" className="font-semibold text-text" />}
+                {amount !== null && !choice.detail && !choice.label.includes(formatMan(amount)) && (
+                  <Money value={amount} mode="man" className="font-semibold text-text" />
+                )}
                 {choice.detail && <span className="num">{choice.detail}</span>}
               </p>
               {av.enabled ? (

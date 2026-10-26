@@ -86,7 +86,21 @@ export function DepositPanel({
         })}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
+      <div className="mt-3 rounded-[4px] bg-paper-2 px-3.5 py-3">
+        <p className="text-[11px] font-bold text-mute">고른 통장의 이름표</p>
+        <p className="mt-1 max-w-[46em] text-[13px] leading-relaxed">
+          <b>{ACCOUNTS[target].label}</b> · {ACCOUNTS[target].purpose}
+        </p>
+        <p className="mt-1 max-w-[46em] text-[11px] leading-relaxed text-mute">{ACCOUNTS[target].withdrawRule}</p>
+        {realized < 0 && (
+          <p className="mt-2 flex flex-wrap items-center gap-x-2 text-[11px] text-mute">
+            <TrendingDown size={13} className="text-bad" aria-hidden />
+            매도로 손실이 확정됩니다. 다시 투자하려면 다음 달 가계부에서 자동이체를 정해야 합니다.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
         <p className="text-[11px] leading-snug text-mute">
           넣은 뒤에는 그 통장의 이름표대로만 쓸 수 있습니다.
           {dep.amount === 'investBalance' ? ' 다시 사려면 새로 투자해야 합니다.' : ''}

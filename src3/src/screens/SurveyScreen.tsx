@@ -145,7 +145,7 @@ function Result({
           <dl className="mt-4 grid grid-cols-[1fr_auto] gap-y-1.5 text-sm">
             <dt className="text-mute">자동이체 합계</dt>
             <dd><Money value={sum.transferTotal} mode="man" className="font-semibold" /></dd>
-            <dt className="text-mute">생활비 통장 (지출 {formatMan(sum.expenseTotal)} + 여유 {formatMan(r.livingBuffer)})</dt>
+            <dt className="text-mute">생활비 통장 (지출+여유)</dt>
             <dd><Money value={sum.livingIn} mode="man" className="font-semibold" /></dd>
             <dt className="text-mute">비상금</dt>
             <dd><Money value={r.transfers.emergency} mode="man" className="font-semibold" /></dd>

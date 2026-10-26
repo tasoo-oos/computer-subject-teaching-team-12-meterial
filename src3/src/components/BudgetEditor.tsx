@@ -72,7 +72,7 @@ export function Stepper({ value, onChange, label }: { value: number; onChange: (
             const n = Number.parseFloat(e.target.value);
             onChange(Number.isFinite(n) ? Math.max(0, Math.round(n * 10) * 1_000) : 0);
           }}
-          className="num h-11 w-full min-w-0 bg-transparent text-right text-[15px] font-semibold focus:outline-none"
+          className="num h-11 w-full min-w-0 bg-transparent text-right text-[14px] font-semibold focus:outline-none"
         />
         <span className="ml-1 shrink-0 text-xs text-mute">만 원</span>
       </label>
@@ -106,7 +106,7 @@ function Row({
   const v = get(budget, k);
   const diff = before ? v - get(before, k) : 0;
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_164px] items-center gap-2 py-1.5">
+    <li className="grid grid-cols-[minmax(0,1fr)_172px] items-center gap-2 py-1">
       <div className="flex min-w-0 items-center gap-2.5">
         {mark}
         <div className="min-w-0">
@@ -168,11 +168,11 @@ export function BudgetEditor({ budget, salary, onChange, before, resetTo, resetL
   const over = sum.remaining < 0;
 
   return (
-    <div className="grid gap-2.5 xl:grid-cols-[1fr_1fr_336px] lg:grid-cols-[1fr_1fr]">
+    <div className="grid gap-2.5 lg:grid-cols-[1fr_1fr_300px] xl:grid-cols-[1fr_1fr_336px]">
       <div className="cut flex flex-col gap-6 p-5">
         <Group title="월급날 자동이체" total={sum.transferTotal} note="월급이 들어오면 먼저 떼어 각 통장으로 보냅니다.">
           {TRANSFER_ORDER.map((id) => (
-            <Row key={id} k={id} budget={budget} before={before} onChange={onChange} mark={<AccountMark id={id} />} sub={`권장 ${ACCOUNTS[id].guide.split(' (')[0]}`} />
+            <Row key={id} k={id} budget={budget} before={before} onChange={onChange} mark={<AccountMark id={id} />} sub={`권장 ${(ACCOUNTS[id].guide.split(' (')[0] ?? '').replace('월 ', '')}`} />
           ))}
         </Group>
         <Group title="생활비 통장 여유분" total={budget.livingBuffer} note="쓰고 남으면 다음 달로 넘어갑니다. 갑자기 오른 지출을 받아 줍니다.">
@@ -193,7 +193,7 @@ export function BudgetEditor({ budget, salary, onChange, before, resetTo, resetL
         </Group>
       </div>
 
-      <aside className="cut flex flex-col gap-5 p-5 lg:col-span-2 xl:col-span-1" aria-live="polite">
+      <aside className="cut flex flex-col gap-5 p-5" aria-live="polite">
         <dl className="grid grid-cols-[1fr_auto] gap-y-1.5 text-sm">
           <dt className="text-mute">월급</dt>
           <dd><Money value={salary} className="font-semibold" /></dd>
@@ -230,7 +230,7 @@ export function BudgetEditor({ budget, salary, onChange, before, resetTo, resetL
           <ShareBar shares={sum.shares} />
         </div>
 
-        <div className="mt-auto flex flex-col gap-2">
+        <div className="mt-auto flex flex-col gap-2 pt-1">
           <Button variant="plate" size="lg" disabled={!valid} onClick={onConfirm} aria-describedby={valid ? undefined : 'budget-why'}>
             {confirmLabel}
           </Button>
@@ -247,7 +247,7 @@ export function BudgetEditor({ budget, salary, onChange, before, resetTo, resetL
             )}
             {promptText && (
               <Button size="sm" onClick={() => copy(promptText)} aria-live="polite" className={resetTo ? '' : 'col-span-2'}>
-                {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? '복사했어요' : 'AI에게 물어보기'}
+                {copied ? <Check size={15} /> : <Copy size={15} />} <span className="whitespace-nowrap">{copied ? '복사했어요' : 'AI에게 물어보기'}</span>
               </Button>
             )}
           </div>

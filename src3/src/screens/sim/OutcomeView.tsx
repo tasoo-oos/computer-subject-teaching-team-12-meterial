@@ -1,10 +1,14 @@
 import { ArrowRight, BookOpen, CalendarClock, CircleCheck, Lightbulb, Minus } from 'lucide-react';
 import {
   ACCOUNTS,
+  EVENTS,
+  PROMPTS,
   STATUSES,
   budgetSummary,
+  fillTemplate,
   formatMan,
   formatSignedWon,
+  formatWon,
   monthLabel,
   type AccountId,
   type Delta,
@@ -13,6 +17,7 @@ import {
 } from '@gagyebu/core';
 import { AccountMark, Button, Money } from '../../components/ui.tsx';
 import { ShareBar } from '../../components/ShareBar.tsx';
+import { PromptButton } from './SceneCard.tsx';
 
 /** 결과 컷: 피드백, 잔고 변화, 이어지는 장면, 교훈, 결정 기록 */
 export function OutcomeView({
@@ -28,6 +33,19 @@ export function OutcomeView({
 }) {
   const sum = budgetSummary(state.budget, state.profile.salary);
   const recent = state.decisions.slice(-4).reverse();
+  const event = EVENTS[outcome.ref.eventId];
+  const promptText = event.promptId
+    ? fillTemplate(PROMPTS[event.promptId].template, {
+        salary: formatMan(state.profile.salary).replace(' 만 원', ''),
+        amount: formatMan(Math.abs(outcome.deltas.find((d) => d.kind === 'account')?.amount ?? 0)),
+        accounts: (['living', 'emergency', 'savings', 'invest', 'goal', 'housing'] as AccountId[])
+          .map((id) => `${ACCOUNTS[id].label} ${formatWon(state.accounts[id].balance)}`)
+          .join(', '),
+        item: event.title,
+        months: '12',
+        message: outcome.feedback,
+      })
+    : null;
 
   return (
     <section className="cut flex flex-1 flex-col p-4" aria-labelledby="outcome-title">
@@ -57,6 +75,17 @@ export function OutcomeView({
             <p className="mt-4 flex gap-2 rounded-[4px] bg-flash-soft px-3 py-2.5 text-[13px] leading-relaxed font-medium">
               <Lightbulb size={16} className="mt-0.5 shrink-0" aria-hidden /> {outcome.lesson}
             </p>
+          )}
+
+          {promptText && (
+            <div className="mt-4 rounded-[4px] border border-line px-3 py-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] font-bold text-mute">이 결정을 AI와 다시 생각해 보기</p>
+                <PromptButton text={promptText} />
+              </div>
+              <p className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed text-mute">{promptText}</p>
+              <p className="mt-1 text-[10px] text-mute">AI 답변을 그대로 따르지 말고 내 상황에 맞는지 판단하세요.</p>
+            </div>
           )}
         </div>
 
@@ -95,7 +124,7 @@ export function OutcomeView({
             <p className="num mt-1.5 text-[11px] text-mute">저축률 {(sum.savingsRate * 100).toFixed(1).replace('.0', '')}%</p>
           </div>
 
-          <div className="mt-auto rounded-[4px] bg-paper-2 px-3 py-2.5">
+          <div className="rounded-[4px] bg-paper-2 px-3 py-2.5">
             <p className="text-[11px] font-bold text-mute">최근 결정</p>
             <ol className="mt-1 grid gap-1">
               {recent.map((d, i) => (

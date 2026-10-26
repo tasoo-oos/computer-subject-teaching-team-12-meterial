@@ -74,7 +74,13 @@ export function StartScreen({ state, ui, go, goScreen }: ScreenProps) {
               <p className="mt-3 text-sm leading-relaxed text-mute">
                 월급은 기준 평균소득 <b className="num text-text">{formatMan(BASE_SALARY)}</b>의 ±{SALARY_SPREAD * 100}% 안에서 1만 원 단위로 정해집니다. 친구와 월급이 조금씩 다를 수 있어요.
               </p>
-              <Button type="submit" variant="plate" size="lg" className="mt-auto w-full" disabled={!trimmed}>
+              <div className="mt-auto rounded-[5px] bg-paper-2 px-4 py-3">
+                <p className="text-[11px] font-bold text-mute">수업 안내</p>
+                <p className="mt-1 text-[12px] leading-relaxed text-mute">
+                  40분 동안 각자 진행하고, 마지막에 몇 명이 결과를 발표합니다. 입력한 내용은 이 브라우저에만 남습니다.
+                </p>
+              </div>
+              <Button type="submit" variant="plate" size="lg" className="mt-3 w-full" disabled={!trimmed}>
                 월급 확인하기 <ArrowRight size={18} />
               </Button>
             </form>
@@ -167,7 +173,14 @@ function Reveal({ nickname, salary, onNext }: { nickname: string; salary: number
         </div>
       </figure>
 
-      <Button variant="plate" size="lg" className="mt-auto w-full" onClick={onNext}>
+      <div className="mt-auto rounded-[5px] bg-paper-2 px-4 py-3">
+        <p className="text-[11px] font-bold text-mute">다음</p>
+        <p className="mt-0.5 text-[12px] leading-relaxed text-mute">
+          소비습관 7문항에 답하면 추천 가계부가 만들어집니다. 그 가계부를 고쳐서 1년을 시작합니다.
+        </p>
+        <p className="mt-1 text-[11px] leading-relaxed text-mute">월급과 진행 상태는 이 브라우저에 저장되어 새로고침해도 유지됩니다.</p>
+      </div>
+      <Button variant="plate" size="lg" className="mt-3 w-full" onClick={onNext}>
         내 소비습관부터 알아보기 <ArrowRight size={18} />
       </Button>
     </div>

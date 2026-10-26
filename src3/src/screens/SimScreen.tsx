@@ -190,7 +190,7 @@ export function SimScreen({ state, ui, fixture, go }: ScreenProps) {
           </div>
 
           {!wide && (
-            <div className="min-w-0 lg:max-h-[calc(100dvh-210px)] lg:overflow-y-auto lg:pr-0.5">
+            <div className="min-w-0">
               <SidePanel state={state} onSellSneakers={sellSneakers} />
             </div>
           )}
