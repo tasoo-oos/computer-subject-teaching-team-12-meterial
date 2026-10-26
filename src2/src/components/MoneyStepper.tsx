@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
 
 const nf = new Intl.NumberFormat('ko-KR');
 
-/** 1만 원 단위 조정 + 직접 입력 */
+/** 1만 원 단위 조정 + 직접 입력. 조작 버튼은 44px 터치 영역을 지킨다 */
 export function MoneyStepper({
   value,
   onChange,
@@ -26,7 +26,10 @@ export function MoneyStepper({
   size?: 'sm' | 'md';
 }) {
   const [text, setText] = useState(nf.format(value));
-  useEffect(() => setText(nf.format(value)), [value]);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setText(nf.format(value));
+  }, [value]);
   const clamp = (v: number) => Math.max(min, max === undefined ? v : Math.min(max, v));
   const commit = (raw: string) => {
     const n = Number(raw.replace(/[^0-9]/g, ''));
@@ -41,17 +44,21 @@ export function MoneyStepper({
       className={`flex items-stretch overflow-hidden rounded-xl border bg-surface ${invalid ? 'border-danger' : 'border-line-strong'} ${disabled ? 'opacity-55' : ''} focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25`}
     >
       <button type="button" className={btn} aria-label={`${label} 1만 원 줄이기`} disabled={disabled || value <= min} onClick={() => onChange(clamp(value - step))}>
-        <Minus size={18} aria-hidden />
+        <Minus size={17} aria-hidden />
       </button>
-      <label className="flex min-w-0 flex-1 items-center border-x border-line px-2">
+      <label className="flex min-w-0 flex-1 items-center border-x border-line px-1.5">
         <span className="sr-only">{label} (원)</span>
         <input
           inputMode="numeric"
-          className="num w-full min-w-0 bg-transparent text-right text-[17px] font-semibold text-ink outline-none"
+          className="num w-full min-w-0 bg-transparent text-right text-[15px] font-semibold text-ink outline-none"
           value={text}
           disabled={disabled}
+          onFocus={() => (focused.current = true)}
           onChange={(e) => setText(e.target.value)}
-          onBlur={(e) => commit(e.target.value)}
+          onBlur={(e) => {
+            focused.current = false;
+            commit(e.target.value);
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') commit((e.target as HTMLInputElement).value);
             if (e.key === 'ArrowUp') {
@@ -64,12 +71,12 @@ export function MoneyStepper({
             }
           }}
         />
-        <span className="ml-1 text-sm text-ink-3" aria-hidden>
+        <span className="ml-0.5 shrink-0 text-[11px] text-ink-3" aria-hidden>
           원
         </span>
       </label>
       <button type="button" className={btn} aria-label={`${label} 1만 원 늘리기`} disabled={disabled || (max !== undefined && value >= max)} onClick={() => onChange(clamp(value + step))}>
-        <Plus size={18} aria-hidden />
+        <Plus size={17} aria-hidden />
       </button>
     </div>
   );

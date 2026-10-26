@@ -1,4 +1,4 @@
-import { budgetIssues, budgetSummary, formatPct, type Budget } from '@gagyebu/core';
+import { budgetIssues, budgetSummary, formatPct, formatWon, type Budget } from '@gagyebu/core';
 import { CircleAlert, CircleCheck } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { budgetKeyLabel } from './BudgetEditor.tsx';
@@ -70,6 +70,46 @@ export function BudgetSummaryPanel({ budget, salary, children }: { budget: Budge
         <AccountShareBar shares={s.shares} />
       </div>
       {children}
+    </section>
+  );
+}
+
+/** 조정 단계용 압축 합계 바: 남은 금액과 확정 버튼이 항상 보인다 */
+export function BudgetBalanceBar({ budget, salary, children }: { budget: Budget; salary: number; children?: ReactNode }) {
+  const s = budgetSummary(budget, salary);
+  const issues = budgetIssues(budget, salary);
+  const over = issues.find((i) => i.kind === 'over');
+  const under = issues.find((i) => i.kind === 'under');
+  const ok = issues.length === 0;
+  return (
+    <section
+      aria-label="가계부 합계"
+      className={`sticky top-2 z-20 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border-2 bg-surface px-3.5 py-2.5 shadow-[var(--shadow-lift)] ${ok ? 'border-up' : over ? 'border-danger' : 'border-warn'}`}
+    >
+      <div>
+        <div className="text-[11px] font-semibold text-ink-3">월급</div>
+        <Money value={salary} className="text-[15px] font-bold" />
+      </div>
+      <div>
+        <div className="text-[11px] font-semibold text-ink-3">배정 합계</div>
+        <Money value={s.transferTotal + s.livingIn} className="text-[15px] font-bold" />
+      </div>
+      <div>
+        <div className="text-[11px] font-semibold text-ink-3">저축률</div>
+        <div className="num text-[15px] font-bold">{formatPct(s.savingsRate)}</div>
+      </div>
+      <div aria-live="polite" className="min-w-[128px]">
+        <div className="text-[11px] font-semibold text-ink-3">{over ? '초과' : ok ? '남은 금액' : '남은 금액'}</div>
+        <div className={`num text-lg font-bold ${ok ? 'text-up' : over ? 'text-danger' : 'text-warn'}`}>
+          {formatWon(over ? over.amount : s.remaining)}
+        </div>
+      </div>
+      <div className="ml-auto flex items-center gap-3">
+        <span className={`hidden text-[12px] font-semibold sm:block ${ok ? 'text-up' : over ? 'text-danger' : 'text-warn'}`}>
+          {ok ? '합계가 맞았습니다' : over ? '초과분을 줄이세요' : under ? '남은 돈을 배정하세요' : '고칠 항목이 있어요'}
+        </span>
+        {children}
+      </div>
     </section>
   );
 }
