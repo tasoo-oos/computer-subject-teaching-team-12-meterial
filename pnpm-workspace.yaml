@@ -1,0 +1,5 @@
+packages:
+  - packages/*
+  - src1
+  - src2
+  - src3
