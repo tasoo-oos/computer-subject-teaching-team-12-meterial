@@ -16,5 +16,5 @@ const screens: ScreenMap = {
 };
 
 export function App() {
-  return <DraftShell screens={screens} title="src3" />;
+  return <DraftShell screens={screens} title="시안 3 · 열두 컷 인화 띠" />;
 }

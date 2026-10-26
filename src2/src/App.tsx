@@ -16,5 +16,5 @@ const screens: ScreenMap = {
 };
 
 export function App() {
-  return <DraftShell screens={screens} title="src2" />;
+  return <DraftShell screens={screens} title="시안 2 · 통장 덱" />;
 }
