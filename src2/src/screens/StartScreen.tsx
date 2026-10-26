@@ -111,13 +111,18 @@ function Reveal({ state, go }: { state: ScreenProps['state']; go: ScreenProps['g
           <span className="font-semibold text-ink-2">기준 평균소득 {formatWon(base)}</span>
           <span className="text-ink-3">±10% 범위</span>
         </div>
+        <span
+          className="num absolute -top-6 -translate-x-1/2 rounded-md bg-primary px-1.5 py-0.5 text-[11px] font-bold whitespace-nowrap text-white"
+          style={{ left: `clamp(46px, ${pos}%, calc(100% - 46px))` }}
+        >
+          내 월급
+        </span>
         <div className="relative mt-3 h-3 rounded-full bg-surface-2 ring-1 ring-line ring-inset">
           <span className="absolute inset-y-0 left-0 rounded-full bg-primary/15" style={{ width: '100%' }} aria-hidden />
           <span className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-surface bg-primary shadow" style={{ left: `${pos}%` }} aria-hidden />
         </div>
-        <div className="num mt-1.5 flex justify-between text-xs text-ink-3">
+        <div className="num mt-2 flex justify-between gap-2 text-[11px] text-ink-3">
           <span>{nf.format(min)}원</span>
-          <span className="font-bold text-primary">내 월급 {nf.format(salary)}원</span>
           <span>{nf.format(max)}원</span>
         </div>
         <p className="mt-3 text-sm leading-relaxed text-ink-2">

@@ -21,7 +21,7 @@ export function FixedPayPanel({ choice, onClose, onConfirm }: { choice: Choice; 
             <strong className="num text-ink">{formatWon(fp.amount)}</strong>
             <span className="num text-ink-3"> · {months === 1 ? '일시불' : `${months}개월`}</span>
           </div>
-          <Button size="lg" onClick={onConfirm}>
+          <Button size="lg" className="w-full sm:w-auto" onClick={onConfirm}>
             이 방식으로 확정
           </Button>
         </div>

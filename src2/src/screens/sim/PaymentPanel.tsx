@@ -37,7 +37,9 @@ export function PaymentPanel({
   const cardMonthsList = pay.cardMonths ?? [1];
   const [adjustable, setAdjustable] = useState(pay.adjustable?.min ?? 0);
   const need = pay.adjustable ? adjustable : resolveAmount(state, pay.amount);
-  const firstAccount = options.find((o) => o.source !== 'card' && (o.max ?? 0) > 0);
+  // 비상금처럼 '이 일에 쓰라고 둔 돈'부터 채워 둔다. 금액은 언제든 바꿀 수 있다
+  const firstAccount =
+    options.find((o) => o.source === 'emergency' && (o.max ?? 0) > 0) ?? options.find((o) => o.source !== 'card' && (o.max ?? 0) > 0);
   const [parts, setParts] = useState<Partial<Record<FundingSource, number>>>(() =>
     firstAccount ? { [firstAccount.source]: Math.min(firstAccount.max ?? 0, need) } : {},
   );
@@ -69,7 +71,7 @@ export function PaymentPanel({
               {left === 0 ? '금액이 맞았습니다' : left > 0 ? `${formatWon(left)} 더 필요합니다` : `${formatWon(-left)} 넘게 골랐습니다`}
             </div>
           </div>
-          <Button size="lg" disabled={!ready} onClick={() => onConfirm({ parts: (Object.entries(parts) as [FundingSource, number][]).filter(([s, v]) => s !== 'card' && v > 0).map(([source, amount]) => ({ source: source as Exclude<FundingSource, 'card'>, amount })), ...(cardAmount > 0 ? { card: { amount: cardAmount, months } } : {}) })}>
+          <Button size="lg" className="w-full sm:w-auto" disabled={!ready} onClick={() => onConfirm({ parts: (Object.entries(parts) as [FundingSource, number][]).filter(([s, v]) => s !== 'card' && v > 0).map(([source, amount]) => ({ source: source as Exclude<FundingSource, 'card'>, amount })), ...(cardAmount > 0 ? { card: { amount: cardAmount, months } } : {}) })}>
             {formatWon(need)} 확정
           </Button>
         </div>
@@ -123,7 +125,7 @@ export function PaymentPanel({
                   </div>
                   <button
                     type="button"
-                    onClick={() => set(source, Math.max(0, Math.min(max, value === Math.min(max, need) ? 0 : need - (total - value))))}
+                    onClick={() => set(source, Math.max(0, Math.min(max, value + Math.max(0, left))))}
                     className="min-h-11 shrink-0 rounded-lg border border-line-strong bg-surface px-2 text-[11px] font-bold text-ink-2 hover:bg-surface-2"
                     aria-label={`${ACCOUNTS[source].label}에서 낼 수 있는 만큼 채우기`}
                   >
@@ -152,7 +154,7 @@ export function PaymentPanel({
                     type="button"
                     onClick={() => setMonths(m)}
                     aria-pressed={months === m}
-                    className={`min-h-8 rounded-lg px-2 text-[11px] font-bold ${months === m ? 'bg-acc-card text-white' : 'bg-surface-2 text-ink-2 hover:bg-line'}`}
+                    className={`min-h-11 rounded-lg px-2.5 text-[11px] font-bold ${months === m ? 'bg-acc-card text-white' : 'bg-surface-2 text-ink-2 hover:bg-line'}`}
                   >
                     {MONTH_LABEL(m)}
                   </button>

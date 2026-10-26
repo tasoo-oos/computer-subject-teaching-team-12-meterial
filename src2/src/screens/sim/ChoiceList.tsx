@@ -32,7 +32,7 @@ export function ChoiceList({ state, scene, onChoose }: { state: GameState; scene
                 disabled={!enabled}
                 onClick={() => onChoose(c)}
                 aria-describedby={!enabled ? `lock-${c.id}` : undefined}
-                className={`group flex w-full items-start gap-3 rounded-2xl border-2 bg-surface p-3 text-left transition-[border-color,background-color,transform,box-shadow] duration-150 ${
+                className={`group flex w-full items-start gap-3 rounded-2xl border-2 bg-surface px-3 py-2.5 text-left transition-[border-color,background-color,transform,box-shadow] duration-150 ${
                   enabled
                     ? 'border-line shadow-[var(--shadow-card)] hover:-translate-y-px hover:border-primary/50 hover:shadow-[var(--shadow-lift)] active:translate-y-0'
                     : 'border-dashed border-line-strong bg-surface-2/60'
@@ -45,6 +45,11 @@ export function ChoiceList({ state, scene, onChoose }: { state: GameState; scene
                   <span className="flex flex-wrap items-center gap-1.5">
                     <span className={`text-[15px] font-bold leading-snug ${enabled ? 'text-ink' : 'text-ink-3'}`}>{c.label}</span>
                     <Chip className={enabled ? k.cls : 'bg-line/70 text-ink-3'}>{k.label}</Chip>
+                    {c.next && (
+                      <span className="rounded-full border border-line bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-3">
+                        {c.next.delayMonths ? `${c.next.delayMonths}개월 뒤로 이어짐` : '이어지는 장면 있음'}
+                      </span>
+                    )}
                   </span>
                   {(c.detail || payLabel) && (
                     <span className="num mt-0.5 block text-[13px] font-semibold text-ink-2">{payLabel ?? c.detail}</span>
@@ -52,7 +57,6 @@ export function ChoiceList({ state, scene, onChoose }: { state: GameState; scene
                   {c.fixedPay && !c.fixedPay.interestFree && c.fixedPay.cardMonths ? (
                     <span className="mt-0.5 block text-[11px] text-ink-3">할부 수수료가 붙습니다</span>
                   ) : null}
-                  <span className="mt-0.5 block text-[11px] text-ink-3">{enabled ? k.hint : '지금은 고를 수 없어요'}</span>
                   {!enabled && reason && (
                     <span id={`lock-${c.id}`} className="mt-1.5 flex items-start gap-1 rounded-lg bg-warn-soft px-2 py-1 text-[12px] leading-snug font-semibold text-warn">
                       <Lock size={12} className="mt-0.5 shrink-0" aria-hidden />

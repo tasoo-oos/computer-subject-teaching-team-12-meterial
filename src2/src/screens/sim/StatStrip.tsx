@@ -60,7 +60,7 @@ export function StatStrip({ state }: { state: GameState }) {
         </div>
         <div className="num mt-0.5 text-[17px] font-bold leading-tight text-hud-ink">{months.toFixed(1)}개월</div>
         <div className="mt-0.5 text-[10px] text-hud-ink-2">
-          {formatMan(state.accounts.emergency.balance)} · 생활비의 {formatPct(Math.min(1, months / 3))}
+          {formatMan(state.accounts.emergency.balance)} · 3개월분의 {formatPct(Math.min(1, months / 3))}
         </div>
       </div>
     </div>

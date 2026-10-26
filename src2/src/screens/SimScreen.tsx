@@ -14,6 +14,8 @@ import {
   type SceneRef,
 } from '@gagyebu/core';
 import { CheckCircle2, ChevronRight, Sparkles } from 'lucide-react';
+import { PromptCopy } from '../components/PromptCopy.tsx';
+import { scenePrompt } from '../lib/prompts.ts';
 import { MonthRail } from './sim/MonthRail.tsx';
 import { StatStrip } from './sim/StatStrip.tsx';
 import { AccountPanel, ScheduledPanel, StatusPanel } from './sim/AccountPanel.tsx';
@@ -58,6 +60,7 @@ export function SimScreen({ state: initial, ui, fixture, go, goScreen }: ScreenP
   const [preview, setPreview] = useState<Outcome | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const scene = game.current ? getScene(game.current) : null;
+  const aiPrompt = scene ? scenePrompt(game, scene.event, scene.scene) : null;
   const [panel, setPanel] = useState<{ choice: Choice; kind: 'pay' | 'deposit' | 'fixed' } | null>(() => {
     if (!ui.openChoiceId || !scene) return null;
     const c = scene.scene.choices.find((x) => x.id === ui.openChoiceId);
@@ -121,7 +124,7 @@ export function SimScreen({ state: initial, ui, fixture, go, goScreen }: ScreenP
   };
 
   return (
-    <div className="flex min-h-dvh flex-col bg-bg">
+    <div className="relative flex min-h-dvh flex-col bg-bg">
       <header className="on-dark bg-hud pb-3 text-hud-ink">
         <div className="mx-auto max-w-[1320px] px-3 pt-3 sm:px-5">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -134,7 +137,9 @@ export function SimScreen({ state: initial, ui, fixture, go, goScreen }: ScreenP
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-hud-ink-2">{SCREEN_LABEL.sim}</span>
             <span className="ml-auto flex items-center gap-2 text-[12px] text-hud-ink-2">
               <span className="font-semibold text-white">{game.profile.nickname}</span>님의 1년
-              <span className="rounded-md bg-accent px-1.5 py-0.5 text-[11px] font-bold text-hud">{game.month}월 · {KIND_LABEL[monthKind(game.month)]}</span>
+              <span className="rounded-md bg-accent px-1.5 py-0.5 text-[11px] font-bold whitespace-nowrap text-hud">
+                {game.month}월<span className="hidden sm:inline"> · {KIND_LABEL[monthKind(game.month)]}</span>
+              </span>
             </span>
           </div>
 
@@ -155,7 +160,7 @@ export function SimScreen({ state: initial, ui, fixture, go, goScreen }: ScreenP
         </div>
       </header>
 
-      <main className="mx-auto grid w-full max-w-[1320px] flex-1 items-start gap-3 px-3 py-3 sm:px-5 xl:grid-cols-[minmax(0,1fr)_336px]">
+      <main className="mx-auto grid w-full max-w-[1320px] flex-1 items-start gap-3 px-3 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_336px]">
         <div className="min-w-0">
           {preview ? (
             <OutcomePanel state={{ ...game, lastOutcome: preview }} onContinue={advance} onAdjust={() => go('sim-jun-adjust')} />
@@ -165,6 +170,14 @@ export function SimScreen({ state: initial, ui, fixture, go, goScreen }: ScreenP
             <>
               <SceneCard event={scene.event} scene={scene.scene} />
               <ChoiceList state={game} scene={scene.scene} onChoose={handleChoice} />
+              {aiPrompt && (
+                <div className="mt-3 rounded-2xl border border-line bg-surface p-3">
+                  <p className="mb-1.5 text-[12px] font-semibold text-ink-2">
+                    판단이 어려울 때 AI에게 물어볼 수 있습니다. <span className="font-normal text-ink-3">질문만 복사되고, 답은 내가 고릅니다.</span>
+                  </p>
+                  <PromptCopy text={aiPrompt.text} stage={aiPrompt.stage} compact />
+                </div>
+              )}
               {game.queue.length > 0 && (
                 <p className="mt-3 flex items-center gap-1.5 rounded-xl border border-dashed border-line-strong bg-surface/70 px-3 py-2 text-[12px] text-ink-2">
                   <ChevronRight size={14} aria-hidden /> 이번 달에 이어지는 장면이 {game.queue.length}개 더 있습니다.
@@ -190,7 +203,7 @@ export function SimScreen({ state: initial, ui, fixture, go, goScreen }: ScreenP
         </div>
 
         {game.step !== 'adjust' && (
-          <aside className="flex min-w-0 flex-col gap-3 xl:sticky xl:top-3">
+          <aside className="flex min-w-0 flex-col gap-3 lg:sticky lg:top-3">
             <AccountPanel state={game} />
             <StatusPanel state={game} onSell={sellSneakers} />
             <ScheduledPanel state={game} />

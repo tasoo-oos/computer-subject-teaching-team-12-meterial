@@ -55,7 +55,7 @@ export function AdjustPanel({ state, onConfirm }: { state: GameState; onConfirm:
       </div>
 
       <div className="mt-3">
-        <BudgetEditor budget={budget} salary={state.profile.salary} onChange={setBudget} reference={state.budget} layout="stack" />
+        <BudgetEditor budget={budget} salary={state.profile.salary} onChange={setBudget} reference={state.budget} />
       </div>
       <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
         조정 횟수는 결과 화면에 기록됩니다. 가계부를 고치는 것은 계획이 틀렸다는 뜻이 아니라, 조건이 바뀌었다는 신호입니다.

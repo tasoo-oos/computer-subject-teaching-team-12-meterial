@@ -32,17 +32,19 @@ export function OutcomePanel({ state, onContinue, onAdjust }: { state: GameState
         {choice && <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-ink-2">{choice.label}</span>}
       </div>
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_308px]">
-        <div className="flex flex-col gap-3">
-          <div className="card relative overflow-hidden p-4">
-            <MessageSquareQuote size={22} className="text-primary" aria-hidden />
-            <p className="mt-1.5 text-[17px] leading-[1.7] font-medium text-ink">{o.feedback}</p>
-          </div>
+      <div className="card relative mt-3 overflow-hidden p-4">
+        <MessageSquareQuote size={22} className="text-primary" aria-hidden />
+        <p className="mt-1.5 max-w-[62ch] text-[17px] leading-[1.7] font-medium text-ink">{o.feedback}</p>
+      </div>
 
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-3">
           <div className="card p-3.5">
             <h2 className="mb-2 text-sm font-bold text-ink-2">무엇이 바뀌었나요</h2>
             {o.deltas.length === 0 ? (
-              <p className="rounded-xl bg-surface-2 px-3 py-2.5 text-[13px] text-ink-2">잔고 변화는 없습니다. 이번 선택은 기록으로만 남습니다.</p>
+              <p className="rounded-xl bg-surface-2 px-3 py-2.5 text-[13px] leading-relaxed text-ink-2">
+                잔고 변화는 없습니다. 이번 선택은 기록으로만 남습니다.
+              </p>
             ) : (
               <ul className="flex flex-col gap-1.5">
                 {o.deltas.map((d, i) => (
@@ -62,7 +64,7 @@ export function OutcomePanel({ state, onContinue, onAdjust }: { state: GameState
           )}
         </div>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           {next && (
             <div className="card p-3.5">
               <div className="flex items-center gap-1.5 text-[12px] font-bold text-primary">
@@ -81,14 +83,19 @@ export function OutcomePanel({ state, onContinue, onAdjust }: { state: GameState
               <p className="mt-1 text-[11px] leading-relaxed text-ink-3">그 달이 되면 이 선택의 결과가 다시 등장합니다.</p>
             </div>
           )}
+          {!next && !o.scheduled && (
+            <div className="rounded-2xl border border-dashed border-line bg-surface-2 p-3.5 text-[12px] leading-relaxed text-ink-2">
+              이어지는 장면이 없습니다. 이번 달 장면은 여기서 끝납니다.
+            </div>
+          )}
 
-          <div className="flex flex-col gap-2">
+          <div className="mt-auto flex flex-col gap-1.5 pt-1">
             {o.budgetReason ? (
-              <Button size="lg" onClick={onAdjust}>
+              <Button size="lg" onClick={onAdjust} className="w-full">
                 가계부 조정하기 <ArrowRight size={18} aria-hidden />
               </Button>
             ) : (
-              <Button size="lg" onClick={onContinue}>
+              <Button size="lg" onClick={onContinue} className="w-full">
                 {next ? '다음 장면으로' : '계속'} <ArrowRight size={18} aria-hidden />
               </Button>
             )}

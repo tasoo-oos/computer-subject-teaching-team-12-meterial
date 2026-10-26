@@ -3,8 +3,14 @@ import { CreditCard } from 'lucide-react';
 import { AccountCard } from '../../components/AccountCard.tsx';
 import { Money } from '../../components/Money.tsx';
 
-/** 이번 달 계좌 변화 (월급날 처리 내역 기반) */
+/** 이번 달 계좌 변화. 지난달 기록이 있으면 잔고 차이를, 없으면 월급날 처리 내역을 쓴다 */
 export function accountDeltas(state: GameState): Partial<Record<(typeof ACCOUNT_ORDER)[number], number>> {
+  const prev = state.history.at(-1);
+  if (prev && prev.month === state.month - 1) {
+    return Object.fromEntries(ACCOUNT_ORDER.map((id) => [id, state.accounts[id].balance - prev.balances[id]])) as Partial<
+      Record<(typeof ACCOUNT_ORDER)[number], number>
+    >;
+  }
   const p = state.payday;
   if (!p) return {};
   const living = p.livingIn - p.spending - p.debtPayments;
@@ -112,7 +118,7 @@ export function ScheduledPanel({ state }: { state: GameState }) {
     <section className="card p-3" aria-label="예약된 장면">
       <h2 className="mb-2 text-sm font-bold text-ink">예약된 장면</h2>
       {state.scheduled.length === 0 ? (
-        <p className="rounded-xl bg-surface-2 px-3 py-2.5 text-[13px] leading-relaxed text-ink-3">예약된 장면이 없습니다. 지금의 선택이 몇 달 뒤 장면을 만들 수 있습니다.</p>
+        <p className="rounded-xl bg-surface-2 px-3 py-2.5 text-[13px] leading-relaxed text-ink-3">앞으로 예약된 장면이 없습니다. 지금의 선택이 몇 달 뒤 장면을 만들 수 있습니다.</p>
       ) : (
         <ul className="flex flex-col gap-1.5">
           {state.scheduled.map((sc) => (

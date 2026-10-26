@@ -1,5 +1,5 @@
-import { formatWon, monthLabel, netWorth, totalDebt, creditGrade, type GameState } from '@gagyebu/core';
-import { ArrowRight, ChartLine, CircleAlert, Coins, ReceiptText, Wallet } from 'lucide-react';
+import { emergencyMonths, formatWon, monthLabel, netWorth, totalDebt, creditGrade, type GameState } from '@gagyebu/core';
+import { ArrowRight, CalendarClock, ChartLine, CircleAlert, Coins, ReceiptText, ShieldCheck, Sparkles, Wallet } from 'lucide-react';
 import { Button } from '../../components/ui.tsx';
 import { Money } from '../../components/Money.tsx';
 
@@ -13,6 +13,8 @@ export function ReportPanel({ state, onNext }: { state: GameState; onNext: () =>
   const spend = (p?.spending ?? 0) + (p?.debtPayments ?? 0);
   const grade = creditGrade(state.credit);
   const creditDiff = prev ? state.credit - prev.credit : 0;
+  const carry = prev?.balances.living ?? 0;
+  const livingNet = carry + (p?.livingIn ?? 0) - (p?.spending ?? 0) - (p?.debtPayments ?? 0);
 
   return (
     <section className="animate-enter">
@@ -69,9 +71,78 @@ export function ReportPanel({ state, onNext }: { state: GameState; onNext: () =>
         </div>
       )}
 
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="card p-4">
+          <h2 className="text-sm font-bold text-ink-2">생활비 통장 흐름</h2>
+          <dl className="mt-1.5 divide-y divide-line text-[13px]">
+            <div className="flex items-baseline justify-between py-1.5">
+              <dt className="text-ink-2">지난달에서 넘어온 돈</dt>
+              <dd className="font-semibold"><Money value={carry} /></dd>
+            </div>
+            <div className="flex items-baseline justify-between py-1.5">
+              <dt className="text-ink-2">들어온 돈 (예산 + 여유분)</dt>
+              <dd className="font-semibold"><Money value={p?.livingIn ?? 0} /></dd>
+            </div>
+            <div className="flex items-baseline justify-between py-1.5">
+              <dt className="text-ink-2">예산만큼 나간 돈</dt>
+              <dd className="font-semibold"><Money value={-(p?.spending ?? 0)} /></dd>
+            </div>
+            <div className="flex items-baseline justify-between py-1.5">
+              <dt className="text-ink-2">할부 · 카드값</dt>
+              <dd className="font-semibold"><Money value={-(p?.debtPayments ?? 0)} /></dd>
+            </div>
+            <div className="flex items-baseline justify-between border-t border-line py-1.5">
+              <dt className="text-ink-2">계산 결과</dt>
+              <dd className={`font-semibold ${livingNet < 0 ? 'text-danger' : 'text-ink'}`}><Money value={livingNet} signed tone /></dd>
+            </div>
+            {(p?.livingShortfall ?? 0) > 0 && (
+              <div className="flex items-baseline justify-between py-1.5 text-danger">
+                <dt className="font-semibold">카드값으로 넘어간 부족분</dt>
+                <dd className="font-semibold"><Money value={p?.livingShortfall ?? 0} /></dd>
+              </div>
+            )}
+            <div className="flex items-baseline justify-between py-1.5">
+              <dt className="font-semibold text-ink">생활비 통장에 남은 돈</dt>
+              <dd className="font-bold"><Money value={state.accounts.living.balance} /></dd>
+            </div>
+          </dl>
+          <p className="mt-1 text-[11px] leading-relaxed text-ink-3">남은 돈은 다음 달로 넘어갑니다. 부족분은 카드값이 되어 다음 달에 빠집니다.</p>
+        </div>
+        <div className="card p-4">
+          <h2 className="text-sm font-bold text-ink-2">다음 달로 넘기는 것</h2>
+          <ul className="mt-1.5 flex flex-col gap-1.5 text-[13px]">
+            <li className="flex items-start gap-2 rounded-lg bg-surface-2 px-2.5 py-1.5">
+              <ReceiptText size={14} className="mt-0.5 shrink-0 text-ink-3" aria-hidden />
+              <span>
+                남은 부채 <Money value={totalDebt(state)} className="font-semibold text-ink" />
+                {state.debts.length > 0 && <span className="text-ink-3"> · 매달 {formatWon(state.debts.reduce((a, d) => a + d.monthly, 0))} 상환</span>}
+              </span>
+            </li>
+            <li className="flex items-start gap-2 rounded-lg bg-surface-2 px-2.5 py-1.5">
+              <ShieldCheck size={14} className="mt-0.5 shrink-0 text-ink-3" aria-hidden />
+              <span>
+                비상금 <Money value={state.accounts.emergency.balance} className="font-semibold text-ink" /> · 생활비 {emergencyMonths(state).toFixed(1)}개월분
+              </span>
+            </li>
+            <li className="flex items-start gap-2 rounded-lg bg-surface-2 px-2.5 py-1.5">
+              <Sparkles size={14} className="mt-0.5 shrink-0 text-ink-3" aria-hidden />
+              <span>
+                {state.statuses.length > 0 ? `지속 효과 ${state.statuses.length}개가 계속됩니다.` : '지속되는 상태 효과는 없습니다.'}
+              </span>
+            </li>
+            <li className="flex items-start gap-2 rounded-lg bg-surface-2 px-2.5 py-1.5">
+              <CalendarClock size={14} className="mt-0.5 shrink-0 text-ink-3" aria-hidden />
+              <span>
+                {state.scheduled.length > 0 ? `예약된 장면 ${state.scheduled.length}개가 기다립니다.` : '예약된 장면은 없습니다.'}
+              </span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[12px] text-ink-3">지속 효과와 계좌 잔고는 오른쪽에서 계속 확인할 수 있습니다.</p>
-        <Button size="lg" onClick={onNext}>
+        <Button size="lg" onClick={onNext} className="w-full sm:w-auto">
           {state.month >= 11 ? '12월 결산 보기' : '다음 달로'} <ArrowRight size={18} aria-hidden />
         </Button>
       </div>

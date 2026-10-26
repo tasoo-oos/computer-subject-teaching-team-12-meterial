@@ -1,4 +1,4 @@
-import { formatWon, monthLabel, type GameState } from '@gagyebu/core';
+import { ACCOUNTS, formatWon, monthLabel, type GameState } from '@gagyebu/core';
 import { ArrowRight, Banknote, CalendarClock, CreditCard, Landmark, PiggyBank, Sparkles, TrendingUp } from 'lucide-react';
 import { Button } from '../../components/ui.tsx';
 import { Money } from '../../components/Money.tsx';
@@ -19,7 +19,7 @@ export function PaydayPanel({ state, onContinue }: { state: GameState; onContinu
   if (!p) return null;
   const earnings = Object.values(p.earnings).reduce((a, b) => a + (b ?? 0), 0);
   const spendTotal = p.spending + p.debtPayments;
-  const netGain = p.salary - spendTotal + earnings + p.livingShortfall * 0;
+  const netGain = p.salary - spendTotal + earnings;
   const tutorial = state.month === 1;
   const done = stage >= STEP.length;
   const show = (i: number) => done || i <= stage;
@@ -70,6 +70,7 @@ export function PaydayPanel({ state, onContinue }: { state: GameState; onContinu
                       {(['emergency', 'savings', 'invest', 'goal', 'housing'] as const).map((id) => (
                         <span key={id} className="inline-flex items-center gap-1 rounded-lg bg-surface-2 px-1.5 py-0.5 text-[11px] text-ink-2">
                           <AccountIcon id={id} size="sm" />
+                          <span>{ACCOUNTS[id].label}</span>
                           <span className="num font-semibold">{formatWon(p.transfers[id])}</span>
                         </span>
                       ))}
@@ -87,6 +88,7 @@ export function PaydayPanel({ state, onContinue }: { state: GameState; onContinu
                       {(['emergency', 'savings', 'invest', 'goal', 'housing'] as const).map((id) => (
                         <li key={id} className="inline-flex items-center gap-1 rounded-lg bg-surface-2 px-1.5 py-0.5 text-[11px] text-ink-2">
                           <AccountIcon id={id} size="sm" />
+                          <span>{ACCOUNTS[id].label}</span>
                           <span className="num font-semibold">{formatWon(p.earnings[id] ?? 0)}</span>
                         </li>
                       ))}

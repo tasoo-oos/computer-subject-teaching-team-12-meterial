@@ -163,7 +163,7 @@ function ResultDetail({ state, go, goScreen }: { state: GameState; go: ScreenPro
 
         {/* 가계부 비교 + 선택 기록 */}
         <section className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <BudgetDiff settlement={settlement} />
+          <BudgetDiff settlement={settlement} edits={state.budgetEdits} />
           <Timeline state={state} />
         </section>
 
@@ -214,61 +214,21 @@ function Row({ label, value, strong }: { label: string; value: number; strong?: 
   );
 }
 
+const nfAxis = new Intl.NumberFormat('ko-KR');
+const axisLabel = (v: number) => (Math.abs(v) < 10_000 ? (v === 0 ? '0' : nfAxis.format(v)) : `${nfAxis.format(Math.round(v / 10_000))}만`);
+
 /** 12개월 순자산 선 그래프. 라이브러리 없이 SVG로 그린다 */
 function NetWorthChart({ state }: { state: GameState }) {
   const points = useMemo(() => [{ month: 0, value: 0 }, ...state.history.map((h) => ({ month: h.month, value: h.netWorth }))], [state.history]);
-  const W = 720;
-  const H = 240;
-  const pad = { l: 56, r: 16, t: 16, b: 28 };
-  const max = Math.max(1, ...points.map((p) => p.value));
-  const min = Math.min(0, ...points.map((p) => p.value));
-  const span = max - min || 1;
-  const x = (m: number) => pad.l + ((m - 0) / 12) * (W - pad.l - pad.r);
-  const y = (v: number) => pad.t + (1 - (v - min) / span) * (H - pad.t - pad.b);
-  const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.month).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
-  const area = `${line} L${x(12)},${y(min)} L${x(0)},${y(min)} Z`;
   const last = points.at(-1)!;
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => min + span * f);
-
   return (
     <figure className="mt-2">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-labelledby="nw-title" aria-describedby="nw-desc">
-        <title id="nw-title">12개월 순자산 변화</title>
-        <desc id="nw-desc">1월 0원에서 시작해 12월 {formatWon(last.value)}이 되었습니다.</desc>
-        <defs>
-          <linearGradient id="nw-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.02" />
-          </linearGradient>
-        </defs>
-        {ticks.map((t) => (
-          <g key={t}>
-            <line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="var(--color-line)" strokeWidth="1" strokeDasharray={t === min ? undefined : '3 4'} />
-            <text x={pad.l - 8} y={y(t) + 4} textAnchor="end" fontSize="11" fill="var(--color-ink-3)" className="num">
-              {t === 0 ? '0' : formatMan(t)}
-            </text>
-          </g>
-        ))}
-        <path d={area} fill="url(#nw-fill)" />
-        <path d={line} fill="none" stroke="var(--color-primary)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-        {[1, 3, 6, 9, 12].map((m) => (
-          <text key={m} x={x(m)} y={H - 8} textAnchor="middle" fontSize="11" fill="var(--color-ink-3)" className="num">
-            {m}월
-          </text>
-        ))}
-        {points.map((p) => (
-          <g key={p.month} tabIndex={0} role="listitem" aria-label={`${p.month === 0 ? '시작' : monthLabel(p.month)} 순자산 ${formatWon(p.value)}`} className="outline-none focus-visible:outline-none">
-            <circle cx={x(p.month)} cy={y(p.value)} r="8" fill="transparent" />
-            <circle cx={x(p.month)} cy={y(p.value)} r={p.month === last.month ? 4.5 : 2.5} fill={p.month === last.month ? 'var(--color-primary)' : 'var(--color-surface)'} stroke="var(--color-primary)" strokeWidth="2" />
-          </g>
-        ))}
-        <g>
-          <rect x={x(12) - 96} y={y(last.value) - 34} width="92" height="22" rx="6" fill="var(--color-surface)" stroke="var(--color-line)" />
-          <text x={x(12) - 50} y={y(last.value) - 19} textAnchor="middle" fontSize="11" fontWeight="700" fill="var(--color-ink)" className="num">
-            {formatMan(last.value)}
-          </text>
-        </g>
-      </svg>
+      <div className="hidden sm:block">
+        <ChartSvg points={points} width={720} height={230} compact={false} />
+      </div>
+      <div className="sm:hidden">
+        <ChartSvg points={points} width={360} height={210} compact />
+      </div>
       <ul className="sr-only-table">
         {points.map((p) => (
           <li key={p.month}>
@@ -276,12 +236,84 @@ function NetWorthChart({ state }: { state: GameState }) {
           </li>
         ))}
       </ul>
-      <figcaption className="mt-1 text-[11px] text-ink-3">점에 포커스를 두면 그 달의 순자산을 읽을 수 있습니다. 순자산 = 계좌 합계 + 보유 물건 시세 − 부채.</figcaption>
+      <figcaption className="mt-1 text-[11px] leading-relaxed text-ink-3">
+        점에 포커스를 두면 그 달의 순자산을 읽을 수 있습니다. 순자산 = 계좌 합계 + 보유 물건 시세 − 부채. 12월 말{' '}
+        <strong className="num text-ink-2">{formatWon(last.value)}</strong>
+      </figcaption>
     </figure>
   );
 }
 
-function BudgetDiff({ settlement }: { settlement: Settlement }) {
+function ChartSvg({
+  points,
+  width,
+  height,
+  compact,
+}: {
+  points: { month: number; value: number }[];
+  width: number;
+  height: number;
+  compact: boolean;
+}) {
+  const pad = { l: compact ? 42 : 60, r: compact ? 12 : 20, t: 22, b: compact ? 24 : 30 };
+  const max = Math.max(1, ...points.map((p) => p.value));
+  const min = Math.min(0, ...points.map((p) => p.value));
+  const span = max - min || 1;
+  const x = (m: number) => pad.l + (m / 12) * (width - pad.l - pad.r);
+  const y = (v: number) => pad.t + (1 - (v - min) / span) * (height - pad.t - pad.b);
+  const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.month).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
+  const area = `${line} L${x(12)},${y(min)} L${x(0)},${y(min)} Z`;
+  const last = points.at(-1)!;
+  const ticks = compact ? [0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1];
+  const labelW = 84;
+  const labelY = Math.max(4, Math.min(y(last.value) - 11, height - 64));
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full" role="img" aria-label={`12개월 순자산 추이, 12월 ${formatWon(last.value)}`}>
+      <defs>
+        <linearGradient id={`nw-fill-${compact ? 'm' : 'd'}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      {ticks.map((f) => {
+        const t = min + span * f;
+        return (
+          <g key={f}>
+            <line x1={pad.l} x2={width - pad.r} y1={y(t)} y2={y(t)} stroke="var(--color-line)" strokeWidth="1" strokeDasharray={f === 0 ? undefined : '3 4'} />
+            <text x={pad.l - 6} y={y(t) + 4} textAnchor="end" fontSize={compact ? 9 : 11} fill="var(--color-ink-3)" className="num">
+              {axisLabel(t)}
+            </text>
+          </g>
+        );
+      })}
+      <path d={area} fill={`url(#nw-fill-${compact ? 'm' : 'd'})`} />
+      <path d={line} fill="none" stroke="var(--color-primary)" strokeWidth={compact ? 2.2 : 2.5} strokeLinejoin="round" strokeLinecap="round" />
+      {[1, 3, 6, 9, 12].map((m) => (
+        <text key={m} x={x(m)} y={height - 8} textAnchor="middle" fontSize={compact ? 9 : 11} fill="var(--color-ink-3)" className="num">
+          {m}월
+        </text>
+      ))}
+      {points.map((p) => (
+        <g key={p.month} tabIndex={0} role="listitem" aria-label={`${p.month === 0 ? '시작' : monthLabel(p.month)} 순자산 ${formatWon(p.value)}`}>
+          <title>{`${p.month === 0 ? '시작' : monthLabel(p.month)} ${formatWon(p.value)}`}</title>
+          <circle cx={x(p.month)} cy={y(p.value)} r={compact ? 7 : 9} fill="transparent" />
+          <circle cx={x(p.month)} cy={y(p.value)} r={p.month === last.month ? 4.5 : 2.5} fill={p.month === last.month ? 'var(--color-primary)' : 'var(--color-surface)'} stroke="var(--color-primary)" strokeWidth="2" />
+        </g>
+      ))}
+      {!compact && (
+        <g>
+          <rect x={x(12) - labelW - 6} y={labelY} width={labelW} height="21" rx="6" fill="var(--color-surface)" stroke="var(--color-line)" />
+          <text x={x(12) - labelW / 2 - 6} y={labelY + 14.5} textAnchor="middle" fontSize="11" fontWeight="700" fill="var(--color-ink)" className="num">
+            {formatMan(last.value)}
+          </text>
+        </g>
+      )}
+    </svg>
+  );
+}
+
+function BudgetDiff({ settlement, edits }: { settlement: Settlement; edits: number }) {
   return (
     <div className="card p-4">
       <div className="mb-2 flex items-baseline justify-between">
@@ -312,7 +344,9 @@ function BudgetDiff({ settlement }: { settlement: Settlement }) {
           </tbody>
         </table>
       )}
-      <p className="mt-2 text-[11px] leading-relaxed text-ink-3">가계부를 고친 횟수 {Number(settlement.budgetDiff.length > 0)}회 이상 · 조정은 나쁜 것이 아니라 조건이 바뀌었다는 신호입니다.</p>
+      <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
+        가계부를 조정한 횟수 <strong className="num font-bold text-ink-2">{edits}회</strong> · 조정은 나쁜 것이 아니라 조건이 바뀌었다는 신호입니다.
+      </p>
     </div>
   );
 }
@@ -396,11 +430,15 @@ function PresentationView({ state, go }: { state: GameState; go: ScreenProps['go
   if (!settlement) return null;
   const ending = ENDINGS[settlement.ending];
   const unlocked = settlement.achievements.filter((a) => a.unlocked).length;
-  const keyDecisions = state.decisions.filter((d) => ['laptop-spill', 'sneaker-resell', 'market-crash', 'coin-room', 'rent-hike'].includes(d.eventId)).slice(0, 4);
+  const seen = new Set<string>();
+  const keyDecisions = state.decisions
+    .filter((d) => ['laptop-spill', 'sneaker-resell', 'market-crash', 'coin-room', 'rent-hike'].includes(d.eventId))
+    .filter((d) => (seen.has(d.eventId) ? false : (seen.add(d.eventId), true)))
+    .slice(0, 4);
 
   return (
     <div className="flex min-h-dvh flex-col bg-hud text-hud-ink">
-      <div className="mx-auto flex w-full max-w-[1500px] flex-1 flex-col px-6 py-5 sm:px-10 sm:py-7">
+      <div className="mx-auto flex w-full max-w-[1500px] flex-1 flex-col px-6 py-4 sm:px-10 sm:py-5">
         <div className="flex items-center justify-between gap-4">
           <span className="flex items-center gap-2 text-[clamp(0.9rem,1.4vw,1.1rem)] font-semibold text-hud-ink-2">
             <span className="flex size-9 items-center justify-center rounded-xl bg-white/10 text-accent" aria-hidden>
@@ -417,13 +455,13 @@ function PresentationView({ state, go }: { state: GameState; go: ScreenProps['go
           </button>
         </div>
 
-        <div className="mt-4 grid flex-1 items-center gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+        <div className="mt-3 grid flex-1 items-center gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
           <div>
             <p className="text-[clamp(1rem,1.6vw,1.35rem)] font-semibold text-accent">{state.profile.nickname}님의 1년</p>
-            <h1 className="mt-2 text-[clamp(2.6rem,6vw,5rem)] font-bold leading-[1.05] tracking-tight text-white">{ending.title}</h1>
-            <p className="mt-3 max-w-[28ch] text-[clamp(1.1rem,2vw,1.6rem)] leading-snug text-hud-ink-2">{ending.tagline}</p>
+            <h1 className="mt-1.5 text-[clamp(2.4rem,5.4vw,4.4rem)] font-bold leading-[1.05] tracking-tight text-white">{ending.title}</h1>
+            <p className="mt-2 max-w-[30ch] text-[clamp(1.05rem,1.8vw,1.5rem)] leading-snug text-hud-ink-2">{ending.tagline}</p>
 
-            <div className="mt-7">
+            <div className="mt-5">
               <div className="text-[clamp(0.9rem,1.4vw,1.1rem)] font-semibold text-hud-ink-2">최종 순자산</div>
               <div className="mt-1 text-[clamp(2.4rem,5.6vw,4.6rem)] font-bold leading-none text-white">
                 <Money value={settlement.netWorth} />
@@ -437,7 +475,7 @@ function PresentationView({ state, go }: { state: GameState; go: ScreenProps['go
               </div>
             </div>
 
-            <div className="mt-6 hidden lg:block">
+            <div className="mt-4 hidden lg:block">
               <PresentationChart state={state} />
             </div>
           </div>
@@ -483,30 +521,32 @@ function PresentationView({ state, go }: { state: GameState; go: ScreenProps['go
 function PresentationChart({ state }: { state: GameState }) {
   const points = [{ month: 0, value: 0 }, ...state.history.map((h) => ({ month: h.month, value: h.netWorth }))];
   const W = 640;
-  const H = 180;
+  const H = 172;
   const max = Math.max(1, ...points.map((p) => p.value));
   const x = (m: number) => 8 + (m / 12) * (W - 16);
-  const y = (v: number) => 10 + (1 - v / max) * (H - 30);
+  const y = (v: number) => 30 + (1 - v / max) * (H - 54);
   const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.month).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
-  const area = `${d} L${x(12)},${H - 20} L${x(0)},${H - 20} Z`;
+  const area = `${d} L${x(12)},${H - 26} L${x(0)},${H - 26} Z`;
+  const last = points.at(-1)!;
   return (
     <figure>
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={`12개월 순자산 추이, 마지막 ${formatWon(points.at(-1)!.value)}`}>
+      <figcaption className="mb-1 text-[clamp(0.8rem,1.2vw,0.95rem)] font-semibold text-hud-ink-2">12개월 순자산</figcaption>
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={`12개월 순자산 추이, 마지막 ${formatWon(last.value)}`}>
         <defs>
           <linearGradient id="pw-fill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--color-accent)" stopOpacity="0.35" />
             <stop offset="100%" stopColor="var(--color-accent)" stopOpacity="0.02" />
           </linearGradient>
         </defs>
-        <line x1="8" x2={W - 8} y1={H - 20} y2={H - 20} stroke="rgba(255,255,255,0.2)" />
+        <line x1="8" x2={W - 8} y1={H - 26} y2={H - 26} stroke="rgba(255,255,255,0.18)" />
         <path d={area} fill="url(#pw-fill)" />
         <path d={d} fill="none" stroke="var(--color-accent)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx={x(12)} cy={y(points.at(-1)!.value)} r="7" fill="var(--color-accent)" />
-        <text x={x(12)} y={y(points.at(-1)!.value) - 14} textAnchor="end" fontSize="20" fontWeight="700" fill="#fff" className="num">
-          {formatMan(points.at(-1)!.value)}
+        <circle cx={x(12)} cy={y(last.value)} r="7" fill="var(--color-accent)" />
+        <text x={x(12) - 6} y={Math.max(20, y(last.value) - 14)} textAnchor="end" fontSize="19" fontWeight="700" fill="#fff" className="num">
+          {formatMan(last.value)}
         </text>
-        <text x="8" y={H - 4} fontSize="15" fill="rgba(248,250,252,0.7)">1월</text>
-        <text x={W - 8} y={H - 4} textAnchor="end" fontSize="15" fill="rgba(248,250,252,0.7)">12월</text>
+        <text x="8" y={H - 6} fontSize="15" fill="rgba(248,250,252,0.7)">1월</text>
+        <text x={W - 8} y={H - 6} textAnchor="end" fontSize="15" fill="rgba(248,250,252,0.7)">12월</text>
       </svg>
     </figure>
   );

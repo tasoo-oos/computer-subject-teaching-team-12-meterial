@@ -79,7 +79,6 @@ export function BudgetEditor({
   onChange,
   reference,
   highlight = [],
-  layout = 'columns',
 }: {
   budget: Budget;
   salary: number;
@@ -88,7 +87,6 @@ export function BudgetEditor({
   reference?: Budget;
   /** 이벤트로 바뀐 항목 */
   highlight?: BudgetKey[];
-  layout?: 'columns' | 'stack';
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -97,7 +95,7 @@ export function BudgetEditor({
           <GroupCard key={g.id} g={g} budget={budget} salary={salary} onChange={onChange} reference={reference} highlight={highlight} />
         ))}
       </div>
-      <GroupCard g={VARIABLE_GROUP} budget={budget} salary={salary} onChange={onChange} reference={reference} highlight={highlight} columns={layout === 'columns' ? 2 : undefined} />
+      <GroupCard g={VARIABLE_GROUP} budget={budget} salary={salary} onChange={onChange} reference={reference} highlight={highlight} columns={2} />
     </div>
   );
 }

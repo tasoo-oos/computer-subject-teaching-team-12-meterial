@@ -16,7 +16,7 @@ export function LessonBar({ current, right }: { current: ScreenId; right?: React
             내 첫 월급 <span className="font-medium text-ink-3">1년 살아 보기</span>
           </span>
         </span>
-        <ol className="ml-auto hidden items-center gap-1 md:flex" aria-label="수업 단계">
+        <ol className="ml-auto hidden items-center gap-1 xl:flex" aria-label="수업 단계">
           {ORDER.map((id, i) => {
             const active = id === current;
             const done = ORDER.indexOf(current) > i;
@@ -39,7 +39,11 @@ export function LessonBar({ current, right }: { current: ScreenId; right?: React
             );
           })}
         </ol>
-        <span className="ml-auto md:ml-0">{right}</span>
+        <span className="ml-auto hidden items-center gap-1.5 text-xs font-semibold text-ink-2 sm:flex xl:hidden">
+          <span className="num rounded-md bg-surface-2 px-1.5 py-0.5 font-bold text-ink">{ORDER.indexOf(current) + 1}/6</span>
+          <span className="max-w-[9rem] truncate">{SCREEN_LABEL[current]}</span>
+        </span>
+        {right && <span className="ml-auto shrink-0 xl:ml-3">{right}</span>}
       </div>
     </header>
   );

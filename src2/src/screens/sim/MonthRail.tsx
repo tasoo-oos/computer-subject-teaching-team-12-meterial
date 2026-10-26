@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { EVENT_TYPE_LABEL, eventForMonth, monthKind, type MonthNo } from '@gagyebu/core';
 import { Flag, Sparkles } from 'lucide-react';
 
@@ -14,19 +15,31 @@ function kindLabel(m: MonthNo): string {
 
 /** 12개월 진행 레일. 이벤트 달·조용한 달·결산을 구분해 보여 준다 */
 export function MonthRail({ month }: { month: MonthNo }) {
+  const activeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = activeRef.current;
+    const box = el?.parentElement;
+    if (!el || !box) return;
+    const target = el.offsetLeft - box.clientWidth / 2 + el.clientWidth / 2;
+    let left = target;
+    if (box.scrollWidth > box.clientWidth) left = Math.max(0, Math.min(target, box.scrollWidth - box.clientWidth));
+    else left = 0;
+    box.scrollTo({ left, behavior: 'auto' });
+  }, [month]);
   return (
     <nav aria-label="12개월 진행" className="on-dark mt-3">
-      <ol className="flex gap-1 overflow-x-auto pb-1 sm:gap-1.5">
+      <ol className="flex snap-x gap-1 overflow-x-auto pb-1 sm:gap-1.5">
         {MONTHS.map((m) => {
           const k = monthKind(m);
           const active = m === month;
           const done = m < month;
           const label = kindLabel(m);
           return (
-            <li key={m} className="min-w-0 flex-1">
+            <li key={m} className="w-[52px] shrink-0 snap-center sm:w-auto sm:min-w-0 sm:flex-1">
               <div
+                ref={active ? activeRef : undefined}
                 aria-current={active ? 'step' : undefined}
-                className={`relative flex h-full min-w-[56px] flex-col items-center gap-1 rounded-xl border px-1 py-1.5 transition-colors ${
+                className={`relative flex h-full min-w-[52px] flex-col items-center gap-1 rounded-xl border px-0.5 py-1.5 transition-colors ${
                   active
                     ? 'border-accent bg-accent/15'
                     : done
@@ -45,7 +58,7 @@ export function MonthRail({ month }: { month: MonthNo }) {
                 <span className={`truncate text-[10px] font-semibold leading-none ${active ? 'text-accent' : done ? 'text-hud-ink-2' : 'text-hud-ink-2/60'}`}>
                   {m}월
                 </span>
-                <span className={`flex w-full items-center justify-center gap-0.5 truncate text-[9px] leading-none ${active ? 'text-accent' : 'text-hud-ink-2/55'}`}>
+                <span className={`flex w-full items-center justify-center gap-0.5 overflow-hidden text-[9px] leading-none ${active ? 'text-accent' : 'text-hud-ink-2/55'}`}>
                   {k === 'settlement' ? <Flag size={9} aria-hidden /> : k === 'event' ? <span className="size-1 rounded-full bg-current" aria-hidden /> : k === 'tutorial' ? <Sparkles size={9} aria-hidden /> : null}
                   <span className="truncate">{label}</span>
                 </span>

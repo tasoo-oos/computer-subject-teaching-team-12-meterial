@@ -27,7 +27,8 @@ export function SurveyScreen({ state, ui, go, goScreen }: ScreenProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-bg">
       <LessonBar current="survey" />
-      <main className="mx-auto w-full max-w-[860px] flex-1 px-4 py-7 sm:px-6 lg:py-10">
+      <main className="mx-auto flex w-full max-w-[900px] flex-1 items-center px-4 py-7 sm:px-6 lg:py-10">
+        <div className="w-full">
         {isResult ? (
           <SurveyResult state={state} answers={answers} goScreen={goScreen} />
         ) : (
@@ -39,6 +40,7 @@ export function SurveyScreen({ state, ui, go, goScreen }: ScreenProps) {
             onNext={() => setIndex((i) => i + 1)}
           />
         )}
+        </div>
       </main>
       <LessonFooter />
     </div>
@@ -84,12 +86,13 @@ function QuestionFlow({
       <fieldset className="mt-6">
         <legend className="sr-only">{q.text}</legend>
         <div className="grid gap-2.5 sm:grid-cols-2">
-          {q.options.map((o) => {
+          {q.options.map((o, oi) => {
             const active = selected === o.id;
+            const wide = q.options.length % 2 === 1 && oi === q.options.length - 1;
             return (
               <label
                 key={o.id}
-                className={`group flex min-h-16 items-center gap-3 rounded-2xl border-2 bg-surface px-4 py-3 transition-[border-color,background-color,transform] duration-150 ${
+                className={`group flex min-h-16 items-center gap-3 rounded-2xl border-2 bg-surface px-4 py-3 transition-[border-color,background-color,transform] duration-150 ${wide ? 'sm:col-span-2' : ''} ${
                   active ? 'border-primary bg-primary-soft/60' : 'border-line hover:border-line-strong hover:bg-surface-2'
                 }`}
               >

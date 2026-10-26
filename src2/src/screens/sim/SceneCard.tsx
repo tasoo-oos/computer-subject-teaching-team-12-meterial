@@ -1,5 +1,24 @@
 import { EVENT_TYPE_LABEL, type GameEvent, type Scene } from '@gagyebu/core';
-import { ArrowLeft, BellRing, ChevronLeft, MessageCircle, MoreVertical, Newspaper, Phone, Radio, Signal, Wifi } from 'lucide-react';
+import {
+  ArrowLeft,
+  BellRing,
+  ChartLine,
+  ChevronLeft,
+  Gift,
+  Laptop,
+  MessageCircle,
+  MoreVertical,
+  Newspaper,
+  Phone,
+  Radio,
+  ReceiptText,
+  ShieldAlert,
+  ShoppingBag,
+  Signal,
+  Sparkles,
+  Ticket,
+  Wifi,
+} from 'lucide-react';
 import { Chip } from '../../components/ui.tsx';
 
 const TYPE_STYLE: Record<string, string> = {
@@ -25,7 +44,7 @@ export function SceneCard({ event, scene }: { event: GameEvent; scene: Scene }) 
           <ChannelMark channel={scene.channel} /> {CHANNEL_LABEL[scene.channel]}
         </span>
       </header>
-      {scene.channel === 'narration' && <Narration scene={scene} />}
+      {scene.channel === 'narration' && <Narration scene={scene} type={event.type} />}
       {scene.channel === 'messenger' && <Messenger scene={scene} />}
       {scene.channel === 'sms' && <Sms scene={scene} />}
       {scene.channel === 'news' && <News scene={scene} />}
@@ -51,11 +70,11 @@ function Reveal({ items, tone = 'light' }: { items: { label: string; value: stri
   return (
     <div className="mt-3">
       <div className={`mb-1.5 text-[11px] font-bold tracking-wide ${tone === 'dark' ? 'text-accent' : 'text-accent-ink'}`}>이 장면에서 확인되는 숫자</div>
-      <dl className={`grid gap-1.5 ${items.length > 2 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+      <dl className="flex flex-wrap gap-1.5">
         {items.map((r) => (
           <div
             key={r.label}
-            className={`rounded-xl border px-3 py-2 ${tone === 'dark' ? 'border-accent/50 bg-accent/10' : 'border-accent/50 bg-accent-soft'}`}
+            className={`min-w-[140px] flex-1 rounded-xl border px-3 py-2 ${tone === 'dark' ? 'border-accent/50 bg-accent/10' : 'border-accent/50 bg-accent-soft'}`}
           >
             <dt className={`text-[11px] font-semibold ${tone === 'dark' ? 'text-hud-ink-2' : 'text-accent-ink'}`}>{r.label}</dt>
             <dd className={`num mt-0.5 text-[17px] font-bold leading-tight ${tone === 'dark' ? 'text-white' : 'text-ink'}`}>{r.value}</dd>
@@ -66,9 +85,22 @@ function Reveal({ items, tone = 'light' }: { items: { label: string; value: stri
   );
 }
 
-function Narration({ scene }: { scene: Scene }) {
+const TYPE_ICON = {
+  tutorial: Sparkles,
+  daily: Laptop,
+  lifestyle: ReceiptText,
+  temptation: ShoppingBag,
+  social: Gift,
+  fraud: ShieldAlert,
+  opportunity: ChartLine,
+  quirky: Ticket,
+} as const;
+
+function Narration({ scene, type }: { scene: Scene; type: string }) {
+  const Icon = TYPE_ICON[type as keyof typeof TYPE_ICON] ?? Sparkles;
   return (
     <div className="relative overflow-hidden rounded-[22px] border border-line bg-surface p-4 shadow-[var(--shadow-card)] sm:p-5">
+      <Icon size={110} strokeWidth={1.2} className="pointer-events-none absolute -top-3 right-2 text-primary opacity-[0.06]" aria-hidden />
       <span className="absolute inset-y-0 left-0 w-1.5 bg-primary" aria-hidden />
       <span
         className="pointer-events-none absolute -top-10 -right-6 size-32 rounded-full bg-primary-soft/60 blur-2xl"
@@ -185,7 +217,7 @@ function AppNotice({ scene }: { scene: Scene }) {
   return (
     <div className="rounded-[22px] border border-line bg-gradient-to-b from-surface-2 to-surface p-4 shadow-[var(--shadow-card)] sm:p-5">
       <div className="flex items-center gap-2 text-[11px] font-semibold text-ink-3">
-        <BellRing size={13} aria-hidden /> {scene.speaker ?? '앱 알림'}
+        <BellRing size={13} aria-hidden /> 앱 알림
         <span className="num ml-auto">방금</span>
       </div>
       <div className="mt-2 rounded-2xl border border-line bg-surface p-3.5 shadow-sm">

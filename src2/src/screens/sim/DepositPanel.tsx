@@ -37,7 +37,7 @@ export function DepositPanel({
             <span className="text-ink-3">넣는 곳 </span>
             <strong className="text-ink">{ACCOUNTS[target].label}</strong>
           </div>
-          <Button size="lg" onClick={() => onConfirm(target)}>
+          <Button size="lg" className="w-full sm:w-auto" onClick={() => onConfirm(target)}>
             {formatWon(amount)} 입금
           </Button>
         </div>
