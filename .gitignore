@@ -4,3 +4,5 @@ shots/
 *.tsbuildinfo
 .vite/
 design-skills/
+single/
+.single-build/

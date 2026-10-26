@@ -26,6 +26,7 @@ pnpm dev:1            # 시안 1 (5171), dev:2 (5172), dev:3 (5173)
 pnpm typecheck        # 전체 타입 검사
 pnpm build            # 전체 빌드 (dist/)
 
+pnpm single           # 단일 HTML 파일 3개 → single/src1.html, src2.html, src3.html
 pnpm shots src1       # 27개 스냅숏 × 3크기 스크린숏 → shots/src1/
 pnpm shots src2 --viewports=laptop,tablet
 pnpm shots src1 --only=sim-feb-scene,result-present
@@ -43,6 +44,15 @@ http://localhost:5171/#/result-present
 - 오른쪽 아래 버튼(또는 `` ` `` 키)으로 스냅숏 목록을 열고, `[` `]` 키로 넘깁니다.
 - 목업 데이터는 `packages/core/src/fixtures.ts`에 있습니다. 등장인물은 하늘(균형형)과 바다(즉흥형)입니다.
 - `?shot`을 붙이면 네비게이터가 숨겨집니다(스크린숏용).
+
+## 단일 HTML 파일
+
+```bash
+pnpm single                              # 세 시안 모두
+node scripts/build-single.mjs src1       # 하나만
+```
+
+`single/srcN.html` 하나만 있으면 서버 없이 브라우저로 열립니다. 자바스크립트, CSS, 폰트(woff2)가 모두 안에 들어 있습니다. 파일이 커지는 이유는 대부분 한글 웹폰트입니다(src1 7.3MB, src2 5.1MB, src3 4.2MB). 폰트를 시스템 폰트로 바꾸면 1MB 안팎까지 줄어듭니다.
 
 ## 외부 공개
 
