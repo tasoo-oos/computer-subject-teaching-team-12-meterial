@@ -16,8 +16,9 @@ import {
   MergePendingScreen,
   NicknameForm,
   NotFoundScreen,
+  ReplacedScreen,
 } from './StatusScreens.tsx';
-import { useLive } from './useLive.ts';
+import { JOIN_RETRY_MS, useLive } from './useLive.ts';
 import { useWakeLock } from './useWakeLock.ts';
 
 export function StudentPage({ code }: { code: string }) {
@@ -28,6 +29,17 @@ export function StudentPage({ code }: { code: string }) {
   const [pending, setPending] = useState<{ nickname: string; pendingId: string } | null>(null);
   const [kickedDismissed, setKickedDismissed] = useState(false);
   const [noticeDismissed, setNoticeDismissed] = useState(false);
+  // join 재시도 스로틀(§14 #149): 서버가 소켓당 5초에 1회만 받으므로(§5.4) 마지막 시도부터
+  // 5초 동안 버튼을 잠그고 카운트다운을 보여 준다 — 조용히 버려진 재시도로 UI가 멈추지 않게.
+  const [lastJoinAt, setLastJoinAt] = useState(0);
+  const [nowTick, setNowTick] = useState(Date.now());
+
+  useEffect(() => {
+    if (lastJoinAt === 0 || Date.now() - lastJoinAt >= JOIN_RETRY_MS) return;
+    const t = window.setInterval(() => setNowTick(Date.now()), 250);
+    return () => window.clearInterval(t);
+  }, [lastJoinAt, nowTick]);
+  const joinCooldownMs = Math.max(0, lastJoinAt + JOIN_RETRY_MS - nowTick);
 
   // 다시 입장해 정상 흐름에 들어오면 "다시 입장하기" 확인 상태를 되돌린다
   useEffect(() => {
@@ -43,6 +55,7 @@ export function StudentPage({ code }: { code: string }) {
 
   const tryJoin = async (nickname: string) => {
     setJoinError(null);
+    setLastJoinAt(Date.now());
     const ack = await live.join(nickname);
     if (ack.ok) {
       setPending(null);
@@ -64,6 +77,7 @@ export function StudentPage({ code }: { code: string }) {
   if (live.status === 'connecting') return <ConnectingScreen />;
   if (live.status === 'ended') return <EndedScreen />;
   if (live.status === 'not-found') return <NotFoundScreen />;
+  if (live.status === 'replaced') return <ReplacedScreen />; // 다른 탭이 대체(§14 #143)
 
   // 입장하지 않았으면 모든 비트에서 닉네임 입력 화면(§8.3)
   if (!live.you) {
@@ -71,11 +85,12 @@ export function StudentPage({ code }: { code: string }) {
       return <KickedScreen reason={live.kicked} onRetry={() => setKickedDismissed(true)} />;
     }
     if (pending) {
-      return <MergePendingScreen nickname={pending.nickname} onRetry={tryJoin} />;
+      return <MergePendingScreen nickname={pending.nickname} onRetry={tryJoin} cooldownMs={joinCooldownMs} />;
     }
     return (
       <NicknameForm
         onSubmit={tryJoin}
+        cooldownMs={joinCooldownMs}
         error={joinError ?? (live.status === 'join-locked' ? '지금은 입장할 수 없어요. 입장이 마감되었을 수 있어요. 선생님에게 확인해 주세요.' : null)}
       />
     );

@@ -724,7 +724,7 @@ export type LiveDraft = DraftPayload<GagyebuDraft>;
 ### 5.8 교사·학생 관리 명령
 
 - `openClass { lessonId? }`: 서버가 4자리 코드 발급(§8.4), Room 생성, 로그 `open`. `lessonId` 생략 시 `LESSON_ID`(§7). 여러 수업을 동시에 열 수 있다(리허설용). 통제 페이지의 수업 목록은 `classes`로 받는다.
-- `endClass`: `status: 'ended'`, 로그 `end`. 학생 링크는 막히고(들어오면 `ended`), 로그는 남아 CSV 내보내기 가능. 학생 소켓에는 `class`가 전달되고 클라이언트가 끝난 수업 화면을 보여 준다.
+- `endClass`: `status: 'ended'`, 로그 `end`. 학생 링크는 막히고(들어오면 `ended`), 로그는 남아 CSV 내보내기 가능(코드는 `ended.json`에 48시간 보존, Room은 유예 후 메모리에서 제거 — CSV는 로그에서 요청 시 재구축, §14 #144). 학생 소켓에는 `class`가 전달되고 클라이언트가 끝난 수업 화면을 보여 준다.
 - `lockJoin { on }`: 입장 마감. `join`은 `'join-locked'` 거부.
 - `reveal { on }`: 공개 토글 수동 제어(on→off도 허용). live 비트에서 바뀌면 `highRevealed`도 함께 갱신.
 - `spotlight { studentId | null }`: 발표자 지정·해제. `:stage` 룸에 `spotlightState`(발표자의 활동 상태 또는 null + **발표자 닉네임**, §14 #132)를 방송한다.
@@ -880,8 +880,8 @@ export type LogLine =
 
 - **전이 행동도 기록한다**(`transition` 줄): 재생이 live와 정확히 같은 순서로 적용하도록. 없으면 재생 결과가 실제 수업과 달라진다(감사 B1).
 - **draft는 로그에 남기지 않는다**(§4.2). 기본값 루프의 결과는 `auto` 줄에 남는다.
-- **재생**: 서버 시작 시 각 세션 디렉터리를 읽어 줄 순서대로 적용한다 — `join`은 각 활동 세그먼트의 `init` 기저 + `inits.actions`, 이후 `act`·`auto`·`transition`은 레지스트리의 `apply`로, `cursor`·`reveal`은 ClassState에. `end` 줄이 없으면 그 수업은 열린 채 복원되고, 학생들은 토큰으로 재접속한다. 로그에 없는 것(초안, 스로틀 상태, 무차별 대입 카운터, 연결 여부)은 복원 대상이 아니다.
-- 로그는 append-only이고 한 수업의 모든 쓰기는 직렬 큐 안에서 일어나므로 락이 필요 없다.
+- **재생**: 서버 시작 시 각 세션 디렉터리를 읽어 줄 순서대로 적용한다 — `join`은 각 활동 세그먼트의 `init` 기저 + `inits.actions`, 이후 `act`·`auto`·`transition`은 레지스트리의 `apply`로, `cursor`·`reveal`은 ClassState에. `end` 줄이 없으면 그 수업은 열린 채 복원되고, 학생들은 토큰으로 재접속한다. `end` 줄이 있으면 Room으로 복원하지 않고 `ended.json`에만 남긴다(§14 #144). 로그에 없는 것(초안, 스로틀 상태, 무차별 대입 카운터, 연결 여부)은 복원 대상이 아니다. 파싱할 수 없는 줄은 경고와 함께 건너뛰고 세션 하나가 깨져도 나머지는 복원된다(§14 #141).
+- 로그는 append-only이고 한 수업의 모든 쓰기는 직렬 큐 안에서 일어나므로 락이 필요 없다. 세션 로그를 열 때 찢어진 마지막 줄(비정상 종료로 덧붙이다 만 줄)은 잘라내서 이후 append가 깨진 줄에 이어 붙지 않게 한다(§14 #141).
 
 ### 8.3 토큰·재접속·지각·연결 끊김
 
@@ -1587,3 +1587,21 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 133. **draft-kit의 `Beat`는 `@gagyebu/live`의 타입을 그대로 쓴다.** draft-kit `package.json`의 `dependencies`에 `"@gagyebu/live": "workspace:*"`를 추가하고(lockfile 반영), 로컬 구조 타입을 `import type { Beat } from '@gagyebu/live'` re-export로 대체했다(#85 해결). 하위 호환을 위해 `Beat`는 draft-kit에서도 그대로 export된다.
 134. **자동 처리 안내는 하나의 중립 카드로, 빈 문구는 어디에도 세지 않는다.** 학생 화면의 `autoApplied` 표시가 겹친 오버레이 토스트에서 **정상 흐름 맨 위의 카드 하나**(제목 "자동으로 처리된 내용" + 글머리 목록 + "닫기")로 바뀌었다. 커서 비트가 바뀌면 서버 큐가 비워지므로 카드도 사라진다(기존 규칙 그대로). 활동이 안내가 필요 없는 걸음(월 자동 시작·자동 넘기기 등 순차 처리)에 `notice: ''`을 돌려주면 **서버는 큐에 넣지 않고** 클라이언트도 무시한다(§4.2).
 125. **전면 화면 1차 리뷰 반영.** ① `DistributionBars`가 컨테이너 쿼리로 반응형이 됐다 — 넓은 컨테이너(≥850px)는 라벨(440px, 최대 2줄) | 막대(flex-1, 최소 280px) | 인수(고정 110px) 한 줄, 좁은 컨테이너는 라벨+인수 한 줄 위에 막대가 full 폭으로 쌓인다(오른쪽 기둽의 연쇄·예약 장면 분포가 2px 실루엣이 되던 문제). "자동 처리 N명" 줄은 왼쪽 정렬. ② 이어진·예약 장면 tally의 제목은 `sceneLabel`(장면 제목 → 발신자 → 채널 → 본문 앞 20자)로 폴백한다 — 이벤트 제목으로 떨어지면 "가정의 달"처럼 정체를 알 수 없다. 시작 장면(entry)은 이벤트 제목 폴백을 유지하고 `locate`도 같은 규칙. ③ 12월 도전과제는 두 단 13칸으로(한 단 13줄은 1080px 넘침), 라벨 28px. ④ 가계부 미제출 인원("자동 처리될 수 있어요 N명")은 완료 인원과 같은 종류라 `progress`가 제공될 때(showProgressOnStage)만 TV에 나온다 — 사건 달의 `inChained`(지금 어느 장면에 서 있는지)도 같은 이유로 TV에서 뺐다(통제 패널에만 있다). ⑤ DotBand의 기준/평균 표식은 실제 값의 x 위치에 선다(띠 중앙이 아니라). ⑥ 발표 비트는 "발표 · {spotlightName}" 52px 머리표를 PresentationView 위에 얹고(min-h-dvh 화면이라 위에 더하면 넘친다), 그래프 마지막 값 라벨은 전면에서 점 왼쪽에 둬서 겹치지 않게 한다(`PresentationView tv`·`NetWorthChart endLabelBeside` — dev 스냅숏은 기본값 그대로). ⑦ 입장 벽 오른쪽 열(주소·인원·닉네임 벽)이 QR 카드와 세로 중앙이 맞게 닉네임 벽의 flex-1을 뗐다(60명은 max-h 560px 안에 숨김).
+
+### S9(감사 수정) 구현 중 확정 (2026-11-08)
+
+> 번호 135~139는 다른 스트림이 쓸 수 있으므로 이 목록은 140번부터 센다(merge 시 순서 유지).
+
+140. **소켓 페이로드는 전부 신뢰하지 않는다 (B1).** 서버는 모든 이벤트(hello·join·act·draft·select·next·prev·goto·reveal·spotlight·student·openClass·endClass·lockJoin)의 페이로드를 모양(typeof) 검증하고, 어긋나면 계약의 실패 이유로 ack한다 — hello `'not-found'`, join `'invalid-nickname'`, act `'not-allowed'`, 통제 명령 `'invalid-target'`. 모든 ack 체인은 공용 `settle()`로 마무리해 어떤 예외·거부도 `{ ok: false, reason: 'server-error' }`(hello·join은 계약상 남은 이유)로 돌아오고 unhandled rejection이 나지 않는다. CLI 진입점에는 `process.on('unhandledRejection'|'uncaughtException')` 안전망이 있어 놓친 예외도 로그만 남기고 계속 서비스한다.
+141. **로그 한 줄·한 세션이 시작을 막지 않는다 (B2).** `readSessionLog`는 파싱할 수 없는 줄을 큰 경고와 함께 건너뛴다(찢어진 마지막 줄 포함). 세션 복원은 세션별 try/catch로 묶어 하나가 깨져도 나머지는 복원된다. `openSessionLog`는 열 때 개행 없이 끝나는 찢어진 마지막 줄을 잘라낸다 — 이후 append가 깨진 줄에 이어 붙아 한 줄 전체를 망가뜨리지 않게 한다.
+142. **`connect_error`는 재접속 중일 뿐이다 (M1).** 전면·통제 소켓의 `connect_error`는 네트워크 문제·서버 재시작으로 치고 status `'reconnecting'`("다시 연결 중" 띠, 판은 그대로)로만 바뀐다. `'unauthorized'`(비밀번호 화면)는 첫 snapshot을 받기 전에 서버가 끊은 연결(쿠키 거부, §14 #66)이나 `/api/me`의 401일 때뿐이다.
+143. **서버가 끊은 학생 소켓은 클라이언트가 다시 연결한다 (M2).** socket.io는 서버가 `disconnect(true)`한 연결을 자동 재접속하지 않는다. `kicked`를 받은 뒤 끊기면 useLive가 `socket.connect()`로 다시 연결해 "다시 입장하기"가 새 연결에서 동작하게 하고, 끊긴 동안 쌓인 송신 버퍼를 비워 join이 hello보다 먼저 나가는 것을 막는다. `kicked` 없이 서버가 끊으면 같은 기록의 다른 탭이 이 소켓을 대체한 것이므로(§5.8) status `'replaced'`로 "다른 창에서 접속했어요" 화면을 보여 준다(재접속하면 그 탭의 기록을 다시 훔치게 되므로 자동 이어보기 없음). `join`·`dispatch`는 10초 타임아웃으로 항상 결말이 나서 UI가 멈추지 않는다.
+144. **끝난 수업은 메모리에 두지 않는다 (M3).** `endClass`는 `ended.json`에 코드를 기록하고(48시간, §8.4 — 코드 재사용 금지 + `hello`의 `'ended'` 응답용), Room은 유예(기본 60초) 후 메모리에서 내려간다. CSV 내보내기는 메모리에 없는 코드를 요청받으면 로그에서 Room을 다시 만들어 응답한다(append 없는 읽기 전용 재생). 시작 복원도 `end` 줄이 있는 세션은 Room으로 올리지 않고 `ended.json`에만 남긴다(#75의 "ended로 복원"을 대체).
+145. **`student` op는 서버에서도 모양을 검증한다 (m1).** 모르는 op 종류·누락 필드는 `{ ok: false, reason: 'invalid-target' }`로 ack한다(기존에 unknown op가 ack `null`을 새던 것을 막음). 소켓 계층과 Room 양쪽에서 검증한다.
+146. **`hello.device`는 화이트리스트로 검증하고 기본값은 `'laptop'`이다 (m2).** `'laptop'|'tablet'|'phone'` 밖의 값은 `'laptop'`으로 치환해 받는다(거부하지 않는다 — 기기 값은 roster 표시에만 쓰인다).
+147. **draft는 직렬화해 8KB까지 (m3).** 초과 초안은 서버가 조용히 버린다(거부 ack 없음 — draft는 원래 ack가 없는 이벤트). 초안은 메모리에만 있으므로(§14 #8) 버려도 진행에 영향이 없고 기본값은 "초안 없음" 경로를 쓴다.
+148. **내보내진 닉네임은 그 수업에서 다시 쓸 수 없다 (m4).** `kick`된 학생의 닉네임은 세션 동안 차단 목록에 남아, 같은 닉네임의 재입장은 `'join-locked'`, 그 닉네임으로의 개명은 `'invalid-target'`으로 거부한다(다른 닉네임으로의 재입장은 가능). 계약에 전용 이유가 없으므로 `'join-locked'`를 재사용한다 — 클라이언트는 입장 마감과 같은 안내문을 보여 준다. 재생도 `admin kick` 줄에서 닉네임을 복원해 같게 차단한다.
+149. **join 재시도 스로틀은 클라이언트 버튼 카운트다운이다 (m5).** 계약(`JoinAck`)은 그대로 두고, 클라이언트가 마지막 join 시도부터 5초 동안 입장/재시도 버튼을 잠그고 "잠시 후 다시 시도 (N초)"를 보여 준다. useLive도 5초 안의 재시도를 서버가 조용히 버리기 전에 즉시 `'join-locked'` ack로 돌려준다(UI가 멈추지 않게).
+150. **발표자 노트의 비밀성은 서버 전송 범위로 한정한다 (m6).** 노트 내용은 어차피 공개 정적 번들에 있으므로 클라이언트 쪽에서는 비밀이 아니다. 서버는 계속 학생·전면 스냅숏에서 `SlideManifest.notes`를 제거한다(§5.2 — 통제 전용). 이 규칙은 그대로 유지된다.
+151. **전이 줄에는 실제로 적용된 행동만 기록한다 (m7).** `transition`의 행동을 적용하다 예외가 나면, 나머지를 버리고 지금까지 적용된 행동만 로그에 남긴다 — 재생이 live와 같은 상태를 만든다(§8.2). 기본값 루프(`auto` 줄)는 원래부터 적용된 행동만 기록했다.
+152. **두 번째 hello로 다른 방에 들어갈 때 이전 방을 먼저 뗀다 (m8).** 학생 소켓이 이미 한 방에 묶여 있는데 다른(존재하는) 방으로 hello하면, 서버는 이전 방의 대기 요청(pendingMerge)·기록 연결·룸 조합을 해제하고 join 속도 창도 새로 시작한다. 방 전환은 재시도가 아니므로 hello 5초 창을 적용하지 않는다. 이전 방 roster에는 그 학생이 `connected: false`로 남는다(기록은 그대로, §8.3).

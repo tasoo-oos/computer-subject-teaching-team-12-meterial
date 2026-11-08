@@ -18,6 +18,8 @@ export interface HttpCtx {
   env: Env;
   limiter: LoginLimiter;
   rooms: Map<ClassCode, Room>;
+  /** 메모리에 없는 수업(끝나고 내려간 것)을 로그에서 다시 만든다(§14 #144). 없으면 null */
+  rebuildRoom?: (code: ClassCode) => Room | null;
   now?: () => number;
 }
 
@@ -167,7 +169,8 @@ async function handleExport(req: IncomingMessage, res: ServerResponse, ctx: Http
     sendJson(res, 401, { error: 'unauthorized' });
     return;
   }
-  const room = ctx.rooms.get(code);
+  // 메모리에 없으면(끝난 수업이 유예 뒤 내려간 경우) 로그에서 다시 만든다(§14 #144).
+  const room = ctx.rooms.get(code) ?? ctx.rebuildRoom?.(code) ?? null;
   if (!room) {
     sendJson(res, 404, { error: 'not-found' });
     return;

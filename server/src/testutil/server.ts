@@ -53,7 +53,11 @@ export interface TestServer {
 }
 
 /** startServer + listen(0). 기본 레슨: testLesson(+throwingLesson). */
-export async function startTestServer(over: Partial<Env> = {}, dist?: string): Promise<TestServer> {
+export async function startTestServer(
+  over: Partial<Env> = {},
+  dist?: string,
+  extra?: { endedGraceMs?: number },
+): Promise<TestServer> {
   const env = testEnv(over);
   const lessons: Record<string, Lesson> = { [testLesson.id]: testLesson, [throwingLesson.id]: throwingLesson };
   const server = await startServer({
@@ -62,6 +66,7 @@ export async function startTestServer(over: Partial<Env> = {}, dist?: string): P
     activities: testActivities,
     distDir: dist ?? makeDist(),
     statsIntervalMs: 0,
+    endedGraceMs: extra?.endedGraceMs,
     random: () => 0.01, // init bonus 0 — 결정적 테스트
   });
   await new Promise<void>((resolve) => server.httpServer.listen(0, () => resolve()));

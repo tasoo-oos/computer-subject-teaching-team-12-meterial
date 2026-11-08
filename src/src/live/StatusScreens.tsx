@@ -45,10 +45,39 @@ export function NotFoundScreen() {
   );
 }
 
-/** 기록 이어받기 승인 대기 (§5.8): "선생님 승인을 기다리는 중" + 다른 닉네임으로 다시 join */
-export function MergePendingScreen({ nickname, onRetry }: { nickname: string; onRetry: (nickname: string) => void }) {
+/** 같은 기록의 다른 탭이 이 소켓을 대체했다(§5.8, §14 #143) — 이 탭은 자동으로 이어지지 않는다 */
+export function ReplacedScreen() {
+  return (
+    <Center title="다른 창에서 접속했어요">
+      이 수업에는 같은 이름으로 다른 창이나 기기에서 접속되어 있어요. 이 화면은 자동으로 이어지지 않아요.
+      이 창을 닫고 방금 접속한 창에서 계속해 주세요.
+      <a href="/" className="btn btn-primary mt-5">
+        첫 화면으로
+      </a>
+    </Center>
+  );
+}
+
+/** join 재시도 대기 표시 문구(§14 #149): 남은 밀리초 → 버튼 라벨 */
+function cooldownLabel(cooldownMs: number): string {
+  return `잠시 후 다시 시도 (${Math.ceil(cooldownMs / 1000)}초)`;
+}
+
+/** 기록 이어받기 승인 대기 (§5.8): "선생님 승인을 기다리는 중" + 다른 닉네임으로 다시 join.
+ *  join은 서버가 5초에 1회만 받으므로(§5.4) 재시도 버튼은 카운트다운 동안 잠긴다(§14 #149). */
+export function MergePendingScreen({
+  nickname,
+  onRetry,
+  cooldownMs = 0,
+}: {
+  nickname: string;
+  onRetry: (nickname: string) => void;
+  /** 재시도 가능까지 남은 밀리초 — 그동안 버튼이 잠긴다 */
+  cooldownMs?: number;
+}) {
   const [next, setNext] = useState('');
   const valid = next.trim().length > 0 && next.trim().length <= 10 && next.trim() !== nickname;
+  const blocked = cooldownMs > 0;
   return (
     <Center title="선생님 승인을 기다리는 중" icon={<Hourglass size={22} aria-hidden />}>
       <p>
@@ -58,7 +87,7 @@ export function MergePendingScreen({ nickname, onRetry }: { nickname: string; on
         className="mx-auto mt-5 flex max-w-[20rem] flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault();
-          if (valid) onRetry(next.trim());
+          if (valid && !blocked) onRetry(next.trim());
         }}
       >
         <label className="text-left">
@@ -71,8 +100,8 @@ export function MergePendingScreen({ nickname, onRetry }: { nickname: string; on
             className="h-12 w-full rounded-[8px] bg-white px-3.5 text-[17px] shadow-[inset_0_0_0_1.5px_var(--color-rule)]"
           />
         </label>
-        <button type="submit" disabled={!valid} className="btn btn-quiet">
-          이 닉네임으로 다시 입장
+        <button type="submit" disabled={!valid || blocked} className="btn btn-quiet">
+          {blocked ? cooldownLabel(cooldownMs) : '이 닉네임으로 다시 입장'}
         </button>
       </form>
     </Center>
@@ -95,14 +124,28 @@ export function KickedScreen({ reason, onRetry }: { reason: 'kicked' | 'merge-re
 
 /** 닉네임 입력 (§8.3: 입장하지 않은 접속자는 모든 비트에서 이 화면).
  *  유효성(1~10자)은 서버가 판정한다(§14 #130) — 잘못된 닉네임은 'invalid-nickname'
- *  ack로 돌아와 이 양식 안에 안내문으로 보여 주므로, 입력 단계에서 막지 않고 그대로 보낸다. */
-export function NicknameForm({ nickname, onSubmit, error }: { nickname?: string; onSubmit: (nickname: string) => void; error?: string | null }) {
+ *  ack로 돌아와 이 양식 안에 안내문으로 보여 주므로, 입력 단계에서 막지 않고 그대로 보낸다.
+ *  join은 서버가 5초에 1회만 받으므로(§5.4) 입장 버튼은 카운트다운 동안 잠긴다(§14 #149). */
+export function NicknameForm({
+  nickname,
+  onSubmit,
+  error,
+  cooldownMs = 0,
+}: {
+  nickname?: string;
+  onSubmit: (nickname: string) => void;
+  error?: string | null;
+  /** 재시도 가능까지 남은 밀리초 — 그동안 버튼이 잠긴다 */
+  cooldownMs?: number;
+}) {
   const [name, setName] = useState(nickname ?? '');
+  const blocked = cooldownMs > 0;
   return (
     <div className="paper-texture grid min-h-dvh place-items-center px-5">
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          if (blocked) return;
           onSubmit(name.trim());
         }}
         className="w-full max-w-[26rem] rounded-panel bg-sheet p-6 shadow-[0_0_0_1px_var(--color-rule),0_20px_40px_-30px_rgba(24,38,74,.5)] sm:p-8"
@@ -125,9 +168,15 @@ export function NicknameForm({ nickname, onSubmit, error }: { nickname?: string;
             {error}
           </p>
         ) : null}
-        <button type="submit" className="btn btn-primary mt-5 h-12 w-full text-[17px]">
-          <LogIn size={18} aria-hidden />
-          입장
+        <button type="submit" disabled={blocked} className="btn btn-primary mt-5 h-12 w-full text-[17px]">
+          {blocked ? (
+            cooldownLabel(cooldownMs)
+          ) : (
+            <>
+              <LogIn size={18} aria-hidden />
+              입장
+            </>
+          )}
         </button>
       </form>
     </div>

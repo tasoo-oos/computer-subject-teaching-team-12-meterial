@@ -38,6 +38,8 @@ export interface StartServerOptions {
   distDir?: string;
   /** 집계 스로틀 간격(기본 250ms, §5.6). 0이면 즉시(테스트) */
   statsIntervalMs?: number;
+  /** 끝난 수업을 메모리에서 내려 보내기까지의 유예(기본 60초, §14 #144). CSV는 로그에서 다시 만든다 */
+  endedGraceMs?: number;
   now?: () => number;
   random?: () => number;
 }
@@ -71,6 +73,8 @@ export async function startServer(opts: StartServerOptions): Promise<RunningServ
   const rooms = new Map<ClassCode, Room>();
   const roleSockets = new Set<LiveSocket>();
   const limiter = new LoginLimiter({ now });
+  const endedGraceMs = opts.endedGraceMs ?? 60_000;
+  const evictionTimers = new Set<ReturnType<typeof setTimeout>>();
   let closed = false;
 
   const getClasses = (): OpenClassInfo[] =>
@@ -87,6 +91,20 @@ export async function startServer(opts: StartServerOptions): Promise<RunningServ
   const hooks = {
     getClasses,
     onClassesChange: broadcastClasses,
+    /** 수업 종료(§14 #144): ended.json에 기록하고 유예 뒤 메모리에서 내려 보낸다.
+     *  CSV 내보내기는 이후에도 로그에서 요청 시 다시 만든다(rebuildRoom). */
+    onEnd(code: ClassCode): void {
+      ended.add(code, now());
+      const room = rooms.get(code);
+      if (!room) return;
+      const timer = setTimeout(() => {
+        evictionTimers.delete(timer);
+        if (closed || rooms.get(code) !== room) return;
+        rooms.delete(code);
+        room.close();
+      }, endedGraceMs);
+      evictionTimers.add(timer);
+    },
   };
 
   // http 서버: /socket.io/* → socket.io, /api/* → API, 나머지 → 정적(§6.1)
@@ -99,7 +117,7 @@ export async function startServer(opts: StartServerOptions): Promise<RunningServ
       const pathname = url.pathname;
       if (pathname.startsWith('/socket.io/')) return; // socket.io 엔진이 처리
       if (pathname.startsWith('/api/')) {
-        await handleApi(req, res, { env, limiter, rooms, now }, pathname);
+        await handleApi(req, res, { env, limiter, rooms, now, rebuildRoom }, pathname);
         return;
       }
       staticHandler(req, res, pathname);
@@ -115,6 +133,8 @@ export async function startServer(opts: StartServerOptions): Promise<RunningServ
   const io = new Server(httpServer, { serveClient: false }) as LiveIOServer;
 
   // 로그 재생(§8.2): 서버 시작 시 각 세션 디렉터리를 읽어 줄 순서대로 적용한다.
+  // 세션 하나가 깨져도(찢어진 줄·손상) 나머지는 그대로 복원된다(B2, §14 #141).
+  // end 줄이 있는 세션은 메모리에 올리지 않고 ended.json에만 남긴다(§14 #144).
   let entries: string[] = [];
   try {
     entries = readdirSync(sessionsDir).filter((d) => existsSync(join(sessionsDir, d, 'log.jsonl')));
@@ -122,18 +142,53 @@ export async function startServer(opts: StartServerOptions): Promise<RunningServ
     entries = [];
   }
   for (const code of entries) {
-    const lines = readSessionLog(sessionsDir, code);
-    const log = openSessionLog(sessionsDir, code);
-    const room = restoreRoom(lines, {
-      lessons,
-      activities,
-      log,
-      io,
-      statsIntervalMs,
-      hooks,
-    });
-    if (room) rooms.set(room.code, room);
+    try {
+      const log = openSessionLog(sessionsDir, code); // 찢어진 마지막 줄 수리(§14 #141)
+      const lines = readSessionLog(sessionsDir, code);
+      const endTs = lines.find((l) => l.t === 'end')?.ts;
+      if (endTs !== undefined) {
+        ended.add(code, endTs); // 48시간 코드 재사용 금지 + hello 'ended' 응답(§8.4, §14 #144)
+        continue; // 끝난 수업은 Room으로 복원하지 않는다 — CSV는 요청 시 로그에서 다시 만든다
+      }
+      const room = restoreRoom(lines, {
+        lessons,
+        activities,
+        log,
+        io,
+        statsIntervalMs,
+        hooks,
+      });
+      if (room) rooms.set(room.code, room);
+    } catch (err) {
+      console.error(`[replay] 세션 ${code} 복원 실패 — 건너뛴다(나머지는 계속):`, err);
+    }
   }
+
+  /** 끝난(또는 메모리에서 내려간) 수업을 로그에서 다시 만들어 CSV 내보내기에 쓴다(§14 #144). */
+  const rebuildRoom = (code: ClassCode): Room | null => {
+    try {
+      const lines = readSessionLog(sessionsDir, code);
+      if (lines.length === 0) return null;
+      const readOnlyLog = {
+        dir: join(sessionsDir, code),
+        file: join(sessionsDir, code, 'log.jsonl'),
+        append(): void {
+          // 읽기 전용 재구축 — 새 줄을 쓰지 않는다
+        },
+      };
+      return restoreRoom(lines, {
+        lessons,
+        activities,
+        log: readOnlyLog,
+        io: null,
+        statsIntervalMs: 0,
+        hooks: { getClasses: () => [] },
+      });
+    } catch (err) {
+      console.error(`[export] 세션 ${code} 재구축 실패:`, err);
+      return null;
+    }
+  };
 
   // 수업 열기 — 서버 수준 직렬화(코드 발급 경합 방지).
   let openQueue: Promise<unknown> = Promise.resolve();
@@ -182,6 +237,7 @@ export async function startServer(opts: StartServerOptions): Promise<RunningServ
     roleSockets,
     getClasses,
     openClass,
+    endedHas: (code) => ended.has(code),
   });
 
   return {
@@ -193,6 +249,8 @@ export async function startServer(opts: StartServerOptions): Promise<RunningServ
     async close(): Promise<void> {
       if (closed) return;
       closed = true;
+      for (const timer of evictionTimers) clearTimeout(timer);
+      evictionTimers.clear();
       for (const room of rooms.values()) room.close();
       roleSockets.clear();
       await new Promise<void>((resolveClose) => {
@@ -208,6 +266,15 @@ export async function startServer(opts: StartServerOptions): Promise<RunningServ
 // ── CLI ────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  // 프로세스 수준 안전망(B1, §14 #140): 놓친 예외·거부가 Node를 죽이지 않게
+  // 크게 로그를 남기고 계속 서비스한다. 각 이벤트 처리기의 catch가 원칙이고 이것은 최후의 보루다.
+  process.on('unhandledRejection', (reason) => {
+    console.error('[server] 처리되지 않은 promise 거부 — 로그만 남기고 계속한다:', reason);
+  });
+  process.on('uncaughtException', (err) => {
+    console.error('[server] 처리되지 않은 예외 — 로그만 남기고 계속한다:', err);
+  });
+
   let env: Env;
   try {
     env = validateEnv(process.env);

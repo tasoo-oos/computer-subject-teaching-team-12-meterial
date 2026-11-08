@@ -99,10 +99,16 @@ export function useRoleLive<S = unknown, St = unknown>(role: 'stage' | 'control'
       setSpotlightName(p.nickname ?? null);
     });
     socket.on('disconnect', () => {
-      // snapshot을 한 번도 안 받았는데 끊기면 쿠키 거부(§14 S2-#66)일 가능성이 크다 — 로그인 화면 유도
+      // snapshot을 한 번도 안 받았는데 끊기면 쿠키 거부(§14 S2-#66)일 가능성이 크다 — 로그인 화면 유도.
+      // 받은 뒤에 끊기면(서버 재시작 등) 네트워크 문제로 치고 판을 유지한다(M1, §14 #142).
       setStatus(gotSnapshotRef.current ? 'reconnecting' : 'unauthorized');
     });
-    socket.on('connect_error', () => setStatus((prev) => (prev === 'open' || prev === 'reconnecting' ? 'unauthorized' : prev)));
+    socket.on('connect_error', () => {
+      // 연결 자체가 안 되는 중(네트워크 불안·서버 재시작) — 로그인 상태와는 무관하다.
+      // 비밀번호 화면으로 쫓아내지 않고 "다시 연결 중" 띠만 띄운다(M1, §14 #142).
+      // unauthorized는 첫 snapshot 전 서버 끊김(쿠키 거부)이나 /api/me 401뿐이다.
+      setStatus((prev) => (prev === 'unauthorized' ? prev : 'reconnecting'));
+    });
 
     return () => {
       socket.disconnect();

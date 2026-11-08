@@ -95,6 +95,8 @@ export interface RoomHooks {
   getClasses(): OpenClassInfo[];
   /** openClass·endClass로 목록이 바뀌면 */
   onClassesChange?(): void;
+  /** 수업이 끝났을 때(ended.json 기록·유예 뒤 메모리 제거, §14 #144) */
+  onEnd?(code: ClassCode): void;
 }
 
 export interface RoomOptions {
@@ -128,6 +130,8 @@ interface PendingMerge {
 }
 
 const MAX_FALLBACK_ITERATIONS = 50; // §4.2 기본값 루프 종료 보장
+/** draft 직렬화 상한(§14 #147). 초과 초안은 버린다 — 통제망·메모리 보호. */
+const MAX_DRAFT_BYTES = 8 * 1024;
 
 export class Room {
   readonly code: ClassCode;
@@ -157,6 +161,8 @@ export class Room {
   private readonly byNickname = new Map<string, StudentRecord>();
   private readonly byToken = new Map<string, StudentRecord>();
   private readonly pendingMerges = new Map<string, PendingMerge>();
+  /** 내보내진 닉네임 — 이 수업에서 다시 입장·개명할 수 없다(§14 #148) */
+  private readonly kickedNicknames = new Set<string>();
   private studentNum = 0;
   private pendingNum = 0;
 
@@ -644,6 +650,9 @@ export class Room {
       return { ok: false, reason: 'invalid-nickname' };
     }
     if (this.joinLocked) return { ok: false, reason: 'join-locked' };
+    // 내보내진 닉네임은 이 수업에서 다시 입장할 수 없다(§14 #148). 다른 닉네임은 가능.
+    // 계약에 전용 이유가 없으므로 'join-locked'로 돌려준다(클라이언트는 입장 마감 안내문을 보여 준다).
+    if (this.kickedNicknames.has(nickname)) return { ok: false, reason: 'join-locked' };
     if (this.students.size >= this.maxStudents) return { ok: false, reason: 'class-full' };
 
     this.cancelPendingOf(socket);
@@ -801,13 +810,15 @@ export class Room {
     return { ok: true, state: next, done, version: this.version };
   }
 
-  /** draft(§4.2): 메모리에만 저장. 로그에 남기지 않는다(§14 #8). */
+  /** draft(§4.2): 메모리에만 저장. 로그에 남기지 않는다(§14 #8).
+   *  직렬화해 8KB를 넘는 초안은 버린다(§14 #147) — 서버는 ack 없이 조용히 놓아둔다. */
   saveDraft(socket: LiveSocket, p: DraftPayload): void {
     this.enqueue(() => {
       const rec = socket.data.student;
       if (!rec || socket.data.room !== this) return;
       if (beforeBeat(this.cursor, this.highMark)) return;
-      if (!sameBeat(p.beat, this.highMark)) return;
+      if (p?.beat === undefined || !sameBeat(p.beat, this.highMark)) return;
+      if (draftSizeOf(p.data) > MAX_DRAFT_BYTES) return;
       rec.draft = p.data;
     }).catch(() => undefined);
   }
@@ -939,7 +950,8 @@ export class Room {
     });
   }
 
-  /** 전이(§5.5-4): 로그 먼저, 적용은 재생과 같은 순서로(§8.2). */
+  /** 전이(§5.5-4): 실제로 적용된 행동만 로그에 남긴다(§14 #151) —
+   *  도중에 apply가 예외를 던지면 나머지는 버리고 적용된 만큼만 기록해 재생과 live가 같아진다. */
   private applyTransition(rec: StudentRecord, from: BeatRef, to: BeatRef): void {
     if (from.segment !== to.segment) return; // 세그먼트 경계 전이 없음(§4.2)
     const seg = this.activitySegOf(from.segment);
@@ -954,21 +966,26 @@ export class Room {
       return;
     }
     if (actions.length === 0) return;
+    const applied: unknown[] = [];
+    let ns: unknown = s;
+    try {
+      for (const a of actions) {
+        ns = seg.logic.apply(ns, a, seg.cfg);
+        applied.push(a);
+      }
+    } catch (err) {
+      console.error(`[room ${this.code}] transition apply(${seg.activity}) 예외:`, err);
+    }
+    rec.states[seg.id] = ns;
+    if (applied.length === 0) return;
     this.log.append({
       t: 'transition',
       ts: this.now(),
       studentId: rec.id,
       from: { segment: from.segment, beat: from.beat },
       to: { segment: to.segment, beat: to.beat },
-      actions,
+      actions: applied,
     });
-    let ns: unknown = s;
-    try {
-      for (const a of actions) ns = seg.logic.apply(ns, a, seg.cfg);
-    } catch (err) {
-      console.error(`[room ${this.code}] transition apply(${seg.activity}) 예외:`, err);
-    }
-    rec.states[seg.id] = ns;
   }
 
   prev(): Promise<CmdAck> {
@@ -1048,28 +1065,42 @@ export class Room {
       this.log.append({ t: 'end', ts: this.now() });
       this.broadcastClass();
       this.hooks.onClassesChange?.();
+      this.hooks.onEnd?.(this.code); // ended.json 기록·메모리 유예 후 제거(§14 #144)
       return { ok: true };
     });
   }
 
-  /** 교사·학생 관리(§5.8): rename·kick·merge */
+  /** 교사·학생 관리(§5.8): rename·kick·merge. 모양이 아니면 invalid-target(§14 #145). */
   studentOp(op: StudentOp): Promise<CmdAck> {
     return this.enqueue(() => {
-      switch (op.op) {
+      const raw = op as { op?: unknown; id?: unknown; nickname?: unknown; pendingId?: unknown; intoId?: unknown };
+      switch (raw?.op) {
         case 'rename':
-          return this.doRename(op.id, op.nickname);
+          if (typeof raw.id !== 'string' || typeof raw.nickname !== 'string') {
+            return { ok: false, reason: 'invalid-target' };
+          }
+          return this.doRename(raw.id, raw.nickname);
         case 'kick':
-          return this.doKick(op.id);
+          if (typeof raw.id !== 'string') return { ok: false, reason: 'invalid-target' };
+          return this.doKick(raw.id);
         case 'merge':
-          return this.doMerge(op.pendingId, op.intoId);
+          if (typeof raw.pendingId !== 'string' || typeof raw.intoId !== 'string') {
+            return { ok: false, reason: 'invalid-target' };
+          }
+          return this.doMerge(raw.pendingId, raw.intoId);
+        default:
+          // 모르는 op 종류 — null ack가 새는 것을 막는다(§14 #145)
+          return { ok: false, reason: 'invalid-target' };
       }
     });
   }
 
   private doRename(id: string, nicknameRaw: string): CmdAck {
-    const nickname = nicknameRaw.trim();
+    const nickname = typeof nicknameRaw === 'string' ? nicknameRaw.trim() : '';
     const rec = this.students.get(id);
     if (!rec || nickname.length < 1 || nickname.length > 10) return { ok: false, reason: 'invalid-target' };
+    // 내보내진 닉네임으로는 개명할 수 없다(§14 #148)
+    if (this.kickedNicknames.has(nickname)) return { ok: false, reason: 'invalid-target' };
     const other = this.byNickname.get(nickname);
     if (other && other !== rec) return { ok: false, reason: 'invalid-target' }; // 수업 내 유일(§5.8)
     this.byNickname.delete(rec.nickname);
@@ -1096,6 +1127,7 @@ export class Room {
     }
     const rec = this.students.get(id);
     if (!rec) return { ok: false, reason: 'invalid-target' };
+    this.kickedNicknames.add(rec.nickname); // 이 수업에서 이 이름으로 재입장 금지(§14 #148)
     if (rec.socket) {
       const socket = rec.socket;
       socket.data.student = undefined;
@@ -1185,6 +1217,29 @@ export class Room {
       this.rosterDirty();
       this.statsDirty();
     }).catch(() => undefined);
+  }
+
+  /**
+   * 학생 소켓을 이 방에서 뗀다(§14 #152): 두 번째 hello로 다른 방에 들어갈 때 먼저 불러
+   * 이전 방의 대기 요청·기록 연결·룸 조합을 정리한다. 큐에 넣지 않고 즉시 뗀다 —
+   * 새 방의 hello가 같은 소켓의 data를 다시 쓰기 때문이다.
+   */
+  detachSocket(socket: LiveSocket): void {
+    const pendingId = socket.data.pendingId;
+    if (pendingId) {
+      const pending = this.pendingMerges.get(pendingId);
+      if (pending && pending.socket === socket) this.pendingMerges.delete(pendingId);
+      socket.data.pendingId = undefined;
+    }
+    const rec = socket.data.student;
+    if (rec && rec.socket === socket) {
+      rec.socket = null;
+      rec.connected = false;
+    }
+    socket.data.student = undefined;
+    socket.data.room = undefined;
+    socket.leave(this.classRoomName());
+    socket.leave(this.studentRoomName());
   }
 
   // ── CSV 내보내기 (§8.5) ────────────────────────────────────────────────
@@ -1348,7 +1403,10 @@ export class Room {
           }
         } else if (line.op.kind === 'kick') {
           const rec = this.students.get(line.op.id);
-          if (rec) this.removeStudent(rec); // 이 학생의 기록은 여기서 끝난다(§8.2)
+          if (rec) {
+            this.kickedNicknames.add(rec.nickname); // 재생도 내보낸 이름을 막는다(§14 #148)
+            this.removeStudent(rec); // 이 학생의 기록은 여기서 끝난다(§8.2)
+          }
         } else if (line.op.kind === 'merge') {
           const into = this.students.get(line.op.intoId);
           if (into) {
@@ -1399,6 +1457,15 @@ export class Room {
 
 function randomToken(): string {
   return randomBytes(16).toString('base64url'); // 128비트(§8.3)
+}
+
+/** 초안의 직렬화 크기(바이트). JSON이 아니면 0으로 친다(§14 #147). */
+function draftSizeOf(data: unknown): number {
+  try {
+    return Buffer.byteLength(JSON.stringify(data) ?? '', 'utf8');
+  } catch {
+    return Number.MAX_SAFE_INTEGER; // 순환 참조 등 직렬화 불가 초안은 무조건 버린다
+  }
 }
 
 function parseNumSuffix(id: string): number {
