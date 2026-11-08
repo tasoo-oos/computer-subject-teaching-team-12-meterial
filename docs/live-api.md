@@ -1,0 +1,1273 @@
+# 수업 모드 API 명세 (`packages/live`, `server`, `lesson`, `packages/activity-gagyebu`)
+
+- 작성일: 2026-11-09
+- 상태: 명세(구현 전). 이 문서가 구현 계약이다. 여러 에이전트가 서로 말하지 않고 이 문서만 보고 구현할 수 있어야 한다.
+- 관련 문서: `docs/live-classroom-plan.md`(계획·근거, 이 문서보다 위에 없다), `docs/core-api.md`(core API), `가계부-시나리오-수업-기획서.md` 5~6장(시뮬레이션 규칙), `src/DESIGN.md`(디자인 토큰·화면)
+- 읽는 법: 모든 TypeScript 블록은 그대로 내보내야 하는 시그니처이다. 본문은 한국어, 식별자는 영어. 계획이 침묵하거나 코드와 어긋난 부분은 §14 「결정 사항」에 모두 적어 두었다.
+
+## 0. 요약
+
+교사가 통제 페이지에서 넘기면 반 전체가 같은 단계에 있는 중앙 통제식 수업 모드의 구현 계약.
+
+| 페이지 | 주소 | 역할 |
+| --- | --- | --- |
+| 학생 | `/<숫자 4자리>` | 슬라이드 보기, 게임 조작, 제출 뒤 대기 |
+| 전면 | `/stage` (전면 비밀번호) | 슬라이드, 장면, 익명 집계, 발표 |
+| 통제 | `/control` (통제 비밀번호) | 수업 열기·끝내기, 다음/이전, 완료 인원, 학생 관리 |
+| 개발 | `/dev` (통제 비밀번호) | 스냅숏 셸 (`pnpm shots`) |
+| 혼자 | `/solo` (`SOLO_ENABLED=true`일 때만) | 네트워크 장애 시 비상용 로컬 모드 |
+
+서버는 Node 24 단일 프로세스로 Socket.IO + 정적 파일 + 세션 로그를 함께 맡고, 빌드 단계 없이 `node --env-file=.env server/src/main.ts`로 실행한다. 게임 규칙은 `@gagyebu/core`의 `step()`(core-api.md §4), 진행·통신은 이 문서의 `@gagyebu/live` 프로토콜이 정한다.
+
+---
+
+## 1. 범위와 패키지 구조
+
+### 1.1 새 워크스페이스 패키지
+
+`pnpm-workspace.yaml`을 아래로 바꾼다.
+
+```yaml
+packages:
+  - packages/*
+  - src
+  - server
+  - lesson
+```
+
+| 패키지 | 폴더 | `exports` 진입 파일 | 역할 |
+| --- | --- | --- | --- |
+| `@gagyebu/live` (신규) | `packages/live` | `./src/index.ts` | 레슨·비트·커서 타입, 프로토콜, `ActivityLogic` 인터페이스, 슬라이드 세그먼트 논리 |
+| `@gagyebu/activity-gagyebu` (신규) | `packages/activity-gagyebu` | `./src/index.ts` | 가계부 활동의 순수 로직: 비트 목록, 진행 판정, 기본값, 집계 |
+| `@gagyebu/server` (신규) | `server` | `./src/main.ts` | Node 서버: Socket.IO, Room, 큐, 세션 로그, 비밀번호 로그인, 정적 파일 |
+| `@gagyebu/lesson` (신규) | `lesson` | `./lesson.ts` | 수업 콘텐츠: 세그먼트 순서·설정, 덱 매니페스트(데이터만) |
+| `@gagyebu/core` (기존, 확장) | `packages/core` | `./src/index.ts` | 게임 규칙·데이터 + `step()` (core-api.md 참조) |
+| `@gagyebu/draft-kit` (기존) | `packages/draft-kit` | `./src/index.tsx` | 스냅숏 셸. §10.9의 새 어댑터 계약으로 바뀜 |
+| `@gagyebu/app` (기존, 확장) | `src` | `./index.html` + Vite | 화면 앱. 수업 모드 셸·활동 화면·통제 페이지 추가 |
+
+모든 신규 패키지의 `exports`는 소스 `.ts` 파일을 직접 가리킨다(빌드 없음). 서버 실행은 Node 24의 네이티브 타입 스트리핑에 의존한다.
+
+### 1.2 의존 그래프 (import 가능 방향)
+
+```
+core ←─ live ←─ activity-gagyebu ←─┐
+  ↑       ↑                       ├─ lesson ←─ server
+  └───────┴───────────────────────┴────────── src(app)
+```
+
+- `@gagyebu/core`: 의존 없음(기존 그대로).
+- `@gagyebu/live`: `@gagyebu/core`만 의존(`GameState`를 프로토콜에 싣는다). **React·DOM·Node 전용 API 금지.**
+- `@gagyebu/activity-gagyebu`: `core` + `live`. **React·DOM·Node 전용 API 금지.** 순수 함수만.
+- `@gagyebu/lesson`: `live` + `activity-gagyebu` + `core`(설정 타입). 데이터만 담는다. **React 금지.**
+- `@gagyebu/server`: `live` + `activity-gagyebu` + `lesson` + `core` + `socket.io`, `cookie`. Node 전용.
+- `@gagyebu/app`: 전부 + `socket.io-client`, `qrcode`. React 화면.
+
+금지 규칙(정적 검증 가능해야 한다): `packages/live`, `packages/activity-gagyebu`에서 `react`, `react-dom`, `node:*`, `DOM` 타입(`window`, `document`) import 금지. 타입만 쓸 때는 `import type`으로.
+
+### 1.3 Node 24 네이티브 실행 제약 (서버가 import하는 모든 것)
+
+서버는 빌드 단계가 없으므로, 서버 모듈 그래프 안(`server/**`, `packages/live/**`, `packages/activity-gagyebu/**`, `lesson/**`, `packages/core/**`)의 TS는 **지울 수 있는 구문(erasable syntax)** 만 쓴다.
+
+- 금지: `enum`, `namespace`, 파라미터 프로퍼티(`constructor(private x: T)`), 데코레이터, JSX.
+- 허용: `type`, `interface`, `as`, `satisfies`, 제네릭, 일반 `class`(JS 구문), `const`.
+- import는 상대 경로 + 명시적 `.ts` 확장자(`import { x } from './types.ts'`). 타입은 `import type`.
+- 패키지 간 import는 패키지 이름(`@gagyebu/live`)으로 하고, 각 `package.json`의 `exports`가 `./src/index.ts`를 가리킨다(pnpm 심볼릭 링크로 Node가 `.ts` 소스를 그대로 적재한다. core에서 동작 확인됨).
+- `tsconfig.base.json`은 이미 `verbatimModuleSyntax` + `allowImportingTsExtensions`가 있다. **`erasableSyntaxOnly: true`를 `tsconfig.base.json`에 추가할 것을 권장**한다(위반을 컴파일 타임에 잡는다).
+
+### 1.4 추가할 외부 의존성
+
+| 패키지 | 대상 | 용도 |
+| --- | --- | --- |
+| `socket.io@^4` | `@gagyebu/server` | 서버 소켓 |
+| `socket.io-client@^4` | `@gagyebu/app` | 클라이언트 소켓 |
+| `cookie@^1` | `@gagyebu/server` | 쿠키 파싱·직렬화 (`@types/cookie` 함께) |
+| `qrcode@^1` | `@gagyebu/app` | 입장 화면 QR (클라이언트에서 생성, `@types/qrcode` 함께) |
+| `vitest@^3` | 루트 `devDependencies` + `core`/`live`/`activity-gagyebu`/`server` 각 `devDependencies` | 테스트 |
+| `@gagyebu/core`, `@gagyebu/live`, `@gagyebu/activity-gagyebu`, `@gagyebu/lesson` | `@gagyebu/app` `dependencies` | `workspace:*` |
+
+루트 `package.json` 스크립트(§11.3 참조): `server`, `test`, `bots` 추가.
+
+---
+
+## 2. 레슨 데이터와 화면의 분리
+
+### 2.1 문제
+
+서버는 모든 레슨의 세그먼트·비트(각 슬라이드 덱의 장 수, `steps`, 발표자 노트 포함)를 알아야 하지만, 슬라이드는 React 컴포넌트라 Node가 import할 수 없다.
+
+### 2.2 해결: 데이터 매니페스트(서버 안전) + 렌더 레지스트리(클라이언트 전용)
+
+- **덱 매니페스트** — `lesson/decks/*.ts`, 데이터만 있는 서버 안전 `.ts`:
+
+```ts
+// packages/live/src/types.ts
+export interface SlideManifest {
+  id: string;
+  /** 한 장 안에서 항목을 하나씩 드러내는 단계 수. 없으면 1비트 */
+  steps?: number;
+  /** 발표자 노트 (통제 페이지에만 표시) */
+  notes?: string;
+}
+
+export interface DeckManifest {
+  id: string;
+  title: string;
+  slides: SlideManifest[];
+}
+```
+
+- **슬라이드 렌더 레지스트리** — `src/src/activities/slides/registry.tsx`, 클라이언트 전용. 키는 `덱 id + 슬라이드 id`:
+
+```tsx
+// src/src/activities/slides/registry.tsx (계약)
+import type { ComponentType } from 'react';
+
+/** `${deckId}/${slideId}` → 슬라이드 렌더 컴포넌트 */
+export const SLIDE_RENDERERS: Record<string, ComponentType<{ step: number }>>;
+```
+
+슬라이드 컴포넌트는 `src/src/activities/slides/decks/<deckId>.tsx`에 들어 있고 레지스트리만 import한다. 레지스트리에 없는 키가 오면 자리표시 오류 슬라이드를 보여 준다(개발 중 드러남).
+
+- **활동도 같은 분리**: 규칙은 `packages/activity-gagyebu`(서버 안전, 순수 함수), 화면은 `src/src/activities/gagyebu/`(클라이언트). 서버는 레지스트리 `server/src/activities.ts`에서 `activity id → ActivityLogic`을, 클라이언트는 `src/src/activities/registry.ts`에서 `activity id → ActivityViews`를 찾는다. 두 레지스트리의 id 집합이 같아야 한다.
+
+### 2.3 레슨 스크립트
+
+```ts
+// lesson/lesson.ts (계약; lesson/decks/*.ts는 DeckManifest만 내보냄)
+import type { Lesson } from '@gagyebu/live';
+import { introDeck } from './decks/intro.ts';
+import { wrapUpDeck } from './decks/wrap-up.ts';
+
+export const lesson: Lesson = {
+  id: 'first-salary',
+  title: '내 첫 월급, 1년 살아 보기',
+  settings: { showProgressOnStage: false },
+  segments: [
+    { kind: 'slides', id: 'intro', deck: introDeck }, // 슬라이드가 들어오기 전까지 slides: [] 로 비워 둠
+    {
+      kind: 'activity',
+      id: 'game',
+      activity: 'gagyebu',
+      config: { guide: true, monthReveal: true, spotlight: true, confirmForce: true },
+    },
+    { kind: 'slides', id: 'wrap-up', deck: wrapUpDeck },
+  ],
+};
+```
+
+---
+
+## 3. core API 변경 요약
+
+`@gagyebu/core`에 승인된 변경(계획 §13 1~9 + `step()`)이 들어간다. 시그니처·세부 의미는 **`docs/core-api.md` §4가 정식 명세**다. 요약:
+
+| 변경 | 시그니처 |
+| --- | --- |
+| `start` 행동에 월급 | `{ type: 'start'; nickname: string; salary: Won }` |
+| 설문 한 번에 제출 | `{ type: 'submitSurvey'; answers: Partial<Record<QuestionId, string>> }` (`answer`/`finishSurvey` 삭제) |
+| 기본 선택지 표시 | `Choice.fallback?: true` |
+| 자동 처리 기록 | `DecisionRecord.auto?: boolean`, 행동에 `auto?: true` |
+| 합계 맞추기 | `balanceBudget(budget, salary): { budget: Budget; changes: BudgetChange[] }` |
+| 설문 기본값 | `defaultAnswers(answers)` |
+| 기본 선택지 조회 | `fallbackChoice(scene): Choice` |
+| 자동 지불 계획 | `autoPaymentPlan(state, pay): { plan: PaymentPlan; shortfall: Won }` |
+| 자동 입금 계좌 | `autoDepositTarget(deposit): AccountId` |
+| 지불 계획 검증 | `validatePayment(state, pay, plan): { ok: true } \| { ok: false; issue: PaymentIssue }` |
+| 집계용 선택자 | `monthChoices(state, month): DecisionRecord[]` |
+| 행동 사전 검사 | `canStep(state, action): true \| string`, `StepError { code }` |
+
+---
+
+## 4. `@gagyebu/live` 타입
+
+파일 구성: `src/index.ts`(전부 re-export), `src/types.ts`, `src/activity.ts`, `src/protocol.ts`, `src/slides.ts`.
+
+### 4.1 진행 모델
+
+```ts
+// packages/live/src/types.ts
+export type ClassCode = string; // 숫자 4자리 ("4821"). 학생 주소 /<code>
+
+/** 교사가 "다음"을 눌러 넘기는 한 칸 */
+export interface Beat {
+  /** 세그먼트 안에서 유일. 예: 'survey', 'guide-3', 'm2', 'intro/why--1' */
+  id: string;
+  /** 통제 타임라인 표시 */
+  label: string;
+  mode: 'show' | 'work';
+  /** 공개 토글이 있는 비트 (work에만 붙는다) */
+  reveal?: boolean;
+  /** 발표자 노트 (통제 페이지에만) */
+  notes?: string;
+}
+
+/** 비트 주소: 세그먼트 인덱스 + 세그먼트 안 비트 인덱스. 전역 인덱스는 서버가 평탄화해서만 계산한다 */
+export interface BeatRef {
+  segment: number;
+  beat: number;
+}
+
+export interface Cursor {
+  segment: number;
+  beat: number;
+  revealed: boolean;
+}
+
+export type ClassStatus = 'open' | 'ended';
+
+export interface LessonSettings {
+  /** 공개 전 응답 중 완료 인원을 TV에도 보일지. 기본 false (통제 페이지에만) */
+  showProgressOnStage: boolean;
+}
+
+export type Segment =
+  | { kind: 'slides'; id: string; deck: DeckManifest }
+  | { kind: 'activity'; id: string; activity: string; config: unknown };
+
+export interface Lesson {
+  id: string;
+  title: string;
+  settings: LessonSettings;
+  segments: Segment[];
+}
+
+export interface ClassState {
+  code: ClassCode;
+  status: ClassStatus;
+  /** 변경마다 +1. 모든 서버→클라이언트 메시지에 실려 낡은 메시지를 버리는 기준 */
+  version: number;
+  lessonId: string;
+  cursor: Cursor;
+  /** 가장 멀리 간 적 있는 비트. prev/goto는 이 안에서만 움직인다 */
+  highMark: BeatRef;
+  spotlight: string | null; // 발표자 studentId
+  joinLocked: boolean;
+}
+
+export interface ProgressInfo {
+  done: number;
+  connected: number;
+  total: number;
+}
+
+export interface RosterEntry {
+  studentId: string;
+  nickname: string;
+  connected: boolean;
+  /** 현재 비트 완료 여부 */
+  done: boolean;
+  /** 지각 합류 (들어올 때 과거 작업 비트를 기본값으로 채움) */
+  late: boolean;
+  device: 'laptop' | 'tablet' | 'phone';
+  /** 활동이 주는 "지금 있는 장면" 짧은 문구 (미완료 명단용). 없으면 null */
+  scene: string | null;
+  /** 기록 이어받기 승인 대기 중인 새 접속 */
+  pendingMerge: boolean;
+}
+```
+
+**비트 주소 결정**: 주소는 `{ segment, beat }` 인덱스(계획 §5.4의 `Cursor` 그대로). `Beat.id`는 표시·디버깅용이고 세그먼트 안에서만 유일하면 된다. 프로토콜은 인덱스만 오간다.
+
+**슬라이드 `steps` → 비트 매핑 결정**: `steps: n`이 있는 슬라이드는 **비트 n개**가 된다. 비트 k(0부터)는 항목 0..k까지 드러낸 상태를 그린다. `steps`가 없으면 비트 1개. 비트 id는 `steps`가 없으면 `${slideId}`, 있으면 `${slideId}--${k}`. `packages/live/src/slides.ts`:
+
+```ts
+/** 덱 매니페스트를 show 비트 목록으로 만든다 (서버·클라이언트 공용) */
+export function deckBeats(deck: DeckManifest): Beat[];
+```
+
+레슨 전체 비트 목록은 서버와 클라이언트가 같은 함수로 계산한다(서버: `deckBeats` + 활동 `beats(cfg)`; 클라이언트도 동일하게, `packages/live/src/index.ts`에 헬퍼를 둔다):
+
+```ts
+/** 레슨의 모든 세그먼트를 순서대로 평탄화. 세그먼트별 비트 수와 BeatRef 계산에 쓴다 */
+export function lessonBeats(lesson: Lesson, beatsOf: (activityId: string, config: unknown) => Beat[]): { segment: number; beats: Beat[] }[];
+```
+
+### 4.2 `ActivityLogic` (계획 §5.4 정제)
+
+```ts
+// packages/live/src/activity.ts
+import type { GameState } from '@gagyebu/core';
+import type { Beat } from './types.ts';
+
+export interface ActivityInitCtx {
+  nickname: string;
+  /** 서버가 주입하는 난수 함수. init 안에서만 쓴다(월급). 결과 행동에 값이 박히므로 로그로 재현 가능 */
+  random: () => number;
+}
+
+/** 기본값 적용 한 걸음의 결과 */
+export interface FallbackResult<A> {
+  action: A;
+  /** 학생에게 보여 줄 안내 문구. 예: "시간 안에 고르지 못해 '○○'이(가) 자동으로 선택됐어요" */
+  notice: string;
+}
+
+export interface AutoAppliedNotice {
+  beatId: string;
+  message: string;
+}
+
+/**
+ * 활동 모듈 계약. 모든 메서드는 순수 함수여야 한다:
+ * - Math.random / Date.now / DOM / I/O 금지. 난수는 ActivityInitCtx.random으로만 주입받는다.
+ * - apply는 원본을 고치지 않고 새 상태를 반환한다.
+ * - 같은 (state, action)에 대해 항상 같은 결과. 서버 로그 재생이 곧 상태 복원이다.
+ */
+export interface ActivityLogic<Cfg, S, A, Stats> {
+  id: string;
+  /** 세그먼트의 비트 목록. openClass 때 한 번, 이후 cfg 불변이라 캐시한다 */
+  beats(cfg: Cfg): Beat[];
+  /** 학생 입장(join 승인) 때 서버가 호출. 반환한 actions를 곧바로 적용하고 로그에 남긴다(월급 등 주입값 포함) */
+  init(ctx: ActivityInitCtx, cfg: Cfg): { state: S; actions: A[] };
+  /** 이 비트에서 이 행동을 받을 수 있는지. 서버는 act의 allowed 검사로 쓴다 */
+  allowed(s: S, beat: number, a: A, cfg: Cfg): true | string;
+  /** 행동 적용. gagyebu는 core.step을 감싼다 */
+  apply(s: S, a: A, cfg: Cfg): S;
+  /** 이 비트에서 학생이 할 일을 다 했는지. 완료 인원·next 마감 판정에 쓴다 */
+  done(s: S, beat: number, cfg: Cfg): boolean;
+  /** 끝내지 못한 학생에게 적용할 다음 기본 행동. done이 될 때까지 서버가 반복 호출한다 */
+  fallback(s: S, beat: number, cfg: Cfg, draft: unknown | undefined): FallbackResult<A>;
+  /** 비트를 떠날 때 서버가 "모든" 학생에게 대신 실행하는 전이. 해당 없으면 [].
+   *  from·to는 이 활동 세그먼트 안의 비트 인덱스. 커서가 세그먼트 경계를 넘을 때는
+   *  서버가 transition을 호출하지 않는다(활동의 마지막 비트까지 done이면 충분해야 한다). */
+  transition(s: S, from: number, to: number, cfg: Cfg): A[];
+  /** 익명 집계 (TV·통제용). 서버가 초당 최대 4회로 묶어 보낸다 */
+  stats(states: S[], beat: number, cfg: Cfg): Stats;
+  /** 미완료 명단용 "지금 있는 장면" 문구 */
+  locate?(s: S): string | null;
+  /** 통제 페이지 "기본값 미리보기"용, 지금 넘기면 적용될 선택지 이름 */
+  previewFallback?(s: S, beat: number, cfg: Cfg): string | null;
+}
+```
+
+**서버가 각 메서드를 부르는 정확한 시점**
+
+| 메서드 | 시점 |
+| --- | --- |
+| `beats` | `openClass` 직후(타임라인·커서 계산). 이후 변경 없음 |
+| `init` | 학생 `join` 승인 시 1회. 반환한 `actions`를 `apply`로 즉시 적용하고 로그(`join` 줄에 행동 포함)에 남긴다 |
+| `allowed` | 학생 `act`마다. `false`면 ack 거부 |
+| `apply` | `act`, `fallback`, `transition`, `init` 결과 적용 시 |
+| `done` | `act` 처리 뒤(완료 인원), `next` 마감 판정, 지각 입장 채우기 |
+| `fallback` | `next` 마감의 기본값 루프, 지각 입장 채우기. `done`이 true가 될 때까지 반복 |
+| `transition` | `next`로 커서가 옮겨질 때, 모든 학생(완료 학생 포함)에 대해 1회 |
+| `stats` | `act`·`next`·`reveal` 뒤 재계산. 전송은 초당 최대 4회로 묶음 |
+| `locate` | `roster` 방송 직전, 학생별 1회 |
+| `previewFallback` | 통제 페이지 요청이 아니라 `stats`와 함께 계산해 통제 `stats` 페이로드에 싣는다 |
+
+**기본값 루프의 종료 보장**: `fallback`은 한 번 호출될 때마다 상태를 반드시 진전시켜야 한다(같은 행동을 두 번 반환하면 안 된다). 서버는 학생·비트마다 **최대 50회** 반복하고, 50회를 넘기면 루프를 끊고 그 학생을 `stalled`로 표시한다(로그 `auto` 줄에 `overflow: true`, roster에 표시). 수업은 계속 진행되고 서버는 죽지 않는다. `stalled` 학생은 이후 비트에서 `done`이 true로 판정되면 다시 정상 흐름에 합류한다.
+
+**난수 주입과 로그**: 유일한 난수는 월급이다. 서버가 `init`에 `random`을 넣고, 나온 `actions`(`start { salary }`)를 로그에 남긴다. 재시작 후 로그 재생은 같은 `actions`를 적용하므로 결정적으로 복원된다. `fallback`·`transition`은 난수 없이 상태만으로 결정된다.
+
+**`autoApplied` 통지 모양**: 서버가 기본값 루프에서 모은 `FallbackResult.notice`를 학생별 큐에 쌓고, 그 학생에게 보내는 다음 `state`/`snapshot` 메시지의 `autoApplied`에 `AutoAppliedNotice[]`로 실어 보낸다(클라이언트가 받으면 화면에 보여 주고 서버는 큐를 비운다). 전이(`transition`) 행동에는 통지가 없다.
+
+**초안(draft) 처리**: `draft { beat, data }`는 서버 메모리에만 있다(로그에 남기지 않는다 — §14 결정 #8). `next` 마감 때 `fallback`의 `draft` 인자로 넘어가고, 그 결과 행동은 `auto` 줄에 남는다. 서버가 비트 도중 재시작하면 초안은 사라지고 기본값은 "초안 없음" 경로로 간다.
+
+### 4.3 활동 화면 계약 (클라이언트 전용 — React 타입을 쓰므로 `src/src/activities/registry.ts`에 둔다)
+
+```tsx
+// src/src/activities/registry.ts (계약)
+import type { ComponentType } from 'react';
+import type { Beat, ProgressInfo, RosterEntry } from '@gagyebu/live';
+
+export interface AudienceProps<S, A> {
+  state: S;
+  beat: Beat;
+  revealed: boolean;
+  /** 이 비트에서 제출을 마쳤으면 true (대기 화면) */
+  submitted: boolean;
+  mode: 'live' | 'solo' | 'dev';
+  dispatch: (a: A) => void;
+  draft: (d: unknown) => void;
+}
+
+export interface StageProps<S, Stats> {
+  beat: Beat;
+  revealed: boolean;
+  stats: Stats | null;
+  /** 발표자의 상태 (spotlight 없으면 null) */
+  spotlight: S | null;
+  /** lesson.settings.showProgressOnStage일 때만 null이 아님 */
+  progress: ProgressInfo | null;
+}
+
+export interface ControlPanelProps<S, Stats> {
+  beat: Beat;
+  revealed: boolean;
+  stats: Stats | null;
+  roster: RosterEntry[];
+}
+
+export interface ActivityViews<S, A, Stats> {
+  Audience: ComponentType<AudienceProps<S, A>>;
+  Stage: ComponentType<StageProps<S, Stats>>;
+  ControlPanel?: ComponentType<ControlPanelProps<S, Stats>>;
+}
+
+/** activity id → 화면. 서버 레지스트리(server/src/activities.ts)의 id 집합과 같아야 한다 */
+export const ACTIVITY_VIEWS: Record<string, ActivityViews<unknown, unknown, unknown>>;
+```
+
+---
+
+## 5. 프로토콜 (`packages/live/src/protocol.ts`)
+
+Socket.IO v4. 모든 이벤트 이름·페이로드·ack 모양을 이 절에서 정한다. 서버·클라이언트가 같은 타입을 쓴다.
+
+### 5.1 이벤트와 페이로드
+
+```ts
+// packages/live/src/protocol.ts
+import type { Action, GameState } from '@gagyebu/core';
+import type { BeatRef, ClassCode, ClassState, Lesson, ProgressInfo, RosterEntry } from './types.ts';
+import type { AutoAppliedNotice } from './activity.ts';
+
+export type DeviceKind = 'laptop' | 'tablet' | 'phone';
+
+// ── 학생 → 서버 ────────────────────────────────────────────
+export interface HelloPayload {
+  code: ClassCode;
+  /** localStorage['gg_token_<code>'] */
+  token?: string;
+  device: DeviceKind;
+}
+
+export type HelloAck =
+  | { ok: true; resumed: boolean } // resumed: 토큰으로 기존 학생 재접속
+  | { ok: false; reason: 'not-found' | 'ended' | 'rate-limited' };
+
+export interface JoinPayload {
+  nickname: string; // 1~10자
+}
+
+export type JoinAck =
+  | { ok: true; studentId: string; token: string }
+  | { ok: false; reason: 'join-locked' | 'nickname-taken' | 'class-full' | 'rate-limited' };
+
+export interface ActPayload {
+  /** 학생별 증가 번호. 로그·디버깅용 */
+  seq: number;
+  /** 학생이 보고 있는 비트. 서버 커서와 다르면 'stale-beat'로 거부 */
+  beat: BeatRef;
+  action: Action;
+}
+
+export type ActReject =
+  | 'stale-beat'      // 커서가 이미 다음 단계로 넘어감
+  | 'not-allowed'     // allowed 검사 실패
+  | 'class-ended'
+  | 'too-fast'        // ack 전 행동 또는 속도 제한
+  | 'server-error';
+
+export type ActAck =
+  | { ok: true; state: GameState; version: number }
+  | { ok: false; reason: ActReject; message?: string };
+
+export interface DraftPayload {
+  beat: BeatRef;
+  data: unknown; // 가계부 활동: GagyebuDraft (§9.5)
+}
+
+// ── 전면·통제 → 서버 (해당 역할 쿠키 필수) ──────────────────
+export interface SelectPayload {
+  code: ClassCode; // 열린 수업이 여럿일 때 어떤 수업을 볼지
+}
+
+export interface NextPayload {
+  /** confirmForce로 거부된 뒤 대화상자 확인 재전송 */
+  force?: boolean;
+}
+
+export interface GotoPayload {
+  segment: number;
+  beat: number;
+}
+
+export type StudentOp =
+  | { op: 'rename'; id: string; nickname: string }
+  | { op: 'kick'; id: string }
+  /** 기록 이어받기: pendingMerge 새 접속(pendingId)을 기존 기록(intoId)으로 합침 */
+  | { op: 'merge'; pendingId: string; intoId: string };
+
+export interface OpenClassPayload {
+  lessonId: string;
+}
+
+export type CmdReject =
+  | 'unauthorized'
+  | 'invalid-target' // prev/goto 대상이 없거나 규칙 위반, 마지막 비트의 next 등
+  | 'confirm-required' // 미완료가 있는데 force 없음. pending이 함께 온다
+  | 'server-error';
+
+export type CmdAck = { ok: true } | { ok: false; reason: CmdReject; pending?: number };
+
+// ── 서버 → 클라이언트 ──────────────────────────────────────
+export interface OpenClassInfo {
+  code: ClassCode;
+  lessonId: string;
+  openedAt: number;
+}
+
+export interface SnapshotPayload {
+  class: ClassState;
+  lesson: Lesson;
+  classes: OpenClassInfo[]; // 열린 수업 목록 (여럿이면 고르기)
+  you?: { studentId: string; nickname: string }; // 학생만
+  state?: GameState; // 학생만
+  autoApplied?: AutoAppliedNotice[]; // 학생만
+  roster?: RosterEntry[]; // 통제만
+  spotlightState?: GameState | null; // 전면만
+}
+
+export interface ClassPayload {
+  class: ClassState;
+}
+
+export interface StatePayload {
+  state: GameState;
+  /** ClassState.version. 클라이언트는 자기가 본 version보다 낮으면 버린다 */
+  version: number;
+  autoApplied?: AutoAppliedNotice[];
+}
+
+export interface StatsPayload {
+  beat: BeatRef;
+  stats: unknown; // 활동별 Stats (§9.4)
+  progress: ProgressInfo; // 항상 포함. Stage는 showProgressOnStage일 때만 그린다
+  /** 지금 넘기면 자동 처리될 선택지 이름 (통제 기본값 미리보기) */
+  fallbackPreview: string | null;
+}
+
+export interface RosterPayload {
+  entries: RosterEntry[];
+}
+
+export interface SpotlightStatePayload {
+  state: GameState | null;
+}
+
+export interface ClassesPayload {
+  classes: OpenClassInfo[];
+}
+
+// ── socket.io 타이핑 ────────────────────────────────────────
+export interface ClientToServerEvents {
+  hello: (p: HelloPayload, ack: (r: HelloAck) => void) => void;
+  join: (p: JoinPayload, ack: (r: JoinAck) => void) => void;
+  act: (p: ActPayload, ack: (r: ActAck) => void) => void;
+  draft: (p: DraftPayload) => void;
+  select: (p: SelectPayload, ack: (r: CmdAck) => void) => void; // 전면·통제
+  next: (p: NextPayload, ack: (r: CmdAck) => void) => void; // 통제
+  prev: (p: void, ack: (r: CmdAck) => void) => void; // 통제
+  goto: (p: GotoPayload, ack: (r: CmdAck) => void) => void; // 통제
+  reveal: (p: { on: boolean }, ack: (r: CmdAck) => void) => void; // 통제
+  spotlight: (p: { studentId: string | null }, ack: (r: CmdAck) => void) => void; // 통제
+  student: (p: StudentOp, ack: (r: CmdAck) => void) => void; // 통제
+  openClass: (p: OpenClassPayload, ack: (r: { ok: true; code: ClassCode } | { ok: false; reason: CmdReject }) => void) => void; // 통제
+  endClass: (p: void, ack: (r: CmdAck) => void) => void; // 통제
+  lockJoin: (p: { on: boolean }, ack: (r: CmdAck) => void) => void; // 통제
+}
+
+export interface ServerToClientEvents {
+  snapshot: (p: SnapshotPayload) => void;
+  class: (p: ClassPayload) => void;
+  state: (p: StatePayload) => void; // 해당 학생 소켓에만
+  stats: (p: StatsPayload) => void; // stage·control 룸
+  roster: (p: RosterPayload) => void; // control 룸
+  spotlightState: (p: SpotlightStatePayload) => void; // stage 룸
+  classes: (p: ClassesPayload) => void; // stage·control 룸
+}
+```
+
+### 5.2 연결·인증·룸
+
+- **학생 소켓**: 쿠키 없음. `hello { code, token?, device }`로 시작한다. 토큰이 유효하면 기존 학생으로 재접속(`resumed: true`), 없으면 `join`을 기다린다. 진행 중이 아니면 `not-found`/`ended`로 응답하고 클라이언트는 그 코드의 토큰을 지운 뒤 끝난/없는 수업 화면을 보여 준다.
+- **전면·통제 소켓**: 연결 시 HTTP 쿠키(`gg_stage`/`gg_control`, §6.3)로 역할을 확인한다. 쿠키가 없거나 서명이 틀리면 서버가 연결을 끊는다. `hello` 없이 `snapshot`을 바로 받는다.
+- **룸**: 수업마다 `class:<code>`(전체)와 역할 룸 `class:<code>:student`, `:stage`, `:control`. `class`·`stats`는 수업 룸 전체, `roster`는 `:control`, `spotlightState`는 `:stage`, `state`는 해당 학생 소켓에만 보낸다.
+
+### 5.3 버전 관리(낡은 메시지 버리기)
+
+- `ClassState.version`은 수업의 모든 변경(커서·공개·발표자·잠금·종료)마다 +1된다.
+- `class`·`state`·`stats` 페이로드는 모두 그 순간의 version(또는 ClassState 전체)을 싣는다.
+- 클라이언트는 마지막으로 본 version보다 **낮은** 메시지는 조용히 버린다. 재접속 후에는 `snapshot`이 기준을 다시 맞춘다.
+- 학생 `act`는 ack를 받기 전까지 다음 행동을 보내지 않는다(클라이언트 규칙). 서버는 위반 시 `'too-fast'`.
+
+### 5.4 속도 제한
+
+| 대상 | 제한 | 위반 응답 |
+| --- | --- | --- |
+| 학생 `act` | 소켓당 초당 4회 + 동시 1개 | `'too-fast'` |
+| 학생 `draft` | 소켓당 2초에 1회(클라이언트에서 1.5초로 묶어 전송) | 조용히 버림 |
+| 학생 `join` | 소켓당 5초에 1회 | `'rate-limited'` |
+| 통제 명령 | 소켓당 초당 10회 | 초과분은 ack `{ ok: false, reason: 'server-error' }`로 거부 |
+| HTTP 로그인 | IP당 분당 실패 5회 (§6.3) | `429` |
+
+### 5.5 `next` 알고리즘 (정확한 순서)
+
+모든 학생 행동과 교사 명령은 수업 하나의 **직렬 큐**(§8.1)로 들어가 순서대로 처리된다. `next` 하나의 처리:
+
+1. **공개 단계 먼저.** 현재 비트가 `reveal: true`이고 `cursor.revealed === false`면 `revealed = true`, version++, 로그 `reveal`, 전체에 `class` 방송, `stats` 재계산·방송. 끝. ("다음" 키 하나가 `공개 → 다음 비트` 순서로 동작한다)
+2. **마감 확인.** `pending` = `done(s, beat)`이 false인 학생 수. `pending > 0`이고 활동 설정 `confirmForce`이고 `force`가 없으면 ack `{ ok: false, reason: 'confirm-required', pending }`. 통제 페이지가 대화상자를 띄우고 확인하면 `next { force: true }`로 다시 보낸다.
+3. **기본값 루프.** pending 학생 각각에 대해: `r = fallback(s, beat, cfg, draft)` → `apply(r.action)` → `s` 교체, `r.notice`를 그 학생의 autoApplied 큐에 추가 → `done`이 true가 될 때까지 반복(최대 50회, 초과 시 §4.2의 `stalled` 처리). 학생 하나의 루프 전체(적용된 행동·통지·overflow 여부)를 로그 `auto` 줄 하나로 기록한다.
+4. **전이.** 커서의 이전 비트와 다음 비트가 **같은 활동 세그먼트에 있을 때만**, 모든 학생(완료 학생 포함)에 대해 `transition(s, from, to, cfg)`의 행동을 순서대로 `apply`. 세그먼트 경계를 넘는 이동에는 전이가 없다(§4.2). 활동은 해당 없는 학생에게 `[]`를 반환한다(예: `step !== 'report'`면 `endMonth` 없음).
+5. **커서 이동.** 다음 비트로 `cursor = { segment, beat, revealed: false }`, `highMark` 갱신, version++, 로그 `cursor`.
+6. **방송.** 전체에 `class`; 상태가 바뀐 모든 학생에게 `state`(+`autoApplied`); `stats`·`roster` 재계산해 `:stage`·`:control`에 방송(스로틀 §5.6). ack `{ ok: true }`.
+
+마지막 비트에서 `next`는 ack `{ ok: false, reason: 'invalid-target' }`.
+
+### 5.6 집계 스로틀
+
+학생 행동이 들어올 때마다 `stats`를 다시 계산하되 **전송은 수업당 초당 최대 4회(250ms)**로 묶는다. 타이머에 쌓인 마지막 계산 결과만 보낸다. 60명이어도 부하는 무시할 수 있다.
+
+### 5.7 `prev` / `goto` 제한
+
+- 대상은 **표시형(`mode: 'show'`) 비트만**, 그리고 `highMark` 이내만. 학생 게임 상태는 절대 되감지 않는다.
+- `goto`는 현재 커서보다 **앞선**(전역 인덱스가 작은) show 비트만 허용한다. 앞으로 건너뛰기는 없다(작업 비트를 건너뛴 학생 상태가 생기지 않게).
+- `prev`는 현재보다 앞선 show 비트 중 가장 가까운 것으로 이동. 없으면 `'invalid-target'`.
+- 이동 시 `cursor.revealed = false`, version++, 로그 `cursor`, `class` 방송. `stats`는 그 비트의 것으로 다시 방송한다.
+
+### 5.8 교사·학생 관리 명령
+
+- `openClass { lessonId }`: 서버가 4자리 코드 발급(§8.4), Room 생성, 로그 `open`. 여러 수업을 동시에 열 수 있다(리허설용). 통제 페이지의 수업 목록은 `classes`로 받는다.
+- `endClass`: `status: 'ended'`, 로그 `end`. 학생 링크는 막히고(들어오면 `ended`), 로그는 남아 CSV 내보내기 가능. 학생 소켓에는 `class`가 전달되고 클라이언트가 끝난 수업 화면을 보여 준다.
+- `lockJoin { on }`: 입장 마감. `join`은 `'join-locked'` 거부.
+- `reveal { on }`: 공개 토글 수동 제어(on→off도 허용).
+- `spotlight { studentId | null }`: 발표자 지정·해제. `:stage` 룸에 `spotlightState`(발표자의 `GameState` 또는 null)를 방송한다.
+- `student rename { id, nickname }`: 이름 변경(1~10자, 수업 내 유일).
+- `student kick { id }`: 내보내기. 소켓 연결 끊기, 토큰 무효화, roster에서 제거. 상태는 로그에 남는다.
+- `student merge { pendingId, intoId }`: **기록 이어받기 승인**. 토큰을 잃고 같은 닉네임으로 다시 들어온 학생(`join` → `'nickname-taken'`, roster에 `pendingMerge` 항목)의 새 소켓이 `intoId`의 기록과 닉네임을 이어받는다. 새 토큰 발급, 기존 토큰 무효화, 로그 `admin`. 거부는 `kick { pendingId }`로 한다.
+
+---
+
+## 6. HTTP
+
+### 6.1 라우트 표
+
+| 주소 | 메서드 | 접근 | 응답 |
+| --- | --- | --- | --- |
+| `/` | GET | 누구나 | `index.html` (`no-store`). 앱이 수업 코드 입력 화면 |
+| `/<숫자 4자리>` | GET | 누구나 | `index.html` (`no-store`). 열림·끝남·없음 구분은 앱이 `hello` ack로 |
+| `/stage` | GET | 누구나(정적) | `index.html`. 앱이 `/api/me`로 로그인 판별 후 전면 비밀번호 화면 |
+| `/control` | GET | 누구나(정적) | `index.html`. 통제 비밀번호 화면 |
+| `/dev` | GET | 누구나(정적) | `index.html`. 앱이 통제 로그인 쿠키 확인 후 스냅숏 셸 |
+| `/solo` | GET | `SOLO_ENABLED=true`일 때만 | 200 `index.html`, 아니면 **404** |
+| `/assets/*` | GET | 누구나 | 빌드 산출물. `cache-control: public, max-age=31536000, immutable` |
+| `/socket.io/*` | — | — | Socket.IO 핸들셰이크 |
+| `/api/login` | POST | 누구나 | `200 { role }` + `Set-Cookie` / `401` / `429` |
+| `/api/logout` | POST | 로그인된 역할 | `200` + 쿠키 만료 |
+| `/api/me` | GET | 누구나 | `200 { role: 'stage' \| 'control' \| null }` |
+| `/api/export/<code>.csv` | GET | 통제 쿠키 | `200 text/csv` / `401` / `404` |
+| 그 외 모든 경로 | * | — | **404** |
+
+**404 정책**: 서버는 위 표의 경로만 앱으로 보낸다. `/contorl` 같은 오타가 학생 화면이 되지 않게 한다. 정적 파일은 `src/dist`에서 서빙하고 `scripts/serve.mjs`의 역할을 흡수한다.
+
+### 6.2 상태 코드
+
+- `200` 성공. `401` 비밀번호 불일치/쿠키 없음. `404` 모르는 경로·없는 수업 코드(export). `429` 무차별 대입 잠금(60초). `500` 서버 오류.
+- 로그인 요청은 `timingSafeEqual`로 비교한다. 성공/실패 응답 시간이 같아야 한다.
+
+### 6.3 쿠키
+
+| 이름 | 역할 | 속성 |
+| --- | --- | --- |
+| `gg_stage` | 전면 | `HttpOnly`, `Secure`(NODE_ENV=production), `SameSite=Strict`, `Path=/`, `Max-Age=43200`(12시간) |
+| `gg_control` | 통제 | 위와 같음 |
+
+- **요청·응답 모양**: `POST /api/login` 본문 `{ role: 'stage' | 'control'; password: string }` → 성공 `200 { role }` + `Set-Cookie`, 실패 `401`. `POST /api/logout` 본문 `{ role }` → 그 역할 쿠키 만료(`Max-Age=0`).
+- **값**: `v<pwVer>.<role>.<exp>.<sig>`
+  - `pwVer` = sha256(해당 비밀번호) 앞 8자리(16진수). `.env`의 비밀번호를 바꾸고 서버를 재시작하면 `pwVer`가 달라져 **기존 로그인이 모두 풀린다**(계획 §7.1).
+  - `sig` = HMAC-SHA256(COOKIE_SECRET, `${pwVer}.${role}.${exp}`)의 16진수.
+  - `exp` = 만료 epoch 밀리초.
+- 서명 검증 실패·만료·역할 불일치는 "로그인 없음"으로 취급한다(오류 구분 없음).
+- 소켓 연결 때 같은 쿠키가 자동으로 실려 서버가 역할을 확인한다(§5.2).
+
+### 6.4 무차별 대입 방지
+
+- 같은 IP에서 로그인 실패 5회/1분 → 60초간 그 IP의 `/api/login`은 `429`.
+- IP는 소켓 원격 주소를 기본으로 쓰고, `TRUSTED_PROXY`가 설정돼 있고 요청이 그 주소에서 왔을 때만 `X-Forwarded-For`의 **마지막** 값을 클라이언트 IP로 쓴다.
+
+### 6.5 캐시 헤더
+
+- `index.html`(및 앱 라우트로 서빙되는 모든 HTML): `cache-control: no-store`.
+- `/assets/*`(Vite 해시 파일명): `cache-control: public, max-age=31536000, immutable`. 60대가 같은 와이파이로 받아도 재접속마다 다시 받지 않는다.
+- `/socket.io/*`: Socket.IO 기본값.
+
+### 6.6 개발 환경
+
+- 게임 서버: `pnpm server` → `http://localhost:8091` (PORT).
+- Vite 개발 서버: `pnpm dev` → `http://localhost:5173`. `src/vite.config.ts`에 프록시를 추가한다:
+
+```ts
+server: {
+  proxy: {
+    '/socket.io': { target: 'http://localhost:8091', ws: true },
+    '/api': 'http://localhost:8091',
+  },
+}
+```
+
+- 개발 중 Vite의 SPA 폴백은 모든 경로를 `index.html`로 준다(앱 라우터가 모르는 코드·경로에 끝난/없는 화면을 보여 준다). 알려진 경로만 서빙하는 404 정책은 **배포 서버의 규칙**이다.
+- 앱의 `base`를 `'./'`에서 `'/'`로 바꾼다(계획 §8-8). 단일 HTML 빌드(`scripts/build-single.mjs`)는 자기 설정을 유지한다.
+
+---
+
+## 7. `.env`와 시작 검증
+
+설정은 저장소 루트의 `.env`(gitignore)에 두고 빈 값의 `.env.example`을 커밋한다. 서버는 `node --env-file=.env server/src/main.ts`로만 실행한다.
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `PORT` | `8091` | HTTP·소켓 포트 |
+| `STAGE_PASSWORD` | (필수) | 전면 비밀번호 |
+| `CONTROL_PASSWORD` | (필수) | 통제 비밀번호. `STAGE_PASSWORD`와 달라야 함 |
+| `COOKIE_SECRET` | (필수) | 쿠키 서명용 무작열 문자열. 32자 이상 |
+| `DATA_DIR` | `./data` | 세션 로그 루트 (gitignore) |
+| `SOLO_ENABLED` | `false` | `true`일 때만 `/solo` 200 |
+| `NODE_ENV` | `production` | `development`면 쿠키 `Secure` 끔 |
+| `TRUSTED_PROXY` | (없음) | 이 주소에서 온 요청만 `X-Forwarded-For` 신뢰 |
+| `MAX_STUDENTS` | `60` | 수업별 최대 학생 수 |
+| `LESSON_ID` | `first-salary` | `openClass`의 기본 레슨 |
+
+**시작 검증** — 서버는 다음을 확인하고 하나라도 어기면 오류 메시지를 출력하고 `process.exit(1)`:
+
+1. `STAGE_PASSWORD`, `CONTROL_PASSWORD`가 비어 있으면 안 됨.
+2. 두 비밀번호가 같으면 안 됨.
+3. `COOKIE_SECRET`이 비어 있거나 32자 미만이면 안 됨.
+4. `DATA_DIR`이 없으면 만들고, 쓸 수 없으면 안 됨.
+5. `PORT`가 1~65535 정수여야 함.
+
+---
+
+## 8. 서버 내부
+
+### 8.1 Room과 직렬 큐
+
+- **Room 하나 = 수업 하나.** `openClass` 때 만들어지고 코드로 조회된다. 열린 수업이 여럿일 수 있다(리허설).
+- **모든 학생 행동(`act`, `draft`, `join`)과 교사 명령(`next`, `prev`, …)은 수업별 큐 하나에 들어가 순차 처리된다.** 교사의 `next`와 학생의 마지막 제출이 동시에 와도 상태가 섞이지 않는다. 큐는 promise 체인(뮤텍스)으로 충분하다 — 워커가 필요 없다.
+- Room 상태: `ClassState`, 학생별 `StudentRecord { id, token, nickname, state, draft, connected, late, stalled, pendingMerge, device, autoAppliedQueue, seq }`.
+
+### 8.2 이벤트 소싱 로그
+
+`DATA_DIR/sessions/<code>/log.jsonl`에 한 줄씩 덧붖인다(재생용). 줄 타입:
+
+```ts
+// server/src/log.ts (계약)
+import type { Action } from '@gagyebu/core';
+import type { BeatRef, ClassCode, Cursor } from '@gagyebu/live';
+
+export type LogLine =
+  | { t: 'open'; ts: number; code: ClassCode; lessonId: string }
+  | { t: 'join'; ts: number; studentId: string; nickname: string; token: string; late: boolean;
+      init: Action[] } // 월급 같은 주입 난수 값이 start 행동에 박혀 있음
+  | { t: 'act'; ts: number; studentId: string; seq: number; beat: BeatRef; action: Action }
+  | { t: 'auto'; ts: number; studentId: string; beat: BeatRef; actions: Action[];
+      notices: string[]; overflow: boolean }
+  | { t: 'cursor'; ts: number; cursor: Cursor }
+  | { t: 'reveal'; ts: number; on: boolean }
+  | { t: 'spotlight'; ts: number; studentId: string | null }
+  | { t: 'admin'; ts: number;
+      op: { kind: 'rename'; id: string; nickname: string }
+        | { kind: 'kick'; id: string }
+        | { kind: 'merge'; pendingId: string; intoId: string }
+        | { kind: 'lockJoin'; on: boolean } }
+  | { t: 'end'; ts: number };
+```
+
+- **draft는 로그에 남기지 않는다**(§4.2). 기본값 루프의 결과는 `auto` 줄에 남는다.
+- **재생**: 서버 시작 시 각 세션 디렉터리를 읽어 순서대로 적용한다. `end` 줄이 없으면 그 수업은 열린 채 복원되고, 학생들은 토큰으로 재접속한다. 로그에 없는 것(초안, 스로틀 상태, 무차별 대입 카운터, 연결 여부)은 복원 대상이 아니다.
+- 로그는 append-only이고 한 수업의 모든 쓰기는 직렬 큐 안에서 일어나므로 락이 필요 없다.
+
+### 8.3 토큰·재접속·지각·연결 끊김
+
+- **토큰**: `crypto.randomBytes(16)`의 base64url(128비트). `join` 승인 때 발급, 클라이언트는 `localStorage['gg_token_<code>']`에 저장. 코드별로 저장하므로 지난 수업 탭이 자동 재접속해 섞이지 않는다.
+- **재접속**: `hello { token }` → 기존 `StudentRecord`로 재접속, `snapshot` 전체 전달. 끊긴 동안 자동 처리된 내용은 `autoApplied`로 전달된다.
+- **연결 끊김**: 상태는 서버에 있으므로 똑같이 `next`의 기본값 루프로 처리되고, 다시 연결되면 현재 비트로 바로 들어온다. roster에 `connected: false`로 표시.
+- **지각 입장**: `join` 승인 시, 현재 비트보다 앞선 모든 `work` 비트를 순서대로 기본값 루프로 채운다(통지 없이, `late: true` 표시). show 비트는 상태가 필요 없으므로 건너뛴다. 현재 비트가 work면 그 비트부터 정상 참여.
+
+### 8.4 수업 코드
+
+- 숫자 4자리, `crypto` 무작위. `stage`·`solo` 같은 경로와 겹치지 않는다(전부 4자리 숫자 패턴으로만 판별).
+- **제외 집합**: 현재 열린 수업의 코드 + 최근에 끝난 수업의 코드. 끝난 목록은 `DATA_DIR/ended.json`(`{ [code]: endedAt }`)에 보관하고 **48시간**이 지나면 항목을 지운다. 8천 개(10^4에서 제외 집합을 뺀 것)가 남아 있으므로 충돌은 사실상 없다.
+
+### 8.5 CSV 내보내기
+
+`GET /api/export/<code>.csv`(통제 쿠키 필수). 로그를 재생해 선택 기록을 CSV로 만든다. 열:
+
+```
+studentId, nickname, month, eventCode, sceneId, choiceId, choiceLabel, kind, auto, tags, payment
+```
+
+`payment`는 `PaymentPlan`의 요약 문자열(예: `emergency:520000;card:80000/3`). `auto` 열은 자동 처리된 선택 `true`. BOM으로 시작해 한글이 엑셀에서 깨지지 않게 한다.
+
+### 8.6 파일 구성
+
+```
+server/
+  package.json             (@gagyebu/server, exports: ./src/main.ts)
+  src/
+    main.ts     // 진입점: env 검증 → http 서버 → socket.io 붙이기 → 로그 재생
+    env.ts      // .env 읽기·검증 (§7)
+    auth.ts     // 쿠키 서명·검증, 무차별 대입 제한 (§6.3~6.4)
+    http.ts     // /api/* 라우트, CSV 내보내기
+    static.ts   // 정적 파일 + 캐시 헤더 + 알려진 경로만 앱(§6.1)
+    room.ts     // Room, 직렬 큐, next/prev/fallback/전이 (§5.5, §8.1)
+    log.ts      // JSONL 기록·재생 (§8.2)
+    codes.ts    // 수업 코드 발급 (§8.4)
+    activities.ts  // activity id → ActivityLogic 레지스트리 (gagyebu만 등록)
+```
+
+---
+
+## 9. `@gagyebu/activity-gagyebu`
+
+가계부 활동의 순수 로직. `ActivityLogic<GagyebuConfig, GameState, Action, GagyebuStats>`을 구현한다. `apply`는 `core.step`을 감싸고, 기본값은 core-api.md §4.3의 함수들을 쓴다.
+
+### 9.1 설정
+
+```ts
+// packages/activity-gagyebu/src/config.ts
+export interface GagyebuConfig {
+  /** 안내 카드 1~6 비트 포함 (기본 true) */
+  guide: boolean;
+  /** N월 비트의 공개 토글 (기본 true). false면 reveal 없는 work 비트 */
+  monthReveal: boolean;
+  /** 발표 비트 포함 (기본 true) */
+  spotlight: boolean;
+  /** 미완료가 있을 때 next에 확인 대화상자 (기본 true) */
+  confirmForce: boolean;
+}
+```
+
+`showProgressOnStage`(TV에 완료 인원 표시)는 활동 설정이 아니라 **레슨 설정**(`Lesson.settings`, §4.1)이다. 기본 false.
+
+### 9.2 비트 목록
+
+`beats(cfg)`가 내보내는 순서. `reveal`은 `cfg.monthReveal`이 true일 때만 붙는다.
+
+| # | id | 라벨 | mode | reveal | notes(예) |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `join` | 입장 | work | | QR·링크 안내 |
+| 2 | `salary` | 월급 공개 | show | | 기준 ±10% 설명 |
+| 3 | `survey` | 소비습관 설문 | work | | 7문항 한 화면 |
+| 4 | `survey-result` | 설문 결과 | show | | 분포 없음 |
+| 5~10 | `guide-1`..`guide-6` | 안내 n | show | | 카드별 발표자 노트 (cfg.guide) |
+| 11 | `budget` | 가계부 작성 | work | ○ | 추천값·프롬프트 안내 |
+| 12~22 | `m1`..`m11` | N월 | work | ○ (2·3·5·6·7·8·9·11월; cfg.monthReveal) | 달마다 교훈 |
+| 23 | `m12` | 12월 결산 | work | ○ | |
+| 24 | `present` | 발표 | show | | 발표 진행 순서 (cfg.spotlight) |
+
+`m4`·`m10`(조용한 달)과 `m1`(튜토리얼)은 reveal이 없다. 한 달을 한 비트로 두므로 1년은 교사 클릭 20번 안팎이다.
+
+### 9.3 비트별 done / fallback / transition
+
+| 비트 | done | fallback(한 걸음) | transition(비트 이동 시) |
+| --- | --- | --- | --- |
+| `join` | 플랫폼이 판정(입장 승인됨). 활동은 항상 true | 없음(플랫폼이 지각 규칙으로 채움) | 없음 |
+| `salary` | show — 항상 true | 없음 | 없음 |
+| `survey` | `survey.result !== null` | `submitSurvey { answers: defaultAnswers(부분 답변) }` — 답하지 않은 문항만 중간 답 | 없음(`submitSurvey`가 이미 `phase: 'guide'`) |
+| `survey-result`~`guide-6` | show — 항상 true | 없음 | `guide-6 → budget`: `goto { phase: 'budget' }` |
+| `budget` | `phase === 'sim'` | `setBudget { budget: balanceBudget(초안 ?? state.budget, salary).budget, auto: true }` → `confirmBudget` (두 걸음, 각각 notice) | 없음(`confirmBudget`이 `phase: 'sim'`, `month: 1`, `step: 'payday'`) |
+| `m1`..`m11` | `month === N && step === 'report'` | `step`별: `payday → beginMonth`; `scene → choose { fallbackChoice 장면, 자동 지불/입금 }`; `outcome → continue`; `adjust → setBudget { balanceBudget(...) }` | `m(N) → m(N+1)`: `step === 'report'`면 `endMonth`, 아니면 `[]`(방어 코드 — 마감 루프를 거치면 항상 report) |
+| `m12` | `phase === 'result'` | `payday → beginMonth`(12월 결산 처리). 이미 result면 없음 | 없음 |
+| `present` | show — 항상 true | 없음 | 없음 |
+
+월 비트 세부:
+
+- **`scene` 단계의 fallback**: `fallbackChoice(scene)`을 고르고, 선택지 유형별로
+  - `pay`: `choose { choiceId, payment: autoPaymentPlan(state, pay).plan, auto: true }`. `adjustable`이면 금액 = 최솟값. `to`가 있어도 같은 계획 규칙.
+  - `fixedPay`·`free`·`gamble`·`budget`: `choose { choiceId, auto: true }`.
+  - `deposit`: `choose { choiceId, depositTo: autoDepositTarget(deposit), auto: true }`.
+  - 지불 패널 작성 중(제출 전)이어도 서버는 패널 내용을 모르므로 같은 규칙을 쓴다(계획 §2.3).
+- **`adjust` 단계**: 가계부 작성과 같은 규칙. 초안이 없으면 이벤트가 바꾼 가계부 그대로에서 합계 맞추기.
+- **초안**: `budget`·`adjust`에서만 쓴다(§9.5). `GagyebuDraft`가 있으면 그 안에서, 없으면 `state.budget`에서 `balanceBudget`로 합계를 맞춘다. 편집을 한 번도 안 한 학생의 `state.budget`은 추천 가계부다.
+- **notice 문구**는 활동이 만든다: 선택지 fallback은 `"시간 안에 고르지 못해 '<선택지 라벨>'이(가) 자동으로 선택됐어요"`, 가계부는 balanceBudget의 `changes`로 `"제출하지 않아 남는 돈 3만 원이 생활비 여유분으로 들어갔어요"` / `"제출하지 않아 여유 부족분 3만 원을 여가에서 줄였어요"` 형태.
+
+### 9.4 비트별 Stats (모두 익명, 데이터 순서)
+
+```ts
+// packages/activity-gagyebu/src/stats.ts
+import type { AccountId, EndingId, EventId, SceneChannel, SceneId, Won } from '@gagyebu/core';
+
+export type GagyebuStats =
+  | { beatId: 'join'; joined: number; connected: number; nicknames: string[] }
+  | { beatId: 'salary'; baseSalary: Won; salaries: Won[] } // 기준 ±10% 띠 위 점들
+  | { beatId: 'survey' }        // TV에는 "설문 중" 안내만. 분포 없음
+  | { beatId: 'survey-result' } // 유형 분포 없음
+  | {
+      beatId: 'budget';
+      savingsRates: number[];                       // 학생별 저축률 (평균은 Stage에서)
+      shares: Record<AccountId, number>[];          // 학생별 계좌 배분 (§계좌 6종)
+      autoCount: number;
+    }
+  | {
+      beatId: `m${number}`;
+      entry: {
+        eventId: EventId; sceneId: SceneId; title: string; channel: SceneChannel;
+        choices: { choiceId: string; label: string; count: number }[]; // 데이터 순서 그대로
+      } | null;                                     // 조용한 달은 null
+      chained: {
+        sceneId: SceneId; title: string; reached: number;
+        choices: { choiceId: string; label: string; count: number }[];
+      }[];                                           // 같은 달 이어진 장면(그 장면까지 간 학생만)
+      inChained: number;                            // 지금 이어진 장면에 있는 학생 수
+      netWorths: number[];                          // 조용한 달 순자산 분포 변화용
+      autoCount: number;
+    }
+  | {
+      beatId: 'm12';
+      endings: { endingId: EndingId; label: string; count: number }[];   // ENDING_ORDER 순서
+      achievements: { achievementId: string; label: string; rate: number }[]; // ACHIEVEMENT_ORDER 순서
+      netWorths: number[];
+      autoCount: number;
+    }
+  | { beatId: 'present' };                          // 집계 없음 (spotlightState 사용)
+```
+
+- 선택 분포 막대는 모두 같은 색, 데이터 순서 그대로. 자동 처리 응답은 분포에서 빼고 `autoCount`로 따로 센다.
+- `m1`·`m4`·`m10`처럼 선택 장면이 없는 달은 `entry: null`, `netWorths`로 "돈이 쌓이는 달" 연출.
+- 설문 답·소비 성향은 개인 성향 정보이므로 어디에도 분포로 나오지 않는다.
+
+### 9.5 초안 타입
+
+```ts
+// packages/activity-gagyebu/src/draft.ts
+import type { Budget } from '@gagyebu/core';
+
+/** 가계부 작성·조정 비트에서 1.5초 간격으로 묶어 보내는 편집 중인 안 */
+export interface GagyebuDraft {
+  kind: 'budget';
+  budget: Budget;
+}
+```
+
+### 9.6 입장·닉네임 소유권 (결정)
+
+**플랫폼이 소유한다.** 토큰 발급, roster, 이름 유효성(1~10자, 수업 내 유일), rename·kick·merge, 지각 입장 규칙은 전부 `@gagyebu/live`/서버에 있다. 활동은 `init`으로 닉네임을 받아 `start` 행동에 넣을 뿐이다. `join` 비트의 `done`은 플랫폼이 판정하고(입장 승인 = done), 활동은 `join` 비트에서 항상 true를 반환한다.
+
+### 9.7 파일 구성
+
+```
+packages/activity-gagyebu/
+  package.json       (@gagyebu/activity-gagyebu)
+  src/
+    index.ts         // gagyebuLogic: ActivityLogic<GagyebuConfig, GameState, Action, GagyebuStats>
+    config.ts        // GagyebuConfig
+    beats.ts         // 비트 목록 (§9.2)
+    progress.ts      // done/fallback/transition (§9.3)
+    stats.ts         // GagyebuStats 계산 (§9.4)
+    draft.ts         // GagyebuDraft
+```
+
+---
+
+## 10. 클라이언트 (`src/`)
+
+### 10.1 라우트와 코드 분할
+
+`src/vite.config.ts`의 `base: '/'`. 라우팅은 라이브러리 없이 `window.location.pathname`으로 직접 (라우터 의존성 추가 없음):
+
+| 주소 | 컴포넌트 | 분할 |
+| --- | --- | --- |
+| `/` | `CodeEntryPage` | 기본 청크 |
+| `/<4자리>` | `StudentPage` | 동적 import |
+| `/stage` | `StagePage` | 동적 import |
+| `/control` | `ControlPage` | 동적 import |
+| `/dev` | `DevPage`(DraftShell) | 동적 import |
+| `/solo` | `SoloPage` | 동적 import |
+
+전면·통제·개발·혼자 화면은 서로 다른 청크로 나뉜다(학생이 받는 JS에 통제 코드가 없게). 끝난 수업(`hello` → `ended`), 없는 수업(`not-found`), 입장 마감은 학생 화면 안의 상태로 렌더링한다.
+
+### 10.2 `useLive` 훅
+
+```ts
+// src/src/live/useLive.ts (계약)
+export type LiveStatus =
+  | 'connecting' | 'open' | 'reconnecting'
+  | 'ended' | 'not-found' | 'join-locked';
+
+export interface UseLiveResult {
+  status: LiveStatus;
+  classState: ClassState | null;
+  lesson: Lesson | null;
+  you: { studentId: string; nickname: string } | null;
+  state: GameState | null;
+  /** 현재 비트의 완료 여부(서버 판정). true면 Audience는 대기 화면 */
+  submitted: boolean;
+  /** 서버가 아직 안 보여 준 자동 처리 안내 */
+  autoApplied: AutoAppliedNotice[];
+  /** 커서 비트 (lessonBeats로 해석). 없으면 null */
+  beat: Beat | null;
+  join(nickname: string): Promise<JoinAck>;
+  dispatch(action: Action): Promise<ActAck>;
+  /** 1.5초로 묶어 draft 이벤트로 전송 */
+  draft(data: GagyebuDraft): void;
+}
+
+export function useLive(code: string): UseLiveResult;
+```
+
+- `useLive`는 `hello` → `snapshot` 흐름, 재접속(Socket.IO 내장 자동 재접속), version 기반 낡은 메시지 버림(§5.3), 토큰 저장(`localStorage['gg_token_<code>']`), `ended`/`not-found` 시 토큰 삭제를 모두 책임진다.
+- `dispatch`는 ack 전 다음 행동을 큐에 쌓지 않고 무시한다(터치 연타 방지). 화면은 ack의 `state`를 곧바로 그린다(낙관적 업데이트 없음).
+
+### 10.3 연결 표시·Wake Lock·대기 화면
+
+- **재접속 띠**: `status === 'reconnecting'`이면 모든 학생 화면 상단에 "다시 연결 중" 띠. 복구되면 `snapshot`으로 전체 복원.
+- **Wake Lock**: `useWakeLock()` — 학생 화면 마운트 시 `navigator.wakeLock.request('screen')`, 언마운트·숨김 시 해제. 미지원 브라우저는 조용히 넘어간다.
+- **대기 화면**: `submitted && beat.mode === 'work'`이면 Audience는 `"선생님이 다음으로 넘기면 계속됩니다"` + 자기 계좌·이번 달 결과 읽기 전용 + AI 프롬프트 복사를 보여 준다(`src/src/live/WaitingScreen.tsx`). 제출 전 화면과 같은 부품을 읽기 전용으로 재사용한다.
+
+### 10.4 학생 화면 구성
+
+```
+StudentPage = 코드/닉네임/끝남/없음 상태 화면
+           | 커서 비트가 슬라이드 세그먼트 → SlideCanvas (버튼 없음)
+           | 커서 비트가 활동 세그먼트 → ACTIVITY_VIEWS[activityId].Audience
+```
+
+- **슬라이드 표시기** `SlideCanvas({ deckId, slideId, step })`: 1920×1080 논리 캔버스를 그리고 기기 화면에 맞춰 비율을 유지해 축소·확대(남는 곳은 여백). TV와 노트북·태블릿·휴대폰이 같은 구도. 조작 요소·진행 표시·커서 반응 없음. 디자인 토큰(색·서체)은 `src/DESIGN.md`를 그대로 쓴다.
+- 이동 버튼은 라이브 모드에서 모두 숨긴다(§10.8 ScreenProps 계약). 표시형 비트는 버튼이 하나도 없는 화면.
+
+### 10.5 전면 화면 (Stage)
+
+- 같은 `SlideCanvas`(슬라이드 비트), 활동 비트는 `ACTIVITY_VIEWS[id].Stage` + `stats` + `spotlightState`.
+- 입장 비트: QR 코드(`qrcode` 라이브러리), 큰 주소 `gagyebu.taesoo.uk/<code>`, 입장 인원, 닉네임 벽.
+- `lesson.settings.showProgressOnStage`일 때만 `progress`를 그린다. 기본은 통제 페이지에만 완료 인원이 보인다.
+
+### 10.6 통제 페이지 (Control) — 계획 §10
+
+| 영역 | 내용 |
+| --- | --- |
+| 수업 | 수업 열기(코드 발급, 화면에 크게), 끝내기, 학생 링크 복사, TV 화면 열기(`/stage` 새 탭), 로그아웃(`POST /api/logout`) |
+| 타임라인 | 세그먼트·비트 목록(`lessonBeats`). 현재 위치 강조, 표시형 비트는 클릭해 `goto` |
+| 다음 | 큰 버튼. 키보드 **→ / Space / PageDown = next**, **← / PageUp = prev** (발표용 클리커 호환) |
+| 완료 현황 | 현재 비트 완료/접속/전체(`stats.progress`), 미완료 명단(이름, 연결 상태, `roster[].scene`) |
+| 기본값 미리보기 | `stats.fallbackPreview` + 지금 넘기면 자동 처리될 인원(미완료 수) |
+| TV 미리보기 | 지금 TV에 보이는 화면의 축소 모형(같은 컴포넌트를 작게) |
+| 발표 | 학생 목록에서 `spotlight` 지정·해제 |
+| 학생 관리 | 이름 변경, 내보내기, 기록 이어받기 승인(`pendingMerge` 항목), 입장 마감(`lockJoin`) |
+| 비트별 패널 | `ACTIVITY_VIEWS[id].ControlPanel` (예: 이어진 장면에 있는 학생 수) |
+| 확인 대화상자 | `next` ack가 `confirm-required`면 `"N명이 아직 고르는 중입니다. 기본 선택지로 넘길까요?"` → 확인 시 `next { force: true }` |
+
+### 10.7 로그인·코드 입력 화면
+
+- `/stage`·`/control`·`/dev`: 앱 시작 시 `GET /api/me`로 확인. `role`이 아니면 비밀번호 입력 화면(주소창의 역할로 어느 비밀번호인지 표시). 제출 → `POST /api/login` → 성공 시 같은 경로 다시 렌더링. `429`면 "잠시 후 다시" 안내.
+- `/` (코드 입력): 4자리 숫자 입력 → `/<code>`로 이동. 진행 중인 수업이 없으면 학생 화면이 "지금 진행 중인 수업이 없어요"를 보여 준다.
+- **끝난 수업 화면**: "끝난 수업입니다" + 그 코드의 토큰 삭제. **없는 수업 화면**: "수업 코드를 확인해 주세요".
+
+### 10.8 기존 화면의 새 `ScreenProps` 계약
+
+`packages/draft-kit`의 `ScreenProps`를 아래로 바꾼다. 기존 6개 화면 컴포넌트(`src/src/screens/*.tsx`)는 이 계약으로 고쳐 연결한다.
+
+```ts
+// packages/draft-kit/src/index.tsx (계약)
+import type { Action, GameState } from '@gagyebu/core';
+import type { Beat } from '@gagyebu/live';
+import type { FixtureUi } from '@gagyebu/core';
+
+export interface ScreenProps {
+  state: GameState;
+  /** 현재 비트. id로 세부 표시 결정: 'survey', 'guide-3', 'm2', 'present' … */
+  beat: Beat;
+  revealed: boolean;
+  /** 이 비트 제출 완료 (라이브: 서버 판정 / dev·solo: false) */
+  submitted: boolean;
+  mode: 'live' | 'solo' | 'dev';
+  dispatch: (action: Action) => void;
+  draft: (data: unknown) => void;
+  /** dev 모드에서만 (스냅숏 힌트). 라이브·solo에서는 undefined */
+  ui?: FixtureUi;
+}
+```
+
+- 화면은 **`beat.id`를 먼저** 보고 렌더링한다. `ui` 힌트는 dev 모드 전용이다(라이브 모드에서 설문은 한 화면 7문항, 안내는 비트당 1장이므로 `ui.surveyIndex`·`ui.guideIndex`가 필요 없다).
+- `mode === 'live'`에서는 이전/다음/"처음부터 다시"/"발표용 크게 보기" 버튼을 렌더링하지 않는다. 제출 버튼만 남긴다.
+- `mode === 'solo' | 'dev'`에서는 화면 스스로 다음 단계로 넘어가는 UI를 가질 수 있다(§10.9 어댑터, §10.10 solo).
+
+### 10.9 draft-kit 어댑터 (dev 호환)
+
+`DraftShell`은 스냅숏 id를 그대로 쓰되 화면에는 §10.8 계약을 맞춰 준다.
+
+```tsx
+// packages/draft-kit/src/index.tsx (계약, DraftShell 시그니처)
+export function DraftShell(props: {
+  screens: Record<ScreenId, ComponentType<ScreenProps>>;
+  title: string;
+  /** 스냅숏 id + 행동 → 이동할 스냅숏 id. null이면 무시 */
+  route: (fixtureId: string, action: Action) => string | null;
+  /** 스냅숏 id → 비트 (라이브 비트 id와 같은 id를 쓴다) */
+  beatOf: (fixtureId: string) => Beat;
+}): ReactElement;
+```
+
+- DraftShell이 만드는 props: `state` = `structuredClone(fixture.state)`, `beat` = `beatOf(fixture.id)`, `revealed: true`, `submitted: false`, `mode: 'dev'`, `dispatch` = `(a) => { const next = route(fixture.id, a); if (next) go(next); }`, `draft` = no-op, `ui` = `fixture.ui`.
+- `src/src/dev/`가 `route`·`beatOf`를 제공한다: 기존 `components/sim/routes.ts`의 `NEXT_FIXTURE`/`SCENE_FIXTURE` 이동표를 `(fixtureId, action) → fixtureId` 함수로 다시 쓰고, `packages/core/src/fixtures.ts`의 스냅숏마다 대응하는 라이브 비트 id(`beatOf`)를 둔다. `/dev#/<fixture>`와 `pnpm shots`가 그대로 통과해야 한다.
+
+### 10.10 `/solo` 로컬 모드
+
+- 서버 없이 같은 화면 자산으로 혼자 진행. `useReducer(step, createInitialState(...))`로 로컬 상태를 굴리고, `mode: 'solo'`로 `ScreenProps`를 만든다.
+- show 비트에는 "다음" 버튼이 있고(로컬 커서만 이동), work 비트는 `dispatch`로 진행한다. 공개(reveal) 토글·확인 대화상자·대기 화면 없음(넘길 때 자동으로 공개 상태). 월급은 `rollSalary(Math.random)`.
+- 가계부 초안 전송 없음, 기본값 루프 없음. 학생이 직접 모든 단계를 마쳐야 한다.
+
+### 10.11 기기 대응 (노트북 우선, 모든 기기 가능)
+
+- 기준은 노트북(1366×768). 태블릿 세로·휴대폰: 시뮬레이션 오른쪽 기둥(계좌·상태·가계부)을 접는 패널로, 지불 패널은 "수단 고르기 → 금액" 2단계로(DESIGN.md 6장 기존 문제). `pnpm shots`의 laptop·tablet·tabletPortrait·phone 4종 기준을 수업 모드 화면에도 적용한다.
+
+### 10.12 파일 구성
+
+```
+src/src/
+  routes.tsx          // 주소 → 페이지 (§10.1)
+  live/               // useLive.ts, socket.ts, banner.tsx, useWakeLock.ts, WaitingScreen.tsx
+  activities/
+    registry.ts       // ACTIVITY_VIEWS (§4.3)
+    gagyebu/          // Audience.tsx, Stage.tsx, ControlPanel.tsx (기존 screens/ 재사용)
+    slides/           // SlideCanvas.tsx, registry.tsx, decks/*.tsx
+  stage/              // StagePage.tsx
+  control/            // ControlPage.tsx (§10.6 영역별 컴포넌트)
+  solo/               // SoloPage.tsx
+  dev/                // draft-kit 어댑터: route(), beatOf() (§10.9)
+  screens/            // 기존 6화면, ScreenProps 새 계약으로 (§10.8)
+  components/         // 기존 부품 + TV 재사용 부품(장면 카드 큰 모양, 읽기 전용 선택지, 분포 막대)
+```
+
+---
+
+## 11. 스크립트
+
+### 11.1 `scripts/bots.mjs`
+
+```bash
+node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 --seed 42
+```
+
+| 인자 | 기본 | 설명 |
+| --- | --- | --- |
+| `--url` | `http://localhost:8091` | 서버 주소 |
+| `--code` | (필수) | 수업 코드 |
+| `--n` | `60` | 학생 수 |
+| `--lazy` | `0.1` | 10%는 어떤 work 비트에도 답하지 않음(기본값 처리 검증) |
+| `--seed` | `42` | 선택 재현용 시드 |
+
+동작 계약:
+
+- 봇마다 소켓 하나. `hello`+`join`(닉네임 `bot-01`…) 후 `snapshot`으로 상태를 유지한다.
+- `class`가 오면 커서 비트를 따라가고, work 비트에서 lazy가 아니면 행동한다: 설문 → 시드로 고른 답, 가계부 → 추천 가계부 확정(`recommendBudget`+`confirmBudget`), 장면 → `choiceAvailability`로 열린 선택지 중 시드로 하나 + `pay`면 `autoPaymentPlan` + `deposit`이면 첫 계좌. core와 활동 로직을 상대 경로(`../packages/.../src/index.ts`)로 직접 import해 계산한다(Node 24 타입 스트리핑).
+- lazy 봇은 아무것도 보내지 않는다. 교사 역할은 사람이 통제 페이지에서 하거나 `--auto-next`를 붙일 때 서버에 `next`를 보낸다(선택 사양).
+- 매 비트마다 한 줄 진행 로그, 마지막에 요약(완주/자동 처리/실패 인원). 모든 비lazy 봇이 `present` 비트에 도달하면 종료 코드 0.
+
+### 11.2 `scripts/shots.mjs` 변경
+
+`/dev`가 통제 로그인 뒤에만 보이므로 스크립트가 서버를 임시로 띄운다:
+
+1. 임시 게임 서버를 자식 프로세스로 실행: `PORT=8190 STAGE_PASSWORD=shots-stage CONTROL_PASSWORD=shots-control COOKIE_SECRET=<고정 32자 이상> DATA_DIR=<임시 디렉터리> node server/src/main.ts`.
+2. Vite를 띄우되 `server.proxy`로 `/api`·`/socket.io`를 8190으로 보낸다(개발 프록시 설정과 동일).
+3. Playwright `request.post('/api/login', { role: 'control', password: 'shots-control' })`로 `Set-Cookie`를 받아 브라우저 컨텍스트에 심는다.
+4. `/dev#/<fixture>?shot`을 찍는다(기존 `--only`, `--viewports`, 오류 검사·종료 코드 2 규칙 그대로).
+
+### 11.3 루트 `package.json` 스크립트
+
+| 명령 | 내용 |
+| --- | --- |
+| `pnpm server` | `node --env-file=.env server/src/main.ts` |
+| `pnpm test` | `pnpm -r test` (vitest: core, live, activity-gagyebu, server) |
+| `pnpm bots` | `node scripts/bots.mjs --url http://localhost:8091` (코드는 필수 인자로 전달) |
+
+---
+
+## 12. 마일스톤별 완료 기준 (M1~M8)
+
+| 단계 | 완료 기준(명령·검증) |
+| --- | --- |
+| M1 엔진 | `pnpm --filter @gagyebu/core test` — 하늘·바다 골든 경로 12개월 재생이 결정적이고 결과가 목업(`FIXTURES`)과 근사. `canStep`/`StepError` 일치 테스트 통과 |
+| M1' 기본값 | 같은 테스트 실행 — "아무것도 안 하는 학생이 1년을 완주"(기본값만으로), "모든 장면에 `fallback` 정확히 하나, `requires` 없음", `balanceBudget`·`autoPaymentPlan`·`defaultAnswers` 단위 테스트 통과 |
+| M2 플랫폼 골격 | `pnpm server` 띄운 뒤 통제 페이지에서 `openClass` → `node scripts/bots.mjs --code <발급 코드> --n 60`으로 슬라이드·비트 넘기기. 서버 종료 후 재시작 → 커서·학생 상태 복원(로그 재생). `curl -I localhost:8091/assets/<해시 파일>`이 `immutable`, 모르는 경로 `curl -I localhost:8091/contorl`이 404 |
+| M3 클라이언트 셸 | `pnpm shots`가 `/dev`에서 27개 스냅숏 전 크기 통과(로그인 쿠키 자동 처리). `pnpm --filter @gagyebu/app typecheck`. 재접속 띠·Wake Lock·대기 화면 수동 확인 |
+| M4 가계부 활동 ① | 봇 60(lazy 10%)으로 입장·월급·설문·안내·가계부까지 진행. 미완료 학생이 있을 때 `next` → 확인 대화상자 → 강제 진행 → "자동 선택됨" 안내 확인 |
+| M5 가계부 활동 ② | 봇 60(일부 미완료)이 1년 완주. 전이(`endMonth`) 자동 실행, 장면 중간 강제 진행, 결산, 공개 집계(선택 분포·엔딩 분포·autoCount) 확인 |
+| M6 통제 페이지 | 키보드만으로 전체 수업 진행(→/Space/PageDown, ←/PageUp). 완료 인원·미완료 명단·기본값 미리보기·학생 관리·CSV 내보내기 확인 |
+| M7 기기 대응 | `pnpm shots --viewports=laptop,tablet,tabletPortrait,phone` 통과 + 라이브 화면 4크기에서 모든 단계(지불 패널 2단계 포함) 조작 수동 확인 |
+| M8 슬라이드 | 시험용 덱 1개로 표시기(1920×1080 스케일), `steps`, 통제 미리보기·노트 확인. 실제 덱은 `lesson/lesson.ts`에 넣기만 하면 됨 |
+
+---
+
+## 13. 병렬 작업 스트림과 파일 소유권
+
+여러 에이전트가 parallel worktree에서 나란히 작업한다. **S0이 먼저** 계약 파일을 만들고 merge한 뒤 나머지가 시작한다. 각 스트림은 아래 파일만 고친다(그 외 충돌은 스트림 책임자가 조정).
+
+| 스트림 | 소유 폴더·파일 | 마일스톤 |
+| --- | --- | --- |
+| **S0 scaffold** (한 명, 먼저) | `packages/live/**`, `packages/activity-gagyebu/package.json` + `src/*.ts` 뼈대(시그니처만), `lesson/**`, `server/package.json`, `pnpm-workspace.yaml`, 루트 `package.json` 스크립트, `.env.example`, `tsconfig.base.json`(`erasableSyntaxOnly`), 이 문서가 정한 모든 타입 파일 | — |
+| S1 core 엔진 | `packages/core/**` (engine, types, data/events, selectors) + 테스트 | M1, M1' |
+| S2 live+서버 | `server/**`, `scripts/bots.mjs`, `packages/live/src/slides.ts` 구현 | M2 |
+| S3 클라이언트 셸+슬라이드 | `src/src/live/**`, `src/src/routes.tsx`, `src/src/activities/slides/**`, `src/vite.config.ts`, `packages/draft-kit/**`, `src/src/dev/**`, `scripts/shots.mjs` | M3, M8 |
+| S4 활동 로직 | `packages/activity-gagyebu/src/**` | M4·M5의 로직 |
+| S5 활동 화면 | `src/src/activities/gagyebu/**`, `src/src/screens/**`, `src/src/solo/**` | M4·M5의 화면 |
+| S6 통제·전면 | `src/src/control/**`, `src/src/stage/**` | M6 |
+| S7 기기 대응 | `src/src/components/sim/PayPanel.tsx`, `AccountsPanel.tsx` 및 반응형 스타일 파일 | M7 |
+
+- S5와 S7이 `src/src/components/**`를 공유할 수 있다. S7은 S5 merge 뒤에 시작하거나, S5가 먼저 dispatch 연결을 끝낸 컴포넌트만 만진다.
+- **계약 파일**(S0이 만들고 다른 스트림이 import만 한다): `packages/live/src/types.ts`, `protocol.ts`, `activity.ts`, `slides.ts`(시그니처), `packages/activity-gagyebu/src/index.ts`(타입·비트 목록), `lesson/lesson.ts`, `src/src/activities/registry.ts`(인터페이스), `docs/live-api.md`(이 문서), `docs/core-api.md`.
+- 스트림 사이의 모든 상호작용은 이 문서의 타입·이벤트 이름으로만 일어난다. 이름을 바꿔야 하면 문서를 먼저 고친다.
+
+---
+
+## 14. 결정 사항 (문서에서 정함)
+
+계획(`docs/live-classroom-plan.md`)이 침묵하거나 모호했거나 코드와 어긋나서 이 문서에서 정한 것 전부. 구현 중 되돌아오면 이 목록을 먼저 고친다.
+
+### 진행 모델
+
+1. **비트 주소는 `{ segment, beat }` 인덱스** (계획 §5.4 그대로). 전역 인덱스는 서버 내부 계산값일 뿐 프로토콜에 안 나온다. `Beat.id`는 표시용, 세그먼트 안에서만 유일.
+2. **슬라이드 `steps`는 별도 비트로 매핑**한다: `steps: n`인 슬라이드 = 비트 n개(비트 k는 항목 0..k 공개), `steps` 없는 슬라이드 = 비트 1개. 비트 id는 `${slideId}--${k}` / `${slideId}`. "next 한 번 = 진행 한 단계" 규칙을 전 레슨에서 균일하게 유지하기 위함.
+3. **공개(reveal) 후에도 학생 행동을 허용**한다(비트 마감 전까지). 낡은 분포가 잠깐 보일 수 있지만, 느린 학생이 답을 잃는 것보다 낫다. 마감은 오직 `next`.
+4. **`prev`는 "가장 가까운 이전 show 비트"**, `goto`는 "현재보다 앞선 show 비트만"(`highMark` 이내). 앞으로 건너뛰기 금지 — 작업 비트를 건너뛴 학생 상태가 생기지 않게. `highMark`를 `ClassState`에 추가했다.
+5. **마지막 비트에서 `next`**는 `invalid-target` 거부(결과 화면 이후 없음).
+
+### ActivityLogic
+
+6. **기본값 루프 최대 50회**, 초과 시 학생을 `stalled`로 표시하고 수업은 계속. `fallback`은 한 번에 상태를 반드시 진전시켜야 한다(같은 행동 반복 금지)를 계약에 넣었다.
+7. **`fallback`은 `FallbackResult { action, notice }`**를 반환한다. 안내 문구를 활동이 만들고 서버는 전달만 한다. 전이(`transition`) 행동에는 통지가 없다.
+8. **draft는 로그에 남기지 않는다.** 메모리에만 있고 `next` 마감의 `fallback(draft)`에만 쓴다. 서버가 비트 도중 재시작하면 초안을 잃고 기본값은 "초안 없음" 경로로 간다. 전체 재현성은 `auto` 줄의 행동이 책임진다.
+9. **init의 난수는 월급뿐**이고, 결과가 `start { salary }` 행동에 박혀 로그로 재현된다. `fallback`·`transition`·`stats`는 완전 결정적.
+10. **`ActivityViews` 인터페이스는 클라이언트(`src/src/activities/registry.ts`)에 둔다.** React 타입을 쓰므로 React가 없는 `packages/live`에는 들어갈 수 없다. 서버 레지스트리는 `ActivityLogic`만 담는다.
+11. **입장·닉네임은 플랫폼 소유**(§9.6). 활동은 `init`으로 닉네임을 받기만 한다.
+
+### 프로토콜·서버
+
+12. **`stats` 페이로드에 `progress`와 `fallbackPreview`를 항상** 실어 보낸다. Stage는 `showProgressOnStage`일 때만 progress를 그린다(계획 §12 남은 항목 b의 기본값: 통제에만 표시).
+13. **집계 스로틀은 250ms(초당 4회)**, 최신값만 전송.
+14. **속도 제한**: act 4/s + 동시 1개(ack 전 다음 행동 금지, 위반 `'too-fast'`), draft 2초 1회(클라이언트 1.5초 묶음), join 5초 1회, 통제 10/s.
+15. **여러 수업 동시 허용**(리허설용). 전면·통제는 `classes` 목록에서 `select`로 고르고, 하나만 열려 있으면 자동 선택.
+16. **끝난 수업 코드 48시간 재사용 금지**, 목록은 `DATA_DIR/ended.json`.
+17. **토큰은 128비트**(base64url), `localStorage['gg_token_<code>']`에 코드별 저장.
+18. **같은 닉네임 재입장 = `nickname-taken` + roster `pendingMerge` 항목**. 통제의 `merge` 승인으로 기록을 이어받고 새 토큰을 발급한다. 거부는 `kick`.
+19. **`act`의 `beat` 불일치는 `'stale-beat'`** ("이미 다음 단계로 넘어갔어요"). 클라이언트는 이때 `snapshot` 없이 최신 `class`로 동기화한다.
+20. **CSV 내보내기는 HTTP `GET /api/export/<code>.csv`** (통제 쿠키). 소켓 이벤트가 아니라 링크로 내려받는다.
+
+### HTTP·보안
+
+21. **`/<4자리>`는 코드의 실제 상태와 무관하게 앱을 서빙**한다. 열림/끝남/없음 구분은 `hello` ack가 담당하고, 클라이언트가 맞는 화면(진행·끝난·없는 수업)을 보여 준다.
+22. **쿠키 값에 비밀번호 버전 포함**(`pwVer` = sha256 앞 8자리). 비밀번호 변경 + 재시작 = 전원 로그아웃. 서명은 HMAC-SHA256, 만료 12시간.
+23. **무차별 대입**: IP당 실패 5회/분 → 60초 `429`. `X-Forwarded-For`는 `TRUSTED_PROXY`에서 온 요청만 신뢰(마지막 값).
+24. **`/dev` 보호는 앱 수준**(통제 로그인 쿠키 확인)이다. JS 번들은 어차피 공개 정적 파일이므로 서버가 경로를 막는 것은 의미가 없고(계획 §7.1 "보호 범위"), 목적은 학생이 목업 화면에 들어가 헷갈리지 않게 하는 것. `shots.mjs`는 임시 서버 + 로그인으로 통과한다(§11.2).
+25. **`/solo`는 서버가 `SOLO_ENABLED=true`일 때만 200**, 아니면 404. 앱 안 스위치가 아니라 서버 스위치.
+
+### core (docs/core-api.md와 중복되는 요약)
+
+26. **`answer`·`finishSurvey` 삭제, `submitSurvey` 추가.** `goto`는 유지(활동 전이 `guide-6 → budget`와 solo가 씀)하되 허용 범위를 `guide → budget`로 좁힌다. `reset` 유지(solo 전용).
+27. **자동 처리 표시는 행동에 `auto?: true`**를 싣는 방식. 서버·활동만 설정하고 학생 행동에서는 서버가 뗀다. `step`이 `DecisionRecord.auto`로 복사한다.
+28. **부록 A 선택지 8개를 데이터 대조해 확정**(core-api.md 부록 A 참조). 계획 문면의 장면 id는 `data/events.ts`와 전부 일치했고(교정 불필요), 선택지 id를 새로 지었다: `splurge`(laptop-spill start/scammed/again), `flip3`(sneaker-resell start), `luxury`(family-month gift), `ignore`(rent-hike notice), `hangUp`(rent-hike counter), `tipStock`(market-crash dropNoInvest).
+29. **계획 부록 A와 데이터의 충돌 처리**: 데이터에 이미 있는 `new`(150만 원 무이자 할부), `flip2`(2켤레), `big`(30만 원) 그대로 두고, 계획이 정한 "더 나빠 보이는" 선택지를 **별도로 추가**해 `fallback: true`를 붙인다. 기존 선택지는 일반 선택지로 남는다.
+30. **`showProgressOnStage`는 레슨 설정**(`Lesson.settings`)이고 기본 false. 활동 설정(`GagyebuConfig.confirmForce` 등)과 분리했다.
+
+### 클라이언트
+
+31. **`ScreenProps`의 `ui`는 dev 전용**이 되고 라이브 화면은 `beat.id` + `state`만으로 그린다. `submitted`·`mode`·`draft`가 새로 들어온다(§10.8).
+32. **draft-kit 어댑터는 `route(fixtureId, action)` 함수**로 일반화한다. 스냅숏 id → 비트 매핑(`beatOf`)을 `src/src/dev/`에 둔다. 기존 이동표 `NEXT_FIXTURE`/`SCENE_FIXTURE`는 이 함수로 흡수.
+33. **라우터 라이브러리를 추가하지 않는다.** `window.location.pathname` 6경로면 충분하고 번들이 커지지 않게 하기 위함.
+34. **설문 한 화면(7문항)·안내 카드 비트당 1장**은 라이브 모드 표준. dev 스냅숏은 기존 1문항·카드 진행 힌트(`ui`)를 그대로 쓴다.
+
+### 그 외
+
+35. **`tsconfig.base.json`에 `erasableSyntaxOnly: true` 추가 권장.** 서버의 빌드 없는 실행 제약(§1.3)을 컴파일 타임에 강제한다.
+36. **앱 `base: '/'`**로 바꾼다. 단일 HTML 빌드(`pnpm single`)는 기존 `base: './'` 설정을 유지한다.
+37. **정적 서버 `scripts/serve.mjs`는 흡수**되지만 당장 삭제하지 않는다. 배포 전환 확인 뒤 제거한다(삭제도 이 문서의 범위 밖 구현 단계에서).

@@ -1,6 +1,7 @@
 # 모듈 API 명세 (`packages/core`, `packages/draft-kit`)
 
 - 작성일: 2026-10-26
+- 수정일: 2026-11-09 (수업 모드 승인 변경 반영: `docs/live-classroom-plan.md` §13 1~9 + `step()`. 세부는 이 문서가, 수업 모드 계약은 `docs/live-api.md`가 담당)
 - 대상: 화면 앱(`src`)과 이후 엔진 구현
 - 규칙의 근거: `가계부-시나리오-수업-기획서.md` 4~6장
 
@@ -44,6 +45,8 @@ import { FIXTURES, formatMan, budgetSummary, EVENTS, type GameState } from '@gag
 import type { ScreenProps } from '@gagyebu/draft-kit';
 ```
 
+> 2026-11-09 이후 `ScreenProps` 계약은 수업 모드용으로 바뀐다(§2.1 참조). 이 문서는 core의 계약을 정하고, 새 `ScreenProps`·어댑터의 정식 명세는 `docs/live-api.md` §10.8~10.9에 있다.
+
 ## 2. 화면 앱과의 계약
 
 ### 2.1 화면 컴포넌트
@@ -70,13 +73,15 @@ interface FixtureUi {
 }
 ```
 
+**수업 모드 전환 후의 `ScreenProps`.** 수업 모드가 들어오면 화면은 `go`/`goScreen` 대신 `dispatch`·`draft`·`submitted`·`mode`를 받습니다. 새 계약의 정식 명세는 `docs/live-api.md` §10.8에 있고, draft-kit은 스냅숏 셸을 그대로 유지하는 어댑터를 제공합니다(live-api.md §10.9). core의 `Action`이 두 계약에서 같은 정의를 쓰는 것이 이 문서의 책임입니다.
+
 - 주소는 `#/<스냅숏 id>`입니다. `?shot`을 붙이면 네비게이터가 숨겨집니다 (스크린숏용).
 - 네비게이터: 오른쪽 아래 버튼, `` ` `` 키로 열고 닫기, `[` `]` 키로 이전/다음 스냅숏.
 - 스냅숏이 바뀌면 화면 컴포넌트가 새로 마운트됩니다 (`key`가 스냅숏 id).
 
 ### 2.2 엔진 연결 전에 지킬 것
 
-- `step()`은 아직 구현되지 않았고 호출하면 예외가 납니다. 화면은 `state`와 `ui`로 그립니다.
+- `step()`의 정식 명세는 아래 4장입니다(2026-11-09 기준). 구현은 수업 모드 마일스톤 M1에서 하고, 그 전까지 호출하면 `NotImplementedError`가 납니다. 화면은 지금도 `state`와 `ui`로 그립니다.
 - 입력, 패널 열기, 금액 나누기 같은 화면 안의 상호작용은 컴포넌트 로컬 상태로 흉내 냅니다. 계산은 아래 선택자를 씁니다.
 - 다음 단계로 넘어가는 버튼은 `go()`나 `goScreen()`으로 그럴듯한 다음 스냅숏에 연결합니다. 예: 설문 결과의 "다음" → `goScreen('guide')`, 2월 장면의 "수리한다" → 로컬로 지불 패널 열기, 확정 → `go('sim-feb-outcome')`.
 - 금액은 직접 계산하지 말고 `selectors.ts`와 `format.ts`를 씁니다.
@@ -118,7 +123,7 @@ interface FixtureUi {
 | `lastOutcome` | 마지막 선택의 결과 (피드백, 변화 목록, 이어지는 장면, 교훈, 가계부 조정 이유) |
 | `scheduled` | 몇 달 뒤로 예약된 장면과 예고 문구 |
 | `history` | 끝난 달마다 순자산, 계좌 잔고, 부채, 만족도, 신용점수 |
-| `decisions` | 선택 기록 (월, 이벤트 코드, 선택지 이름, 지불 내역, 태그) |
+| `decisions` | 선택 기록 (월, 이벤트 코드, 선택지 이름, 지불 내역, 태그). 자동 처리된 선택은 `auto: true` (2026-11-09 추가, §4.2) |
 | `budgetEdits` | 가계부를 조정한 횟수 |
 | `unlocked` | 달성한 도전과제 |
 | `settlement` | 12월 결산: 적금 만기(세전·세후), 최종 잔고, 순자산, 부채, 엔딩, 도전과제 목록, 가계부 전후 비교 |
@@ -144,9 +149,18 @@ interface Choice {
   kind: 'pay' | 'fixedPay' | 'free' | 'deposit' | 'gamble' | 'budget';
   pay?: PaySpec; fixedPay?: FixedPaySpec; deposit?: DepositSpec;
   requires?: Condition; lockedReason?: string;
+  fallback?: true;   // 2026-11-09 추가. 이 장면의 기본 선택지
   effects?: Effect[]; next?: NextScene; feedback: string; tags?: ChoiceTag[];
 }
 ```
+
+**`fallback?: true` (2026-11-09 추가).** 그 장면의 "대놓고 나빠 보이는" 기본 선택지 표시입니다. 규칙:
+
+- 모든 장면에 **정확히 하나** 있어야 하고, `requires`(잠김 조건)가 없어야 합니다(테스트로 보장, §4.4).
+- 선택지가 하나뿐인 확인 장면(`welcome`, `aftermath`, `vanished`)은 그 선택지가 기본값입니다.
+- 학생도 직접 고를 수 있고, 화면에서 다른 선택지와 생김새가 같습니다(색·순서·크기 힌트 없음). 이 선택지가 기본값이라는 사실은 학생 화면에 표시하지 않습니다.
+- 서버의 기본값 처리는 `fallbackChoice(scene)`(§4.3)로 이 선택지를 찾습니다.
+- 장면별 지정·새 선택지 목록은 부록 A(문서 끝)에 있습니다.
 
 | `Choice.kind` | 화면 동작 |
 | --- | --- |
@@ -173,21 +187,70 @@ interface Choice {
 | `recommendBudget(answers, salary)` | 추천 가계부가 담긴 `SurveyResult` |
 | `emptyBudget()`, `emptyAccounts()` | 빈 값 |
 
-### 4.2 `step(state, action)` (미구현, 이후 단계)
+### 4.2 `step(state, action)` (명세 확정: 2026-11-09, 구현은 M1)
 
-`useReducer(step, initial)`에 그대로 연결하는 순수 함수입니다. 구현 전까지는 호출하지 않습니다. 이후 구현할 상태 전이는 다음과 같습니다.
+`useReducer(step, initial)`에 그대로 연결하는 순수 함수입니다. 구현 전까지 호출하면 `NotImplementedError`가 납니다.
+
+**순수성·결정성.** `step`은 `Math.random`·`Date.now`·I/O를 쓰지 않습니다. 유일한 난수인 월급은 `start` 행동의 `salary` 값으로 **호출자가 주입**합니다(서버는 `rollSalary()`로 정해 넣고 로그에 남깁니다). 같은 `(state, action)`에 대해 항상 같은 결과를 반환하고, 원본 `state`는 고치지 않습니다. 그래서 서버 로그 재생이 곧 상태 복원입니다.
+
+```ts
+/** 조건을 어기면 던지는 예외 */
+export class StepError extends Error {
+  readonly code: StepErrorCode;
+  constructor(code: StepErrorCode, message: string);
+}
+
+export type StepErrorCode =
+  | 'invalid-phase'    // 지금 phase에서 쓸 수 없는 행동
+  | 'invalid-step'     // 시뮬레이션 안 단계가 맞지 않음 (예: 장면 없는 상태에서 choose)
+  | 'unknown-choice'   // 현재 장면에 없는 선택지
+  | 'choice-locked'    // requires 조건을 못 채움
+  | 'budget-invalid'   // 합계가 맞지 않거나 음수 항목
+  | 'payment-invalid'  // 지불 계획 검증 실패 (validatePayment와 같은 이유)
+  | 'already-finished'; // phase 'result' 뒤의 행동 (reset 제외)
+
+/** 행동을 적용할 수 있는지 미리 검사. 실패 이유 문구를 돌려준다. 서버의 allowed 검사가 쓴다 */
+export function canStep(state: GameState, action: Action): true | string;
+
+/** 상태 전이. 조건을 어기면 StepError */
+export function step(state: GameState, action: Action): GameState;
+```
+
+`canStep`과 `step`은 항상 일치해야 합니다: `canStep`이 `true`를 반환하는 행동은 `step`이 예외 없이 처리하고, `false`(문구)를 반환하는 상황에서 `step`은 같은 이유의 `StepError.code`를 던집니다(§4.4 테스트).
+
+**`Action` (2026-11-09 변경).** `start`가 `salary`를 받고, 설문이 `submitSurvey` 하나로 합쳐집니다. `answer`·`finishSurvey`는 **삭제**합니다(설문은 한 화면 7문항 제출로 바뀌었고 아직 이 행동을 쓰는 코드가 없습니다). `goto`는 **유지**하되 허용 범위를 `guide → budget`로 좁힙니다(활동 전이와 `/solo`가 씁니다). `reset`은 `/solo` 전용으로 유지합니다.
+
+```ts
+export type Action =
+  | { type: 'start'; nickname: string; salary: Won }                    // 변경: salary 필수
+  | { type: 'submitSurvey'; answers: Partial<Record<QuestionId, string>> } // 신규
+  | { type: 'goto'; phase: 'guide' | 'budget' }                          // 변경: 범위 축소
+  | { type: 'setBudget'; budget: Budget; auto?: true }
+  | { type: 'confirmBudget'; auto?: true }
+  | { type: 'beginMonth' }
+  | { type: 'choose'; choiceId: string; payment?: PaymentPlan; depositTo?: AccountId; amount?: Won; auto?: true }
+  | { type: 'continue' }
+  | { type: 'statusAction'; status: StatusId; action: StatusActionId; depositTo?: AccountId }
+  | { type: 'endMonth' }
+  | { type: 'reset' };
+```
+
+- `auto?: true`는 **서버·활동의 기본값 처리만** 붙입니다. 서버는 학생이 보낸 행동에서 이 필드를 무조건 뗍니다. `step`은 이 값을 `DecisionRecord.auto`로 옮깁니다(아래).
+- `DecisionRecord`에 `auto?: boolean` 필드가 추가됩니다. 결과 화면 선택 기록과 TV 집계에서 자동 처리를 구분합니다.
+
+상태 전이(기존 다이어그램에서 `finishSurvey`만 `submitSurvey`로 바뀝니다):
 
 ```mermaid
 stateDiagram-v2
     [*] --> start
     start --> survey: start
-    survey --> guide: finishSurvey
+    survey --> guide: submitSurvey
     guide --> budget: goto
     budget --> sim: confirmBudget
     state sim {
-        [*] --> payday: beginMonth
-        payday --> scene: 장면 있음
-        payday --> report: 장면 없음
+        [*] --> payday: confirmBudget
+        payday --> scene: beginMonth (장면 있음)
+        payday --> report: beginMonth (장면 없음)
         scene --> outcome: choose
         outcome --> scene: continue (이어지는 장면)
         outcome --> adjust: continue (가계부 변경)
@@ -195,25 +258,87 @@ stateDiagram-v2
         adjust --> report: setBudget (합계 일치)
         report --> payday: endMonth (다음 달)
     }
-    sim --> result: 11월 endMonth 후 12월 결산
+    sim --> result: 12월 beginMonth (결산)
 ```
 
-| Action | 내용 |
-| --- | --- |
-| `start { nickname }` | 월급 배정, `phase: 'survey'` |
-| `answer { question, option }` | 설문 답 저장 |
-| `finishSurvey` | 유형 판정과 추천 가계부를 `budget`에 채움 |
-| `goto { phase }` | 이전/다음 화면 이동 (시뮬레이션 시작 후에는 뒤로 갈 수 없음) |
-| `setBudget { budget }` | 가계부 수정. 조정 단계에서는 `budgetEdits` 증가 |
-| `confirmBudget` | 합계가 월급과 같을 때만. `initialBudget` 고정, `phase: 'sim'` |
-| `beginMonth` | 월급날 처리 → 예약 장면과 배치 이벤트를 `queue`에 넣음 |
-| `choose { choiceId, payment?, depositTo?, amount? }` | 선택 처리, `lastOutcome` 생성 |
-| `continue` | 다음 장면 / 가계부 조정 / 월말 리포트 |
-| `statusAction { status, action, depositTo? }` | 상태 카드 행동 (운동화 팔기) |
-| `endMonth` | `history`에 기록하고 다음 달. 11월 뒤에는 12월 결산 후 `phase: 'result'` |
-| `reset` | 처음부터 |
+행동별 정확한 의미. `canStep`은 각 행동의 "조건"을 검사합니다.
 
-월급날 처리 순서 (기획서 5.1~5.3): 월급 입금 → 자동이체 → 생활비 입금 → 지출(예산 + 할부·카드값·리볼빙 상환 + 물가 상승분) → 부족하면 카드값으로 넘기고 만족도 -5 → 비상금·목표·청약 이자, 투자 월 수익률 → 상태 효과(만족도).
+| Action | 조건 (조건 위반 = StepError) | 효과 |
+| --- | --- | --- |
+| `start { nickname, salary }` | `phase === 'start'`, `salary > 0`, 닉네임 1~10자 | `profile` 채움(월급은 행동 값 그대로), `phase: 'survey'` |
+| `submitSurvey { answers }` | `phase === 'survey'`, 7문항 모두 유효한 선택지 id | 답변 저장, `classifySpending`+`recommendBudget`으로 `survey.result`·`budget` 채움, `phase: 'guide'`. 설문 결과 화면은 `phase`와 무관하게 `survey.result`로 그린다 |
+| `goto { phase }` | `phase === 'guide'`에서만, 목표는 `'budget'` | `phase: 'budget'`. 뒤로 가기 없음 |
+| `setBudget { budget }` | `phase === 'budget'`(작성) 또는 `step === 'adjust'`(조정), 모든 항목 ≥ 0 | `budget` 교체. 조정 단계면 `budgetEdits` +1 |
+| `confirmBudget` | `phase === 'budget'` + `isBudgetValid(budget, salary)` | `initialBudget` 고정, `phase: 'sim'`, `month: 1`, `step: 'payday'` |
+| `beginMonth` | `phase === 'sim'`, `step === 'payday'` | 월급날 처리(아래 순서)로 `payday` 채움. 예약 장면(`scheduled`, `when` 판정)과 배치 이벤트를 `queue`에 넣고 `current` 지정. 장면이 있으면 `step: 'scene'`, 없으면 `step: 'report'`. **12월이면**: 월급날 처리 + 적금 만기(`savingsMaturity`) + 12월 결산(`settlement`: 최종 잔고·순자산·엔딩·도전과제·가계부 전후 비교) 후 `phase: 'result'` |
+| `choose { choiceId, … }` | `step === 'scene'`, `choiceId`가 `current` 장면에 있음, `requires` 충족, `pay`면 `validatePayment` 통과, `deposit`면 `depositTo ∈ targets`, `adjustable`이면 금액이 범위 안 | 선택 효과 적용(계좌·만족도·신용·부채·상태·가계부·플래그), `lastOutcome` 생성, `decisions`에 기록(`auto` 복사). `next`가 있으면 같은 달 장면은 `queue`에, 예약은 `scheduled`에 |
+| `continue` | `step === 'outcome'` | `lastOutcome.next`가 있으면 그 장면으로(`step: 'scene'`), `budgetReason`이 있으면 `step: 'adjust'`, 둘 다 없으면 `step: 'report'` |
+| `statusAction { … }` | `phase === 'sim'`, 상태가 있고 행동이 그 상태에 정의됨, `depositTo` 필요하면 유효 | 상태 행동 적용(운동화 팔기: 시세 입금, 상태 제거), `decisions`에 기록 |
+| `endMonth` | `step === 'report'`, `month < 12` | `history`에 `MonthRecord` 추가, `month` +1, `step: 'payday'`, `payday`·`current`·`queue`·`lastOutcome` 초기화 |
+| `reset` | 어느 phase에서든(`/solo` 전용. 수업 모드 서버는 이 행동을 보내지 않는다) | 새 초기 상태(`phase: 'start'`) |
+
+**월급날 처리 순서** (기획서 5.1~5.3, `beginMonth`가 실행): 월급 입금(생활비 통장) → 자동이체(적금은 `paidMonths` +1, 해지된 적금이면 새 적금 원금) → 생활비 입금(예산 합계 + 여유분, 유효한 가계부면 잔고와 정확히 일치) → 지출(예산 + 할부·카드값·리볼빙 상환 + 물가 상승분 `foodOverspend` 플래그) → 생활비가 모자라면 부족분은 카드값으로 넘기고(다음 달 생활비에서 빠짐) 만족도 -5, `livingShort` 플래그 → 비상금·목표·청약 이자(연율/12), 투자 월 수익률(`MARKET_RETURNS[month]`) → 상태 효과(매달 만족도), 운동화 시세 문구 갱신.
+
+### 4.3 기본값·자동 처리 함수 (신규: 2026-11-09)
+
+서버의 기본값 처리와 화면이 같은 규칙을 쓰도록 core가 제공하는 순수 함수들입니다. 근거는 계획 §2.3과 부록 A.
+
+```ts
+/** 합계 맞추기. 남는 돈은 생활비 여유분에 넣고, 모자라면 여유분에서 뺀다.
+ *  여유분이 0이 되어도 모자라면 변동비를 여가 → 의류·미용 → 생활용품 → 경조사 → 식비 순서로 줄인다.
+ *  고정비와 자동이체는 절대 건드리지 않는다. 결과는 항상 isBudgetValid를 통과한다.
+ *  changes는 학생 안내 문구용 ("남는 돈 3만 원이 생활비 여유분으로 들어갔어요"). */
+export interface BudgetChange {
+  key: TransferAccountId | ExpenseId | 'livingBuffer';
+  before: Won;
+  after: Won;
+}
+export function balanceBudget(budget: Budget, salary: Won): { budget: Budget; changes: BudgetChange[] };
+
+/** 답하지 않은 문항만 중간 답으로 채운다. 중간 답 = 보기 n개 중 floor((n-1)/2)번째(데이터 순서).
+ *  이미 답한 문항은 그대로 둔다. */
+export function defaultAnswers(answers: Partial<Record<QuestionId, string>>): Record<QuestionId, string>;
+
+/** 장면의 기본 선택지(fallback: true). 정확히 하나 있어야 한다(테스트 §4.4). */
+export function fallbackChoice(scene: Scene): Choice;
+
+/** 자동 지불 계획: 허용된 수단 중 생활비 → 비상금 → 목표 → 투자 → 적금 → 청약 순서로
+ *  잔고만큼, 남으면 카드 일시불(cardMonths에 1이 있을 때, 없으면 가장 짧은 허용 개월).
+ *  adjustable이면 금액 = 최솟값. 카드도 허용되지 않아 남는 금액은 shortfall로 돌려준다
+ *  (생활비 부족분 규칙: 다음 달 카드값, 만족도 -5 — 엔진이 적용). */
+export function autoPaymentPlan(state: GameState, pay: PaySpec): { plan: PaymentPlan; shortfall: Won };
+
+/** 자동 입금 계좌: 데이터의 첫 번째 입금 계좌 */
+export function autoDepositTarget(deposit: DepositSpec): AccountId;
+
+/** 지불 계획 검증. 지불 패널과 서버가 같은 규칙을 쓴다 (DESIGN.md 7장 4번 제안) */
+export type PaymentIssue =
+  | { kind: 'sum-mismatch' | 'amount-out-of-range' | 'source-not-allowed'
+    | 'over-balance' | 'card-months-not-allowed' | 'negative-part'; detail: string };
+export function validatePayment(state: GameState, pay: PaySpec, plan: PaymentPlan):
+  { ok: true } | { ok: false; issue: PaymentIssue };
+
+/** 그 달의 선택 기록(첫 선택 + 이어진 장면 + 상태 행동)을 기록 순서대로. 집계(stats)가 쓴다 */
+export function monthChoices(state: GameState, month: MonthNo): DecisionRecord[];
+```
+
+`autoPaymentPlan`의 수단 순서는 `PaySpec.sources`에 허용된 것만 건너뛰며 적용하고, 각 계좌는 잔고까지만 냅니다. `to`가 있는 선택지(계좌 이동)도 같은 계획을 쓰고, 합계가 대상 계좌로 이동합니다.
+
+### 4.4 테스트 계획 (Vitest, M1·M1' 완료 기준)
+
+`packages/core`에 Vitest를 넣고 `pnpm --filter @gagyebu/core test`로 돌린다.
+
+| 테스트 | 내용 |
+| --- | --- |
+| 골든 경로 | 하늘(신중 경로)·바다(즉흥 경로)의 12개월 행동 재생이 결정적이고, 결과(순자산·엔딩·도전과제)가 `FIXTURES`의 목업과 근사 |
+| 아무것도 안 하는 학생 | `createInitialState`에서 시작해 모든 단계를 §4.3의 기본값 함수로만 채워 1년을 완주. 중간 어느 시점에도 `isBudgetValid` 위반 없음, 예외 없음 |
+| 기본 선택지 정합성 | `EVENTS`의 모든 장면에 `fallback: true` 선택지가 정확히 하나, `requires` 없음 (부록 A 표와 자동 대조) |
+| canStep/StepError 일치 | 무작위 행동 시퀀스에 대해 `canStep`이 `true`인 경우 `step`이 성공, 문구를 돌려주는 경우 대응하는 `code`의 `StepError` |
+| balanceBudget | 남는 돈 / 여유분으로 메우기 / 여유분 0 + 변동비 절감 순서(여가→의류·미용→생활용품→경조사→식비) / 고정비·자동이체 불변 |
+| autoPaymentPlan | 수단 순서, 잔고 한도, 카드 일시불/최소 개월, `shortfall`, adjustable 최솟값 |
+| defaultAnswers | 보기 4개→2번째, 3개→2번째(중간), 이미 답한 문항 보존 |
+| validatePayment | 합계 불일치, 범위 밖 금액, 허용 밖 수단, 잔고 초과, 카드 개월 위반, 음수 |
+| monthChoices | 예약 장면이 실행된 달(4월 `check4`)에 그 달 기록으로 들어옴 |
 
 ## 5. 선택자와 표기 (`selectors.ts`, `format.ts`)
 
@@ -310,4 +435,54 @@ await navigator.clipboard.writeText(text);
 
 ## 8. core에 고칠 점이 보이면
 
-화면 작업 중 데이터나 타입이 부족하면 `packages/core`를 직접 고치지 말고, `src/DESIGN.md`의 "core에 대한 제안" 절에 적습니다. 지금까지 모은 제안은 `docs/design-review.md` 4장에 정리되어 있습니다.
+원칙은 그대로입니다: 화면 작업 중 데이터나 타입이 부족하면 `packages/core`를 직접 고치지 말고, `src/DESIGN.md`의 "core에 대한 제안" 절에 적습니다. 모아 둔 제안은 `docs/design-review.md` 4장에 정리되어 있습니다.
+
+**예외(2026-11-09 승인).** 이 문서 §4.2~4.4와 부록 A에 정한 변경 — `step()` 구현, `Action` 변경(`start` 월급, `submitSurvey`), `Choice.fallback`, `DecisionRecord.auto`, 부록 A의 기본 선택지 추가, `balanceBudget`·`defaultAnswers`·`fallbackChoice`·`autoPaymentPlan`·`autoDepositTarget`·`validatePayment`·`monthChoices` — 는 수업 모드 계획(`docs/live-classroom-plan.md` §13)으로 **미리 승인된 core 변경**입니다. M1·M1' 마일스톨에서 이 범위 안에서 `packages/core`를 직접 고칩니다. 범위 밖의 새 제안은 여전히 제안 절차를 따릅니다.
+
+---
+
+## 부록 A. 장면별 기본 선택지 (2026-11-09 확정)
+
+모든 장면의 기본 선택지(`fallback: true`). 계획 부록 A의 표를 `data/events.ts`의 실제 이벤트·장면 id와 대조해 확정했습니다. **계획의 장면 id는 데이터와 전부 일치했습니다**(교정 불필요). 새로 넣는 선택지는 8개(같은 문구 재사용 포함), 나머지 14개 장면은 기존 선택지를 기본값으로 지정합니다.
+
+원칙(계획 부록 A): 이미 대놓고 나빠 보이는 선택지가 있고 잠김 조건이 없으면 그것을 지정, 없으면 새로 넣음. 선택지가 하나뿐인 확인 장면은 그것이 기본값. 새 선택지는 같은 생김새(`kind`)로 데이터 순서에 섞어 넣고 맨 아래 고정 자리를 두지 않음. **수치는 임시값**이며 엔진 구현 뒤 "기본값만 고른 학생"이 대체로 '빚과의 동거'나 '무난한 1년 차' 아래쪽으로 가도록 리허설에서 조정합니다.
+
+### A.1 새로 넣는 선택지 (8개)
+
+| 이벤트 / 장면 | 선택지 id | 문구(안) | kind | 요약 |
+| --- | --- | --- | --- | --- |
+| `laptop-spill` / `start` | `splurge` | 이참에 최고 사양 노트북을 12개월 할부로 산다 (280만 원) | `fixedPay` | 카드 12개월, 수수료 연 15%(매달 약 25만 원). 효과: 만족도 +3, `laptopInstallment` 12개월. 기존 `new`(150만 원 무이자)는 일반 선택지로 남음 |
+| `laptop-spill` / `scammed` | `splurge` | (위와 같은 문구) | `fixedPay` | 위와 같음. 사기 피해 뒤에도 나빠 보이는 선택을 유도 |
+| `laptop-spill` / `again` | `splurge` | (위와 같은 문구) | `fixedPay` | 위와 같음 + `noLaptop` 상태 해제. 기존 `repair`·`used`·`new`는 그대로 |
+| `sneaker-resell` / `start` | `flip3` | 3켤레 사서 크게 남긴다 (90만 원) | `gamble` (+`pay`) | `pay { amount: 900_000, cardMonths 포함 }`, 효과: `sneakers` count 3, `next: check4 (+1개월)`. 기존 `flip2`(2켤레)는 그대로 |
+| `family-month` / `gift` | `luxury` | 명품 선물과 호텔 뷔페로 특별하게 (100만 원) | `fixedPay` | 카드 6개월, 수수료 포함(매달 약 17.4만 원). 효과: 만족도 +6, `next: message`. 기존 `big`(30만 원)은 그대로 |
+| `rent-hike` / `notice` | `ignore` | 문자를 무시하고 답하지 않는다 | `budget` | 효과: `rent` +7만 원(집주인이 7만 원 인상 통보), 만족도 -3, `openBudget`(가계부 조정) |
+| `rent-hike` / `counter` | `hangUp` | 기분 나쁘다며 연락을 끊는다 | `budget` | 효과: `rent` +5만 원(협상 무효, 원래대로), 만족도 -3, `openBudget` |
+| `market-crash` / `dropNoInvest` | `tipStock` | 단톡방 추천 종목을 카드로 산다 (50만 원) | `fixedPay` | 카드 3개월. 효과: `invest` -25만 원(반 토막, 돈은 사라짐), 만족도 -2 |
+
+### A.2 기존 선택지를 기본값으로 지정 (14개 장면)
+
+| 이벤트 / 장면 | 기본 선택지 | 비고 |
+| --- | --- | --- |
+| `tutorial` / `welcome` | `ok` (좋아요, 1년을 시작할게요) | 유일한 선택지 |
+| `laptop-spill` / `seller` | `transfer` (계좌이체로 33만 원 보낸다) | `pay` → 자동 지불 계획. 사기 장면(`scammed`)으로 |
+| `sneaker-resell` / `check4` | `hold` (60만 원 될 때까지 기다린다) | 6월 시세 하락 장면으로 |
+| `sneaker-resell` / `check6` | `hold` (다시 오를 거라 믿고 계속 갖고 있는다) | 계속 보유 |
+| `family-month` / `message` | `send` (엄마가 급하다니 바로 사서 보낸다) | `pay` → 자동 지불 계획. 사기 피해 장면으로 |
+| `family-month` / `aftermath` | `ok` (다음부터는 꼭 전화로 확인한다) | 유일한 선택지 |
+| `scratch-lottery` / `win` | `more` (기세를 몰아 10장 더 산다) | 10장 결과 장면으로 |
+| `scratch-lottery` / `reveal` | `again` (한 장만 더!) | 만족도 -3 |
+| `market-crash` / `drop` | `sellAll` (더 떨어지기 전에 전부 판다) | `deposit` → 자동 입금 계좌(첫 번째). 손실 확정 |
+| `price-rise` / `notice` | `ignore` (신경 쓰지 않고 그대로 둔다) | 생활비 부족 시 리볼빙 장면 예약 |
+| `price-rise` / `revolving` | `revolve` (리볼빙을 신청한다) | 리볼빙 시작, 신용 -40 |
+| `coin-room` / `invite` | `tryTen` (일단 10만 원만 넣어 본다) | `pay` → 자동 지불 계획. "적금을 깨서 300만 원"(`allIn`)은 `requires`가 있어 기본값으로 쓸 수 없음 |
+| `coin-room` / `withdraw` | `payFee` (수수료를 내고 출금한다) | `pay` → 자동 지불 계획. 단톡방 소멸 장면으로 |
+| `coin-room` / `vanished` | `ok` (은행과 경찰(112)에 신고한다) | 유일한 선택지 |
+
+### A.3 계획과 데이터의 차이 (이 문서에서 정한 것)
+
+- 계획 부록 A의 2월 기본값은 "280만 원 최고 사양" 새 선택지인데, 데이터에는 이미 `new`(150만 원 12개월 무이자)이 있습니다. **둘 다 두고** `splurge`에만 `fallback: true`를 붙였습니다. 학생 입장에서는 "무이자 할부"와 "수수료 할부"의 대비가 생깁니다.
+- 계획의 3월 기본값 "3켤레(90만 원)"에 대해 데이터에는 `flip2`(2켤레 60만 원)가 있으므로 `flip3`을 새로 넣었습니다(위와 같은 논리).
+- 계획의 5월 기본값 "명품 선물과 호텔 뷔페(100만 원)"에 대해 데이터의 최고 선택지는 `big`(30만 원)이므로 `luxury`를 새로 넣었습니다.
+- 계획의 6월 `notice`·`counter` 기본값("문자 무시", "연락 끊기")은 데이터에 없는 선택지라 새로 넣었습니다. 둘 다 가계부 조정으로 이어지는 나쁜 결과입니다.
+- 9월 `revolving` 장면은 계획의 "9월~" 표기대로 10월에 예약되어 나타납니다(`delayMonths: 1`, `when: livingShort`).
