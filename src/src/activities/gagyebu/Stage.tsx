@@ -79,10 +79,10 @@ function StageShell({
   wide?: boolean;
 }) {
   return (
-    <div className="paper-texture flex size-full flex-col px-[110px] py-[60px]">
+    <div className="paper-texture flex size-full flex-col px-[110px] py-[48px]">
       {kicker ? <p className="text-[28px] font-semibold text-ink-2">{kicker}</p> : null}
-      {title ? <h1 className={`display leading-[1.06] text-ink ${wide ? '' : 'mt-2 text-[80px]'}`}>{title}</h1> : null}
-      <div className={`min-h-0 flex-1 ${title ? 'mt-[36px]' : ''}`}>{children}</div>
+      {title ? <h1 className={`display leading-[1.06] text-ink ${wide ? '' : 'mt-2 text-[72px]'}`}>{title}</h1> : null}
+      <div className={`min-h-0 flex-1 ${title ? 'mt-[24px]' : ''}`}>{children}</div>
     </div>
   );
 }
@@ -143,22 +143,22 @@ function SceneBig({ event, scene }: { event: GameEvent; scene: Scene }) {
   const showTitle = !(scene.channel === 'news' && scene.title);
   return (
     <article className="overflow-hidden rounded-panel bg-sheet shadow-[0_0_0_1px_var(--color-rule)]">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-rule-soft px-10 py-4">
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-rule-soft px-10 py-3">
         <span className="rounded-[6px] bg-ink px-3 py-1 text-[24px] font-semibold text-white">{EVENT_TYPE_LABEL[event.type]}</span>
         <span className="rounded-[6px] border border-rule px-3 py-1 text-[24px] font-semibold text-ink-2">사건 {event.code}</span>
         <span className="ml-auto text-[24px] font-semibold text-ink-3">{channelLabel(scene)}</span>
         {showTitle ? (
-          <h2 className="basis-full text-[44px] font-bold leading-tight">{scene.title ?? event.title}</h2>
+          <h2 className="basis-full text-[42px] font-bold leading-tight">{scene.title ?? event.title}</h2>
         ) : null}
       </header>
-      <div className="px-10 py-8">
+      <div className="px-10 py-5">
         {scene.channel === 'news' ? (
-          <p className="display text-[46px] leading-tight">{scene.title}</p>
+          <p className="display text-[44px] leading-tight">{scene.title}</p>
         ) : null}
-        <p className="mt-2 max-w-[1400px] text-[34px] leading-relaxed">{scene.text}</p>
+        <p className="mt-2 max-w-[1400px] text-[32px] leading-relaxed">{scene.text}</p>
       </div>
       {scene.reveal?.length ? (
-        <section aria-label="이 장면에서 확인된 숫자" className="border-t border-rule bg-mark/40 px-10 py-5">
+        <section aria-label="이 장면에서 확인된 숫자" className="border-t border-rule bg-mark/40 px-10 py-4">
           <div className="flex flex-wrap gap-x-16 gap-y-3">
             {scene.reveal.map((it) => (
               <div key={it.label}>
@@ -191,15 +191,15 @@ function channelLabel(scene: Scene): string {
 /** 읽기 전용 선택지 목록(공개 전) — 데이터 순서 그대로, 모두 같은 생김새. 좋고 나쁨 힌트 없음 */
 function ChoiceListTV({ choices }: { choices: Choice[] }) {
   return (
-    <ul className="grid grid-cols-2 gap-x-8 gap-y-4">
+    <ul className="grid grid-cols-2 gap-x-8 gap-y-3">
       {choices.map((c) => (
         <li
           key={c.id}
-          className="rounded-[10px] bg-sheet px-8 py-5 shadow-[0_0_0_1.5px_var(--color-rule)]"
+          className="rounded-[10px] bg-sheet px-7 py-3.5 shadow-[0_0_0_1.5px_var(--color-rule)]"
         >
           <p className="text-[30px] font-semibold leading-snug">{c.label}</p>
-          {c.detail ? <p className="num mt-1 text-[26px] text-ink-2">{c.detail}</p> : null}
-          <p className="mt-1.5 text-[24px] text-ink-3">{KIND_META[c.kind].label}</p>
+          {c.detail ? <p className="num mt-0.5 text-[26px] text-ink-2">{c.detail}</p> : null}
+          <p className="mt-1 text-[26px] text-ink-3">{KIND_META[c.kind].label}</p>
         </li>
       ))}
     </ul>
@@ -313,10 +313,10 @@ function GuideStage({ index }: { index: number }) {
   );
 }
 
-/** 계좌 6종 통장 표지(안내 3번 카드 TV 버전) */
+/** 계좌 6종 통장 표지(안내 3번 카드 TV 버전) — 1920px 폭에 6권 한 줄로 */
 function AccountShelfTV() {
   return (
-    <ul className="grid grid-cols-3 gap-x-8 gap-y-6">
+    <ul className="grid grid-cols-6 gap-x-6">
       {ACCOUNT_ORDER.map((id) => {
         const a = ACCOUNTS[id];
         return (
@@ -455,11 +455,11 @@ function EventMonthStage({ month, revealed, stats }: { month: number; revealed: 
   if (!revealed) {
     return (
       <StageShell kicker={`${monthLabel(month)} · 사건`} title={event.title}>
-        <div className="grid gap-8">
+        <div className="grid grid-cols-[1.05fr_1fr] items-start gap-x-[60px]">
           {entryScene ? <SceneBig event={event} scene={entryScene} /> : null}
           {entryScene ? (
             <div>
-              <p className="mb-4 text-[30px] font-bold text-ink-2">선택지 — 학생들이 고르는 중이에요</p>
+              <p className="mb-3 text-[28px] font-bold text-ink-2">선택지 — 학생들이 고르는 중이에요</p>
               <ChoiceListTV choices={entryScene.choices} />
             </div>
           ) : null}
