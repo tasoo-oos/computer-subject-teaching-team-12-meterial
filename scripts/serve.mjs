@@ -1,16 +1,16 @@
-// 정적 서버: node scripts/serve.mjs <앱 폴더> <포트>
-// dist를 서비스하고, SPA 라우팅을 위해 없는 경로는 index.html로 돌려준다.
+// 정적 서버: node scripts/serve.mjs [포트=8091]
+// src/dist를 서비스하고, SPA 라우팅을 위해 없는 경로는 index.html로 돌려준다.
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 
-const [app, portArg] = process.argv.slice(2);
-if (!app || !portArg) {
-  console.error('사용법: node scripts/serve.mjs src1 8091');
+const [portArg] = process.argv.slice(2);
+const root = resolve(import.meta.dirname, '..', 'src', 'dist');
+const port = Number(portArg ?? 8091);
+if (!Number.isInteger(port) || port <= 0) {
+  console.error('사용법: node scripts/serve.mjs [포트=8091]');
   process.exit(1);
 }
-const root = resolve(import.meta.dirname, '..', app, 'dist');
-const port = Number(portArg);
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',

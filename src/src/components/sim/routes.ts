@@ -1,4 +1,4 @@
-/** 시안용 이동표: 엔진 대신 그럴듯한 다음 스냅숏으로 */
+/** 스냅숏 이동표: 엔진 대신 그럴듯한 다음 스냅숏으로 */
 export const NEXT_FIXTURE: Record<string, string> = {
   'sim-jan-payday': 'sim-feb-scene',
   'sim-feb-scene': 'sim-feb-outcome',

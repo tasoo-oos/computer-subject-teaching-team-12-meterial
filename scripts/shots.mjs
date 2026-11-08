@@ -1,5 +1,5 @@
-// 시안 스크린숏: node scripts/shots.mjs src1 [--only=id1,id2] [--viewports=laptop,tablet,phone]
-// 결과: shots/<app>/<fixture>--<viewport>.png
+// 앱 스크린숏: node scripts/shots.mjs [--only=id1,id2] [--viewports=laptop,tablet,phone]
+// 결과: shots/<fixture>--<viewport>.png
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
@@ -12,17 +12,17 @@ const VIEWPORTS = {
   phone: { width: 390, height: 844 },
 };
 
-const [app, ...rest] = process.argv.slice(2);
-if (!app || !/^src[1-3]$/.test(app)) {
-  console.error('사용법: node scripts/shots.mjs src1 [--only=id1,id2] [--viewports=laptop,tablet,phone]');
+const rest = process.argv.slice(2);
+if (rest.some((a) => !a.startsWith('--'))) {
+  console.error('사용법: node scripts/shots.mjs [--only=id1,id2] [--viewports=laptop,tablet,phone]');
   process.exit(1);
 }
-const opt = Object.fromEntries(rest.filter((a) => a.startsWith('--')).map((a) => a.slice(2).split('=')));
+const opt = Object.fromEntries(rest.map((a) => a.slice(2).split('=')));
 const viewports = (opt.viewports ?? 'laptop,tablet,phone').split(',');
 const only = opt.only ? opt.only.split(',') : null;
 
-const root = resolve(import.meta.dirname, '..', app);
-const outDir = resolve(import.meta.dirname, '..', 'shots', app);
+const root = resolve(import.meta.dirname, '..', 'src');
+const outDir = resolve(import.meta.dirname, '..', 'shots');
 await mkdir(outDir, { recursive: true });
 
 const { FIXTURES } = await import(resolve(import.meta.dirname, '..', 'packages/core/src/fixtures.ts')).catch(() => ({ FIXTURES: null }));
@@ -30,7 +30,7 @@ const { FIXTURES } = await import(resolve(import.meta.dirname, '..', 'packages/c
 const server = await createServer({
   root,
   configFile: resolve(root, 'vite.config.ts'),
-  server: { port: 5190 + Number(app.slice(3)), strictPort: false },
+  server: { port: 5190, strictPort: false },
   logLevel: 'error',
 });
 await server.listen();

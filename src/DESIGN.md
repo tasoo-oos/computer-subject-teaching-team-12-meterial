@@ -1,8 +1,10 @@
-# src1 디자인 시안: 통장 정리
+# 앱 디자인: 통장 정리
+
+시안 3종 비교에서 채택된 디자인입니다. 비교 기록은 `docs/design-review.md`에 있습니다.
 
 ## 1. 방향과 콘셉트
 
-**통장 정리.** 은행 ATM에 종이 통장을 넣으면 프린터 헤드가 "지이익" 하며 거래 내역을 한 줄씩 찍어 줍니다. 한국 사람이라면 누구나 아는 이 장면이 "내 돈이 어디로 갔는지 눈으로 확인하는 순간"입니다. 이 시안은 화면 전체를 종이 통장의 문법으로 짓습니다. 연한 민트빛 지문(guilloche) 무늬 용지, 괘선 위에 찍힌 날짜·적요·입금·출금·잔액, 표지 색으로 구분되는 여섯 권의 통장, 은행 인주 도장. 게임의 긴장(장면 카드, 선택지, 상태 효과)은 그 통장 옆에서 벌어지는 "사건"으로 둡니다.
+**통장 정리.** 은행 ATM에 종이 통장을 넣으면 프린터 헤드가 "지이익" 하며 거래 내역을 한 줄씩 찍어 줍니다. 한국 사람이라면 누구나 아는 이 장면이 "내 돈이 어디로 갔는지 눈으로 확인하는 순간"입니다. 이 디자인은 화면 전체를 종이 통장의 문법으로 짓습니다. 연한 민트빛 지문(guilloche) 무늬 용지, 괘선 위에 찍힌 날짜·적요·입금·출금·잔액, 표지 색으로 구분되는 여섯 권의 통장, 은행 인주 도장. 게임의 긴장(장면 카드, 선택지, 상태 효과)은 그 통장 옆에서 벌어지는 "사건"으로 둡니다.
 
 대담함은 한 곳에만 씁니다. **월급날 통장에 거래가 한 줄씩 인쇄되는 연출**과, 그 통장을 닮은 1월의 거래 표입니다. 나머지는 금융 앱처럼 조용하고 정확하게 둡니다. 크림색 배경, 둥근 SaaS 카드, 형광 강조색, 대문자 머리표 같은 기본값은 쓰지 않았습니다.
 
@@ -124,11 +126,11 @@
 실행한 명령:
 
 ```
-pnpm --filter @gagyebu/src1 add @fontsource/ibm-plex-sans-kr @fontsource/black-han-sans lucide-react
-pnpm --filter @gagyebu/src1 typecheck
-pnpm --filter @gagyebu/src1 exec vite build
-pnpm shots src1
-pnpm shots src1 --viewports=tabletPortrait
+pnpm --filter @gagyebu/app add @fontsource/ibm-plex-sans-kr @fontsource/black-han-sans lucide-react
+pnpm --filter @gagyebu/app typecheck
+pnpm --filter @gagyebu/app exec vite build
+pnpm shots
+pnpm shots --viewports=tabletPortrait
 ```
 
 스킬 폴더에는 `SKILL.md`와 `LICENSE.md`만 있어 실행할 스크립트는 없었습니다.
@@ -167,14 +169,14 @@ pnpm shots src1 --viewports=tabletPortrait
 
 | 기준 | 결과 |
 | --- | --- |
-| 모든 스냅숏이 laptop·tablet·phone에서 오류 없이 그려짐 | `pnpm shots src1` 27개 스냅숏 × 3 크기, 종료 코드 0 |
+| 모든 스냅숏이 laptop·tablet·phone에서 오류 없이 그려짐 | `pnpm shots` 27개 스냅숏 × 3 크기, 종료 코드 0 |
 | tabletPortrait 보조 확인 | 27개 스냅숏 생성, 시뮬레이션·결과·발표 확인 |
-| typecheck | `pnpm --filter @gagyebu/src1 typecheck` 통과 |
-| build | `pnpm --filter @gagyebu/src1 exec vite build` 통과 |
+| typecheck | `pnpm --filter @gagyebu/app typecheck` 통과 |
+| build | `pnpm --filter @gagyebu/app exec vite build` 통과 |
 | 4장 화면별 요구사항 | 시작 2, 설문 3, 안내 2, 가계부 2, 시뮬레이션 15, 결과 3 스냅숏 모두 구현 |
 | 선택지에 정답 힌트 없음 | `kind` 아이콘·설명만 다르고 색·크기·순서 동일 |
 | 외부 CDN 없음 | 폰트 `@fontsource` 번들, 아이콘 `lucide-react`, 그래프 SVG 직접 |
-| `src1/` 밖 수정 없음 | 모든 변경이 `src1/` 안. `shots/`는 스크립트 산출물 |
+| 시안 단계 범위 | 당시 모든 변경이 `src1/`(지금의 `src/`) 안. `shots/`는 스크립트 산출물 |
 | `DESIGN.md` | 이 문서 |
 
 추가한 패키지: `@fontsource/ibm-plex-sans-kr`, `@fontsource/black-han-sans`, `lucide-react`.

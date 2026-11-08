@@ -1,7 +1,7 @@
 # 모듈 API 명세 (`packages/core`, `packages/draft-kit`)
 
 - 작성일: 2026-10-26
-- 대상: 화면 앱(`src1`~`src3`)과 이후 엔진 구현
+- 대상: 화면 앱(`src`)과 이후 엔진 구현
 - 규칙의 근거: `가계부-시나리오-수업-기획서.md` 4~6장
 
 ## 1. 저장소 구조
@@ -11,7 +11,8 @@
 ├── 가계부-시나리오-수업-기획서.md
 ├── docs/
 │   ├── core-api.md          이 문서
-│   └── design-brief.md      디자인 시안 요구사항
+│   ├── design-brief.md      디자인 시안 요구사항 (비교 단계 기록)
+│   └── design-review.md     시안 비교 기록 (src1 '통장 정리' 채택)
 ├── packages/
 │   ├── core/                화면과 무관한 순수 TypeScript (타입, 데이터, 계산, 엔진, 목업)
 │   │   └── src/
@@ -19,12 +20,11 @@
 │   │       ├── format.ts    금액·날짜 표기
 │   │       ├── selectors.ts 상태 → 화면용 값 계산
 │   │       ├── engine.ts    상태 생성, 추천 가계부, step (미구현)
-│   │       ├── fixtures.ts  디자인 시안용 목업 상태
+│   │       ├── fixtures.ts  목업 스냅숏 상태
 │   │       └── data/        이벤트, 설문, 안내, 계좌, 상태, 도전과제, 엔딩, 프롬프트, 상수
-│   └── draft-kit/           시안 비교용 셸과 네비게이터 (디자인 대상 아님)
-├── src1/ src2/ src3/        화면 앱 (Vite + React + TypeScript + Tailwind CSS v4)
-├── scripts/shots.mjs        스냅숏별 스크린숏
-└── design-skills/           시안별 디자인 스킬 (Git 제외)
+│   └── draft-kit/           스냅숏 네비게이터 셸 (디자인 대상 아님)
+├── src/                     화면 앱 (Vite + React + TypeScript + Tailwind CSS v4)
+└── scripts/                 스크린숏, 단일 HTML 빌드, 정적 서버
 ```
 
 명령
@@ -32,10 +32,10 @@
 | 명령 | 내용 |
 | --- | --- |
 | `pnpm install` | 의존성 설치 |
-| `pnpm dev:1` / `dev:2` / `dev:3` | 시안 개발 서버 (포트 5171, 5172, 5173) |
+| `pnpm dev` | 화면 앱 개발 서버 (Vite 기본 포트 5173) |
 | `pnpm typecheck` | 전체 타입 검사 |
 | `pnpm build` | 전체 빌드 |
-| `pnpm shots src1 [--only=id1,id2] [--viewports=laptop,tablet,tabletPortrait,phone]` | `shots/src1/<스냅숏>--<화면크기>.png` 생성. 페이지 오류가 있으면 종료 코드 2 |
+| `pnpm shots [--only=id1,id2] [--viewports=laptop,tablet,tabletPortrait,phone]` | `shots/<스냅숏>--<화면크기>.png` 생성. 페이지 오류가 있으면 종료 코드 2 |
 
 화면 앱은 `@gagyebu/core`와 `@gagyebu/draft-kit`을 소스 그대로 가져다 씁니다 (별도 빌드 없음). 모든 import는 패키지 루트에서 합니다.
 
@@ -48,7 +48,7 @@ import type { ScreenProps } from '@gagyebu/draft-kit';
 
 ### 2.1 화면 컴포넌트
 
-각 화면 앱은 6개 화면 컴포넌트를 `ScreenMap`으로 넘깁니다. `src*/src/App.tsx`에 이미 연결되어 있습니다.
+각 화면 앱은 6개 화면 컴포넌트를 `ScreenMap`으로 넘깁니다. `src/src/App.tsx`에 이미 연결되어 있습니다.
 
 ```ts
 type ScreenId = 'start' | 'survey' | 'guide' | 'budget' | 'sim' | 'result';
@@ -74,7 +74,7 @@ interface FixtureUi {
 - 네비게이터: 오른쪽 아래 버튼, `` ` `` 키로 열고 닫기, `[` `]` 키로 이전/다음 스냅숏.
 - 스냅숏이 바뀌면 화면 컴포넌트가 새로 마운트됩니다 (`key`가 스냅숏 id).
 
-### 2.2 시안 단계에서 지킬 것
+### 2.2 엔진 연결 전에 지킬 것
 
 - `step()`은 아직 구현되지 않았고 호출하면 예외가 납니다. 화면은 `state`와 `ui`로 그립니다.
 - 입력, 패널 열기, 금액 나누기 같은 화면 안의 상호작용은 컴포넌트 로컬 상태로 흉내 냅니다. 계산은 아래 선택자를 씁니다.
@@ -175,7 +175,7 @@ interface Choice {
 
 ### 4.2 `step(state, action)` (미구현, 이후 단계)
 
-`useReducer(step, initial)`에 그대로 연결하는 순수 함수입니다. 디자인 시안 단계에서는 호출하지 않습니다. 이후 구현할 상태 전이는 다음과 같습니다.
+`useReducer(step, initial)`에 그대로 연결하는 순수 함수입니다. 구현 전까지는 호출하지 않습니다. 이후 구현할 상태 전이는 다음과 같습니다.
 
 ```mermaid
 stateDiagram-v2
@@ -310,4 +310,4 @@ await navigator.clipboard.writeText(text);
 
 ## 8. core에 고칠 점이 보이면
 
-화면 작업 중 데이터나 타입이 부족하면 `packages/core`를 직접 고치지 말고, 각 시안의 `DESIGN.md` "core에 대한 제안" 절에 적습니다. 세 시안이 같은 core를 쓰기 때문입니다.
+화면 작업 중 데이터나 타입이 부족하면 `packages/core`를 직접 고치지 말고, `src/DESIGN.md`의 "core에 대한 제안" 절에 적습니다. 지금까지 모은 제안은 `docs/design-review.md` 4장에 정리되어 있습니다.

@@ -1,5 +1,5 @@
-// 외부 프록시(gagyebuN.taesoo.uk)로 접속할 수 있게 Host 제한을 푼 개발 서버 설정.
-// 각 시안의 vite.config.ts는 건드리지 않고, 이 설정으로만 포트와 Host를 바꾼다.
+// 외부 프록시(gagyebu.taesoo.uk)로 접속할 수 있게 Host 제한을 푼 개발 서버 설정.
+// 앱의 vite.config.ts는 건드리지 않고, 이 설정으로만 포트와 Host를 바꾼다.
 import { defineConfig } from 'vite';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';

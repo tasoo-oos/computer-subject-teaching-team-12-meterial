@@ -1,4 +1,4 @@
-// 디자인 시안용 목업 상태. 엔진(step)이 아직 없으므로 화면은 이 스냅숏으로 그린다.
+// 목업 스냅숏 상태. 엔진(step)이 아직 없으므로 화면은 이 스냅숏으로 그린다.
 // 숫자는 기획서 5장 규칙을 단순화해 계산한 근사값이며, 엔진 구현 후 실제 값과 다를 수 있다.
 import { ACCOUNT_ORDER, EXPENSE_ORDER, TRANSFER_ORDER } from './data/accounts.ts';
 import { ACHIEVEMENT_ORDER } from './data/achievements.ts';

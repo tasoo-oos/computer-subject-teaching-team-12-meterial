@@ -1,5 +1,5 @@
-// 시안 비교용 개발 도구. 시안마다 같은 네비게이터를 써서 화면과 목업 상태를 오간다.
-// 이 파일의 생김새는 디자인 대상이 아니다. 시안 작업에서 고치지 않는다.
+// 스냅숏 네비게이터 개발 도구. 같은 셸로 화면과 목업 상태를 오간다.
+// 이 파일의 생김새는 디자인 대상이 아니다.
 import { useEffect, useMemo, useState, type ComponentType, type CSSProperties } from 'react';
 import { FIXTURES, SCREEN_LABEL, SCREEN_ORDER, type Fixture, type FixtureUi, type GameState, type ScreenId } from '@gagyebu/core';
 

@@ -1,4 +1,4 @@
-// 시뮬레이션 엔진. 디자인 시안 단계에서는 시그니처만 고정하고, step 본체는 구현하지 않는다.
+// 시뮬레이션 엔진. 지금은 시그니처만 고정하고, step 본체는 구현하지 않는다.
 import { ACCOUNT_ORDER, EXPENSE_ORDER } from './data/accounts.ts';
 import { BASE_SALARY, SALARY_ROUND, SALARY_SPREAD, START_CREDIT, START_SATISFACTION } from './data/constants.ts';
 import {
@@ -124,7 +124,7 @@ export function recommendBudget(answers: Partial<Record<QuestionId, string>>, sa
 
 /**
  * 상태 전이. React useReducer에 그대로 연결한다.
- * 규칙은 기획서 5장과 docs/core-api.md를 따른다. 디자인 시안 단계에서는 구현하지 않는다.
+ * 규칙은 기획서 5장과 docs/core-api.md를 따른다. 아직 구현하지 않는다.
  */
 export function step(_state: GameState, action: Action): GameState {
   throw new NotImplementedError(`step(${action.type})`);
