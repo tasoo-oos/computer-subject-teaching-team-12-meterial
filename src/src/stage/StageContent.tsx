@@ -21,9 +21,12 @@ export interface StageContentProps {
   stats: StatsPayload | null;
   /** 발표자의 활동 상태 (spotlight 없으면 null). 통제 소켓은 받지 못하므로 미리보기에서는 null */
   spotlight: unknown;
+  /** 발표자 닉네임 (spotlight 없으면 null). /stage는 spotlightState 페이로드에서,
+   *  통제 미리보기는 roster + classState.spotlight에서 클라이언트가 만든다(§14 #132) */
+  spotlightName: string | null;
 }
 
-export function StageContent({ classState, lesson, beats, stats, spotlight }: StageContentProps) {
+export function StageContent({ classState, lesson, beats, stats, spotlight, spotlightName }: StageContentProps) {
   const cursor = classState.cursor;
   const beat = beats?.[cursor.segment]?.beats[cursor.beat] ?? null;
   const segment = lesson.segments[cursor.segment] ?? null;
@@ -47,6 +50,7 @@ export function StageContent({ classState, lesson, beats, stats, spotlight }: St
         revealed={cursor.revealed}
         stats={beatStats}
         spotlight={spotlight}
+        spotlightName={spotlightName}
         progress={progress}
         code={classState.code}
       />

@@ -25,6 +25,8 @@ export interface StageProps<S, Stats> {
   stats: Stats | null;
   /** 발표자의 상태 (spotlight 없으면 null) */
   spotlight: S | null;
+  /** 발표자 닉네임 (spotlight 없으면 null). 전면 표시용(§5.1, §14 #132) */
+  spotlightName: string | null;
   /** lesson.settings.showProgressOnStage일 때만 null이 아님 */
   progress: ProgressInfo | null;
   /** 수업 코드(숫자 4자리) — 입장 화면의 QR·주소용. 선택적(§14 #121: StageContent가 싣는다) */

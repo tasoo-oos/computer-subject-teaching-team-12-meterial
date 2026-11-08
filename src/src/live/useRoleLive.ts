@@ -33,6 +33,8 @@ export interface UseRoleLiveResult<S = unknown, St = unknown> {
   stats: StatsPayload<St> | null;
   roster: RosterEntry[];
   spotlightState: S | null;
+  /** 발표자 닉네임 (spotlight 없으면 null). spotlightState 페이로드에 실려 온다(§5.1) */
+  spotlightName: string | null;
   /** lessonBeats(lesson, beatsOf) — 타임라인·비트 해석용 */
   beats: { segment: number; beats: Beat[] }[] | null;
   select(code: ClassCode): Promise<CmdAck>;
@@ -55,6 +57,7 @@ export function useRoleLive<S = unknown, St = unknown>(role: 'stage' | 'control'
   const [stats, setStats] = useState<StatsPayload<St> | null>(null);
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [spotlightState, setSpotlightState] = useState<S | null>(null);
+  const [spotlightName, setSpotlightName] = useState<string | null>(null);
 
   const socketRef = useRef<RoleSocket<S, St> | null>(null);
   const versionRef = useRef(-1);
@@ -73,7 +76,10 @@ export function useRoleLive<S = unknown, St = unknown>(role: 'stage' | 'control'
       setLesson(p.lesson);
       setClasses(p.classes);
       if (p.roster) setRoster(p.roster);
-      if (p.spotlightState !== undefined) setSpotlightState((p.spotlightState ?? null) as S | null);
+      if (p.spotlightState !== undefined) {
+        setSpotlightState((p.spotlightState.state ?? null) as S | null);
+        setSpotlightName(p.spotlightState.nickname ?? null);
+      }
       setStatus('open');
     });
     socket.on('class', (p) => {
@@ -88,7 +94,10 @@ export function useRoleLive<S = unknown, St = unknown>(role: 'stage' | 'control'
       setClasses(p.classes);
       setStatus((prev) => (prev === 'connecting' ? 'open' : prev));
     });
-    socket.on('spotlightState', (p: SpotlightStatePayload<S>) => setSpotlightState((p.state ?? null) as S | null));
+    socket.on('spotlightState', (p: SpotlightStatePayload<S>) => {
+      setSpotlightState((p.state ?? null) as S | null);
+      setSpotlightName(p.nickname ?? null);
+    });
     socket.on('disconnect', () => {
       // snapshot을 한 번도 안 받았는데 끊기면 쿠키 거부(§14 S2-#66)일 가능성이 크다 — 로그인 화면 유도
       setStatus(gotSnapshotRef.current ? 'reconnecting' : 'unauthorized');
@@ -137,6 +146,7 @@ export function useRoleLive<S = unknown, St = unknown>(role: 'stage' | 'control'
     stats,
     roster,
     spotlightState,
+    spotlightName,
     beats,
     select,
     next,

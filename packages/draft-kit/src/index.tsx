@@ -3,19 +3,10 @@
 // ScreenProps는 docs/live-api.md §10.8, DraftShell는 §10.9 계약을 따른다.
 import { useEffect, useMemo, useState, type ComponentType, type CSSProperties, type ReactElement } from 'react';
 import { FIXTURES, SCREEN_LABEL, SCREEN_ORDER, type Action, type FixtureUi, type GameState, type ScreenId } from '@gagyebu/core';
+import type { Beat } from '@gagyebu/live';
 
-/**
- * 비트 (docs/live-api.md §4.1 Beat와 구조가 같다).
- * draft-kit은 @gagyebu/live를 의존하지 않는다(package.json은 S0 소유라 여기서 못 더한다).
- * 구조 타이핑으로 live의 Beat와 상호 할당 가능하므로 계약 모양은 그대로다.
- */
-export interface Beat {
-  id: string;
-  label: string;
-  mode: 'show' | 'work';
-  reveal?: boolean;
-  notes?: string;
-}
+/** 비트 — @gagyebu/live의 Beat를 그대로 쓴다(§14 #133). 과거 로컬 구조 타입은 대체됐다. */
+export type { Beat };
 
 /** 기존 화면의 새 계약 (docs/live-api.md §10.8). 라이브·solo·dev 같은 화면 자산으로 그린다 */
 export interface ScreenProps {

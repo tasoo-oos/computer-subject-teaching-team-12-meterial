@@ -197,6 +197,72 @@ describe('역할 소켓 (§5.2)', () => {
   });
 });
 
+describe('join 거부 이유가 소켓 계층까지 그대로 전달된다 (§5.1, §14 #130)', () => {
+  it('빈 값·공백만·10자 초과 닉네임은 invalid-nickname ack, 올바른 닉네임은 입장된다', async () => {
+    const opened = await server.openClass(testLesson.id);
+    if (!opened.ok) throw new Error('openClass 실패');
+    // join은 소켓당 5초에 1회(§5.4) — 시도마다 새 소켓으로 hello+join 한다
+    const tryJoin = async (nickname: string) => {
+      const s = connect(url);
+      sockets.push(s);
+      await emitAck(s, 'hello', { code: opened.code, device: 'laptop' });
+      return emitAck<{ ok: boolean; reason?: string; studentId?: string }>(s, 'join', { nickname });
+    };
+    expect(await tryJoin('')).toEqual({ ok: false, reason: 'invalid-nickname' });
+    expect(await tryJoin('   ')).toEqual({ ok: false, reason: 'invalid-nickname' });
+    expect(await tryJoin('열한글자이상닉네임입니다')).toEqual({ ok: false, reason: 'invalid-nickname' }); // 12자
+    const ok = await tryJoin('하늘');
+    expect(ok.ok).toBe(true);
+  });
+});
+
+describe('발표자 닉네임 방송 (§5.1, §14 #132)', () => {
+  it('spotlight 지정·해제마다 :stage에 nickname이 실린다. 스냅숏에도 들어 있다', async () => {
+    const opened = await server.openClass(testLesson.id);
+    if (!opened.ok) throw new Error('openClass 실패');
+    const { id } = await joinStudent(opened.code, '하늘');
+    const stageCookie = await loginStage(url);
+    const stage = connect(url, { query: { role: 'stage' }, extraHeaders: { Cookie: stageCookie } });
+    sockets.push(stage);
+    await onceEvent(stage, 'snapshot');
+
+    const room = server.rooms.get(opened.code)!;
+    const evP = onceEvent<{ state: unknown; nickname: string | null }>(stage, 'spotlightState');
+    expect(await room.spotlightCmd(id)).toEqual({ ok: true });
+    const ev = await evP;
+    expect(ev.nickname).toBe('하늘'); // 커서가 슬라이드여도 닉네임은 실린다(상태는 null)
+
+    const clearP = onceEvent<{ state: unknown; nickname: string | null }>(stage, 'spotlightState');
+    await room.spotlightCmd(null);
+    expect((await clearP).nickname).toBeNull();
+
+    // 다시 지정한 뒤 새로 연결하는 전면 소켓의 snapshot에도 닉네임이 있다(재연결 복원)
+    await room.spotlightCmd(id);
+    const stage2 = connect(url, { query: { role: 'stage' }, extraHeaders: { Cookie: stageCookie } });
+    sockets.push(stage2);
+    const snap = await onceEvent<{ spotlightState: { state: unknown; nickname: string | null } }>(stage2, 'snapshot');
+    expect(snap.spotlightState.nickname).toBe('하늘');
+  });
+
+  it('발표자 이름 변경(rename) 시 :stage의 닉네임도 따라간다', async () => {
+    const opened = await server.openClass(testLesson.id);
+    if (!opened.ok) throw new Error('openClass 실패');
+    const { id } = await joinStudent(opened.code, '하늘');
+    const stageCookie = await loginStage(url);
+    const stage = connect(url, { query: { role: 'stage' }, extraHeaders: { Cookie: stageCookie } });
+    sockets.push(stage);
+    await onceEvent(stage, 'snapshot');
+
+    const room = server.rooms.get(opened.code)!;
+    const setP = onceEvent(stage, 'spotlightState');
+    await room.spotlightCmd(id);
+    await setP; // 지정 이벤트를 먼저 소비한다
+    const evP = onceEvent<{ nickname: string | null }>(stage, 'spotlightState');
+    expect(await room.studentOp({ op: 'rename', id, nickname: '구름' })).toEqual({ ok: true });
+    expect((await evP).nickname).toBe('구름');
+  });
+});
+
 describe('활동 예외로도 서버 생존 (§4.2, §14)', () => {
   it('init이 던지는 활동: join은 되고(degraded) act는 server-error, next도 계속된다', async () => {
     const opened = await server.openClass(throwingLesson.id);

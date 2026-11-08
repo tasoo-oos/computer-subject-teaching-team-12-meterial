@@ -97,6 +97,8 @@ export interface RosterEntry {
   device: 'laptop' | 'tablet' | 'phone';
   /** 활동이 주는 "지금 있는 장면" 짧은 문구 (미완료 명단용). 없으면 null */
   scene: string | null;
+  /** 기본값 루프 50회 초과로 멈춘 학생(§4.2). 이후 비트에서 done이 되면 다시 false */
+  stalled: boolean;
   /** 기록 이어받기 승인 대기 중인 새 접속 */
   pendingMerge: boolean;
 }

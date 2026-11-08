@@ -27,6 +27,8 @@ export interface FakeConfig {
   confirmForce?: boolean;
   /** true면 fallback이 상태를 진전시키지 않는다(50회 가드 → stalled 검증) */
   stuck?: boolean;
+  /** true면 fallback notice로 ''을 반환한다(빈 안내 무시 검증, §14 #134) */
+  emptyNotice?: boolean;
 }
 
 /** 비트: 0 join(work) · 1 setup(work) · 2 mid(work+reveal) · 3 show(show) · 4 final(work) */
@@ -73,6 +75,7 @@ export const fakeLogic: ActivityLogic<FakeConfig, FakeState, FakeAction, FakeSta
   },
   fallback: (s, beat, cfg): FallbackResult<FakeAction> => {
     if (cfg.stuck) return { action: { type: 'add', n: 0 }, notice: '멈춤' }; // 진전 없음 → 50회 가드
+    if (cfg.emptyNotice) return { action: { type: 'add', n: 1 }, notice: '' }; // 순차 처리 걸음 — 안내 없음
     void s;
     void beat;
     return { action: { type: 'add', n: 1 }, notice: `자동 +1 (비트 ${beat})` };
@@ -172,6 +175,17 @@ export const stuckLesson: Lesson = {
   segments: [
     { kind: 'slides', id: 'intro', deck: introDeck },
     { kind: 'activity', id: 'game', activity: 'fake', config: { confirmForce: true, stuck: true } },
+    { kind: 'slides', id: 'outro', deck: outroDeck },
+  ],
+};
+
+/** 빈 안내 fallback: notice가 ''인 걸음 — 큐에 쌓이지 않는다(§14 #134) */
+export const quietLesson: Lesson = {
+  ...testLesson,
+  id: 'test-quiet',
+  segments: [
+    { kind: 'slides', id: 'intro', deck: introDeck },
+    { kind: 'activity', id: 'game', activity: 'fake', config: { confirmForce: true, emptyNotice: true } },
     { kind: 'slides', id: 'outro', deck: outroDeck },
   ],
 };

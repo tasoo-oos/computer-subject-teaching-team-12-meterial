@@ -198,6 +198,8 @@ export function useLive<S = unknown, A = unknown, D = unknown>(code: string): Us
           } else if (ack.reason === 'join-locked') {
             setStatus('join-locked');
           }
+          // 'invalid-nickname': 잘못된 닉네임 거부(§5.1). status는 'open'을 유지해
+          // 닉네임 양식이 그대로 있게 하고, 페이지가 ack 이유로 안내문을 보여 준다(§14 #130).
           resolve(ack);
         });
       }),

@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import type { Action, GameState } from '@gagyebu/core';
 import type { GagyebuDraft } from '@gagyebu/activity-gagyebu';
+import type { AutoAppliedNotice } from '@gagyebu/live';
 import { ACTIVITY_VIEWS } from '../activities/registry.ts';
 import { SlideCanvas, slideOfBeat } from '../activities/slides/SlideCanvas.tsx';
 import { ReconnectBanner } from './banner.tsx';
@@ -26,11 +27,19 @@ export function StudentPage({ code }: { code: string }) {
   const [joinError, setJoinError] = useState<string | null>(null);
   const [pending, setPending] = useState<{ nickname: string; pendingId: string } | null>(null);
   const [kickedDismissed, setKickedDismissed] = useState(false);
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
 
   // 다시 입장해 정상 흐름에 들어오면 "다시 입장하기" 확인 상태를 되돌린다
   useEffect(() => {
     if (live.you) setKickedDismissed(false);
   }, [live.you]);
+
+  // 자동 처리 안내 개수가 바뀌면(새 알림 도착) 닫기 상태를 되돌린다.
+  // 커서 비트가 바뀌면 서버 큐가 비워지므로 카드도 사라진다(§10.2, §14 #134).
+  const noticeCount = live.autoApplied.filter((n) => n.message).length;
+  useEffect(() => {
+    setNoticeDismissed(false);
+  }, [noticeCount]);
 
   const tryJoin = async (nickname: string) => {
     setJoinError(null);
@@ -42,11 +51,14 @@ export function StudentPage({ code }: { code: string }) {
     if (ack.reason === 'nickname-taken') {
       // 기록 이어받기 대기(§5.8). "선생님 승인을 기다리는 중" 화면 or 다른 닉네임으로 다시 join
       setPending({ nickname, pendingId: ack.pendingId });
+    } else if (ack.reason === 'invalid-nickname') {
+      // 잘못된 닉네임(빈 값·공백만·10자 초과) — 전용 이유로 구분된다(§14 #130)
+      setJoinError('닉네임은 1~10자로 입력해 주세요');
     } else if (ack.reason === 'class-full') {
       setJoinError('수업이 꽉 찼어요. 선생님에게 말씀드려 주세요.');
     }
-    // 'join-locked': 입장 마감과 잘못된 닉네임(§14 S2-#77)을 구분할 수 없어
-    // 훅이 status를 'join-locked'로 바꾸면 닉네임 양식 안에 일반 안내문을 보여 준다
+    // 'join-locked': 실제로 입장이 잠긴 수업. 훅이 status를 'join-locked'로 바꾸면
+    // 닉네임 양식 안에 입장 마감 안내문을 보여 준다(§14 #86).
   };
 
   if (live.status === 'connecting') return <ConnectingScreen />;
@@ -64,7 +76,7 @@ export function StudentPage({ code }: { code: string }) {
     return (
       <NicknameForm
         onSubmit={tryJoin}
-        error={joinError ?? (live.status === 'join-locked' ? '지금은 입장할 수 없어요. 입장이 마감되었을 수 있어요. 닉네임(1~10자)을 확인하고 다시 시도해 주세요.' : null)}
+        error={joinError ?? (live.status === 'join-locked' ? '지금은 입장할 수 없어요. 입장이 마감되었을 수 있어요. 선생님에게 확인해 주세요.' : null)}
       />
     );
   }
@@ -72,21 +84,14 @@ export function StudentPage({ code }: { code: string }) {
   const cls = live.classState;
   const seg = cls && live.lesson ? live.lesson.segments[cls.cursor.segment] : undefined;
   const beat = live.beat;
+  // 빈 안내 문구('' — 순차 처리 걸음)는 화면에 세지 않는다(§14 #134)
+  const notices = live.autoApplied.filter((n) => n.message);
 
   return (
     <>
       <ReconnectBanner show={live.status === 'reconnecting'} />
-      {live.autoApplied.length > 0 ? (
-        <div className="fixed inset-x-0 top-0 z-40 grid justify-center gap-2 px-4 pt-14 sm:justify-end sm:pr-4" role="status">
-          {live.autoApplied.map((n, i) => (
-            <p
-              key={`${n.beatId}-${i}`}
-              className="sheet-in max-w-[24rem] rounded-[10px] bg-mark px-4 py-3 text-[14px] leading-relaxed font-medium shadow-[0_8px_24px_-12px_rgba(24,38,74,.5)]"
-            >
-              {n.message}
-            </p>
-          ))}
-        </div>
+      {!noticeDismissed && notices.length > 0 ? (
+        <AutoAppliedCard notices={notices} onClose={() => setNoticeDismissed(true)} />
       ) : null}
       {seg?.kind === 'slides' && beat ? (
         <SlideCanvas deckId={seg.deck.id} {...slideOfBeat(beat.id)} />
@@ -113,6 +118,32 @@ export function StudentPage({ code }: { code: string }) {
         <ConnectingScreen />
       )}
     </>
+  );
+}
+
+/** 자동 처리 안내 카드 (§14 #134): 알림을 하나로 묶어 정상 흐름 맨 위에 보여 준다(오버레이 아님).
+ *  중립 표시(경고색 없음). 닫기 버튼으로 지울 수 있고, 커서 비트가 바뀌면 서버 큐가 비워져 사라진다. */
+function AutoAppliedCard({ notices, onClose }: { notices: AutoAppliedNotice[]; onClose: () => void }) {
+  return (
+    <section aria-label="자동으로 처리된 내용" className="mx-auto w-full max-w-[36rem] px-4 pt-3">
+      <div className="rounded-[10px] bg-sheet px-4 py-3 shadow-[0_0_0_1px_var(--color-rule)]">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-[13px] font-bold text-ink-2">자동으로 처리된 내용</p>
+          <button
+            type="button"
+            className="text-[12px] font-semibold text-in underline underline-offset-2"
+            onClick={onClose}
+          >
+            닫기
+          </button>
+        </div>
+        <ul className="mt-1.5 list-disc pl-4 text-[13px] leading-relaxed text-ink-2">
+          {notices.map((n, i) => (
+            <li key={`${n.beatId}-${i}`}>{n.message}</li>
+          ))}
+        </ul>
+      </div>
+    </section>
   );
 }
 
