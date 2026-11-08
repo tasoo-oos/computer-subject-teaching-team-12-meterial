@@ -1,6 +1,7 @@
 import { Lock } from 'lucide-react';
 import { choiceAvailability, type Choice, type GameState } from '@gagyebu/core';
 import { KIND_META } from './kinds.ts';
+import { useActBusy } from '../../lib/actBusy.tsx';
 
 interface ChoiceListProps {
   state: GameState;
@@ -11,6 +12,7 @@ interface ChoiceListProps {
 }
 
 export function ChoiceList({ state, choices, onChoose, activeId }: ChoiceListProps) {
+  const busy = useActBusy();
   return (
     <div>
       <h3 className="mt-0 mb-2 text-[15px] font-bold text-ink-2">어떻게 할까요?</h3>
@@ -24,7 +26,7 @@ export function ChoiceList({ state, choices, onChoose, activeId }: ChoiceListPro
             <li key={c.id} className="flex">
               <button
                 type="button"
-                disabled={!enabled}
+                disabled={!enabled || busy}
                 aria-pressed={active}
                 onClick={() => onChoose(c)}
                 className={`flex w-full gap-2.5 rounded-[8px] px-3 py-2.5 text-left transition-colors ${

@@ -2,6 +2,11 @@
 // 서버 레지스트리(server/src/activities.ts)의 id 집합과 ACTIVITY_VIEWS의 id 집합이 같아야 한다.
 import type { ComponentType } from 'react';
 import type { Beat, ProgressInfo, RosterEntry } from '@gagyebu/live';
+import type { Action, GameState } from '@gagyebu/core';
+import type { GagyebuStats } from '@gagyebu/activity-gagyebu';
+import { Audience } from './gagyebu/Audience.tsx';
+import { ControlPanel } from './gagyebu/ControlPanel.tsx';
+import { Stage } from './gagyebu/Stage.tsx';
 
 export interface AudienceProps<S, A> {
   state: S;
@@ -37,6 +42,14 @@ export interface ActivityViews<S, A, Stats> {
   ControlPanel?: ComponentType<ControlPanelProps<S, Stats>>;
 }
 
-/** activity id → 화면. 서버 레지스트리(server/src/activities.ts)의 id 집합과 같아야 한다.
- *  S5가 가계부 화면을 여기에 등록한다. */
-export const ACTIVITY_VIEWS: Record<string, ActivityViews<unknown, unknown, unknown>> = {};
+/** 앱 타입으로 좁힌 가계부 화면 묶음. Audience는 상태가 없는(degraded) 학생을 위해 S를 GameState | null로 넓힌다(§14 #110). */
+const gagyebuViews: ActivityViews<GameState | null, Action, GagyebuStats> = {
+  Audience,
+  Stage: Stage as unknown as ComponentType<StageProps<GameState | null, GagyebuStats>>,
+  ControlPanel: ControlPanel as unknown as ComponentType<ControlPanelProps<GameState | null, GagyebuStats>>,
+};
+
+/** activity id → 화면. 서버 레지스트리(server/src/activities.ts)의 id 집합과 같아야 한다. */
+export const ACTIVITY_VIEWS: Record<string, ActivityViews<unknown, unknown, unknown>> = {
+  gagyebu: gagyebuViews as unknown as ActivityViews<unknown, unknown, unknown>,
+};

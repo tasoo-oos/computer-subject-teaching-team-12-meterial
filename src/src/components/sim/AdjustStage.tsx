@@ -3,9 +3,21 @@ import { CircleAlert } from 'lucide-react';
 import { isBudgetValid, type Budget, type GameState } from '@gagyebu/core';
 import { BudgetEditor } from '../BudgetEditor.tsx';
 import { InlineTotals } from '../BudgetTotals.tsx';
+import { useActBusy } from '../../lib/actBusy.tsx';
 
-/** 이벤트 때문에 달라진 가계부를 다시 맞추는 단계 */
-export function AdjustStage({ state, onNext }: { state: GameState; onNext: () => void }) {
+/** 이벤트 때문에 달라진 가계부를 다시 맞추는 단계.
+ *  onNext(budget): 편집한 안을 그대로 넘긴다(라이브·solo는 setBudget 行動, dev는 이동표만). */
+export function AdjustStage({
+  state,
+  onNext,
+  onDraft,
+}: {
+  state: GameState;
+  onNext: (budget: Budget) => void;
+  /** 편집 중인 안을 초안으로 실어 보낸다(라이브: 자동 처리 대비. dev·solo는 no-op) */
+  onDraft?: (data: unknown) => void;
+}) {
+  const busy = useActBusy();
   const [budget, setBudget] = useState<Budget>(state.budget);
   const reason = state.lastOutcome?.budgetReason ?? '가계부를 다시 맞춰 주세요.';
   const valid = isBudgetValid(budget, state.profile.salary);
@@ -15,6 +27,10 @@ export function AdjustStage({ state, onNext }: { state: GameState; onNext: () =>
     const won = Math.round(d.amount / 10_000);
     marks[d.key] = won > 0 ? `+${won}만` : `${won}만`;
   }
+  const change = (b: Budget) => {
+    setBudget(b);
+    onDraft?.({ kind: 'budget', budget: b });
+  };
   return (
     <div className="grid gap-4">
       <section className="rounded-panel bg-sheet p-4 shadow-[0_0_0_1px_var(--color-rule)] sm:p-5" aria-labelledby="adjust-title">
@@ -32,17 +48,17 @@ export function AdjustStage({ state, onNext }: { state: GameState; onNext: () =>
 
       <InlineTotals budget={budget} salary={state.profile.salary}>
         <span className="text-[12px] text-ink-2">맞추고 나면 다음 달부터 적용됩니다.</span>
-        <button type="button" disabled={!valid} onClick={onNext} className="btn btn-primary px-5">
+        <button type="button" disabled={!valid || busy} onClick={() => onNext(budget)} className="btn btn-primary px-5">
           조정 완료
         </button>
       </InlineTotals>
 
       <div className="rounded-panel bg-sheet p-4 shadow-[0_0_0_1px_var(--color-rule)] sm:p-5">
-        <BudgetEditor budget={budget} onChange={setBudget} marks={marks} layout="split" />
+        <BudgetEditor budget={budget} onChange={change} marks={marks} layout="split" />
       </div>
 
       <div className="flex items-center justify-end gap-3">
-        <button type="button" disabled={!valid} onClick={onNext} className="btn btn-primary px-6">
+        <button type="button" disabled={!valid || busy} onClick={() => onNext(budget)} className="btn btn-primary px-6">
           조정 완료, 이번 달 마치기
         </button>
       </div>

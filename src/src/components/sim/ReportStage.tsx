@@ -3,9 +3,11 @@ import { ACCOUNTS, ACCOUNT_ORDER, formatMan, monthLabel, netWorth, type GameStat
 import { Money } from '../Money.tsx';
 import { monthDeltas } from '../../lib/month.ts';
 import { Spine } from '../Spine.tsx';
+import { useActBusy } from '../../lib/actBusy.tsx';
 
-/** 이벤트 없는 달의 월말 리포트 */
-export function ReportStage({ state, onNext }: { state: GameState; onNext: () => void }) {
+/** 이벤트 없는 달의 월말 리포트. onNext가 없으면 읽기 전용(라이브 대기 화면) */
+export function ReportStage({ state, onNext }: { state: GameState; onNext?: () => void }) {
+  const busy = useActBusy();
   const p = state.payday;
   const prev = state.history.at(-1)?.netWorth ?? 0;
   const now = netWorth(state);
@@ -74,9 +76,11 @@ export function ReportStage({ state, onNext }: { state: GameState; onNext: () =>
       </section>
       <div className="flex items-center justify-between gap-3">
         <p className="text-[12px] text-ink-3">금리와 수익률은 수업을 위한 가정값입니다.</p>
-        <button type="button" onClick={onNext} className="btn btn-primary px-6">
-          다음 달로
-        </button>
+        {onNext ? (
+          <button type="button" onClick={onNext} disabled={busy} className="btn btn-primary px-6">
+            다음 달로
+          </button>
+        ) : null}
       </div>
     </div>
   );

@@ -6,26 +6,41 @@ import {
   formatWon,
   fundingOptions,
   resolveAmount,
+  type AccountId,
+  type CardMonths,
   type Choice,
   type FundingSource,
   type GameState,
+  type PaymentPlan,
   type Won,
 } from '@gagyebu/core';
 import { cardPlan, sourceLabel } from '../../lib/accounts.ts';
+import { useActBusy } from '../../lib/actBusy.tsx';
 import { Stepper } from '../Stepper.tsx';
 import { Money } from '../Money.tsx';
+
+/** 지불·입금 패널 확정 결과 — choose 行動에 실을 값들 (docs/core-api.md §4.2) */
+export interface ChoiceConfirm {
+  /** 계좌 나눠 내기 계획(fixedPay는 없음) */
+  payment?: PaymentPlan;
+  /** 입금 계좌 */
+  depositTo?: AccountId;
+  /** adjustable 선택지의 금액 */
+  amount?: Won;
+}
 
 interface PayPanelProps {
   state: GameState;
   choice: Choice;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (confirm: ChoiceConfirm) => void;
   /** 확인 버튼 문구 */
   confirmLabel?: string;
 }
 
 /** 지불 패널: 계좌별로 나눠 내고, 카드는 일시불·할부를 고른다 */
 export function PayPanel({ state, choice, onClose, onConfirm, confirmLabel }: PayPanelProps) {
+  const busy = useActBusy();
   const pay = choice.pay ?? choice.fixedPay;
   if (!pay) return null;
   const adjustable = 'adjustable' in pay ? pay.adjustable : undefined;
@@ -42,7 +57,17 @@ export function PayPanel({ state, choice, onClose, onConfirm, confirmLabel }: Pa
   const plan = cardAmount > 0 ? cardPlan(cardAmount, cardMonths, 'interestFree' in pay ? !!pay.interestFree : false) : null;
 
   const setPart = (source: FundingSource, v: Won) => setParts((p) => ({ ...p, [source]: v }));
-  const confirm = () => onConfirm();
+  // 확정: 계좌별 부분 + 카드를 PaymentPlan으로 엮어 올린다(라이브 서버 검증·엔진이 같은 모양을 쓴다)
+  const confirm = () =>
+    onConfirm({
+      payment: {
+        parts: Object.entries(parts)
+          .filter(([source, v]) => source !== 'card' && (v ?? 0) > 0)
+          .map(([source, v]) => ({ source: source as AccountId, amount: v as Won })),
+        ...(cardAmount > 0 ? { card: { amount: cardAmount, months: cardMonths as CardMonths } } : {}),
+      },
+      ...(adjustable ? { amount } : {}),
+    });
 
   if (fixed) {
     const fp = choice.fixedPay!;
@@ -95,7 +120,7 @@ export function PayPanel({ state, choice, onClose, onConfirm, confirmLabel }: Pa
           <button type="button" onClick={onClose} className="btn btn-quiet">
             다시 고르기
           </button>
-          <button type="button" onClick={confirm} className="btn btn-primary px-5">
+          <button type="button" onClick={() => onConfirm({})} disabled={busy} className="btn btn-primary px-5">
             {confirmLabel ?? '이 방식으로 확정'}
           </button>
         </div>
@@ -215,7 +240,7 @@ export function PayPanel({ state, choice, onClose, onConfirm, confirmLabel }: Pa
         </dl>
         <button
           type="button"
-          disabled={remaining !== 0}
+          disabled={remaining !== 0 || busy}
           onClick={confirm}
           className="btn btn-primary w-full px-5 sm:w-auto"
           title={remaining !== 0 ? '합계가 맞아야 확정할 수 있어요' : undefined}
@@ -237,8 +262,9 @@ export function DepositPanel({
   state: GameState;
   choice: Choice;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (confirm: ChoiceConfirm) => void;
 }) {
+  const busy = useActBusy();
   const spec = choice.deposit!;
   const amount = resolveAmount(state, spec.amount);
   const [target, setTarget] = useState(spec.targets[0]);
@@ -297,7 +323,7 @@ export function DepositPanel({
         <button type="button" onClick={onClose} className="btn btn-quiet">
           다시 고르기
         </button>
-        <button type="button" onClick={onConfirm} disabled={!target} className="btn btn-primary px-5">
+        <button type="button" onClick={() => onConfirm({ depositTo: target })} disabled={!target || busy} className="btn btn-primary px-5">
           이 통장에 넣기
         </button>
       </footer>
