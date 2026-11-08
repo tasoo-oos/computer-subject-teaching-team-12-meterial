@@ -12,7 +12,8 @@
     "react": "^19.3.1"
   },
   "dependencies": {
-    "@gagyebu/core": "workspace:*"
+    "@gagyebu/core": "workspace:*",
+    "@gagyebu/live": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
