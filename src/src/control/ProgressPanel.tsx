@@ -20,7 +20,7 @@ export function ProgressPanel({ progress, fallbackPreview, roster }: ProgressPan
       <p className="border-b border-rule-soft px-3 py-2 text-[12px] font-bold text-ink-2">완료 현황 (현재 단계 기준)</p>
       <div className="px-3 py-2.5">
         {progress ? (
-          <p className="num flex items-baseline justify-center gap-1.5 text-[26px] font-bold leading-none">
+          <p className="num flex items-baseline justify-center gap-1.5 text-[26px] font-bold leading-none" data-testid="progress-num">
             <span className="text-in">{progress.done}</span>
             <span className="text-[15px] font-semibold text-ink-3">
               / {progress.connected} 접속 · {progress.total}명
