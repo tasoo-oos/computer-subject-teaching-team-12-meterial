@@ -1,6 +1,7 @@
 // TV 미리보기 (docs/live-api.md §10.6 "TV 미리보기"). /stage가 지금 그리는 화면을
 // 같은 컴포넌트(StageContent)로 1920×1080 논리 캔버스에 그린 뒤 통제 화면 폭에 맞춰 축소한다.
 // 주의: spotlightState는 :stage 룸에만 방송되므로(§5.2) 통제 미리보기의 발표자 상태는 항상 null이다.
+// 발표자 닉네임만 roster + classState.spotlight에서 클라이언트가 만들어 넘긴다(§14 #132).
 // 발표 화면의 최종 확인은 실제 /stage 탭에서 해야 한다(§14 S6 결정).
 import type { Beat, ClassState, Lesson, StatsPayload } from '@gagyebu/live';
 import { AutoStageThumb } from '../stage/ScaledSurface.tsx';
@@ -11,9 +12,11 @@ export interface TVPreviewProps {
   lesson: Lesson;
   beats: { segment: number; beats: Beat[] }[] | null;
   stats: StatsPayload | null;
+  /** 발표자 닉네임 — 통제 화면에서 roster + classState.spotlight로 만든 값 */
+  spotlightName: string | null;
 }
 
-export function TVPreview({ classState, lesson, beats, stats }: TVPreviewProps) {
+export function TVPreview({ classState, lesson, beats, stats, spotlightName }: TVPreviewProps) {
   return (
     <section className="rounded-panel bg-sheet p-2.5 shadow-[0_0_0_1px_var(--color-rule)]">
       <p className="mb-2 flex items-baseline justify-between px-0.5">
@@ -27,7 +30,14 @@ export function TVPreview({ classState, lesson, beats, stats }: TVPreviewProps) 
         </button>
       </p>
       <AutoStageThumb>
-        <StageContent classState={classState} lesson={lesson} beats={beats} stats={stats} spotlight={null} />
+        <StageContent
+          classState={classState}
+          lesson={lesson}
+          beats={beats}
+          stats={stats}
+          spotlight={null}
+          spotlightName={spotlightName}
+        />
       </AutoStageThumb>
     </section>
   );

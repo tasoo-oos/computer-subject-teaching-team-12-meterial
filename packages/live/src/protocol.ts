@@ -107,7 +107,8 @@ export interface SnapshotPayload<S = unknown> {
   state?: S | null;
   autoApplied?: AutoAppliedNotice[]; // 학생만
   roster?: RosterEntry[]; // 통제만
-  spotlightState?: S | null; // 전면만
+  /** 전면만. 발표자 상태와 닉네임(§5.1 SpotlightStatePayload) */
+  spotlightState?: SpotlightStatePayload<S>;
 }
 
 export interface ClassPayload {
@@ -144,6 +145,8 @@ export interface RosterPayload {
 
 export interface SpotlightStatePayload<S = unknown> {
   state: S | null;
+  /** 발표자 닉네임 (spotlight 없으면 null). 전면 화면 표시용 — 로스터는 전면에 안 간다(§5.2) */
+  nickname: string | null;
 }
 
 export interface ClassesPayload {

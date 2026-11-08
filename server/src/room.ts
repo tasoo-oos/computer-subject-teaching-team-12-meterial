@@ -16,6 +16,7 @@ import type {
   ProgressInfo,
   RosterEntry,
   SnapshotPayload,
+  SpotlightStatePayload,
   StatePayload,
   StatsPayload,
   ActAck,
@@ -525,7 +526,7 @@ export class Room {
       class: this.classState(),
       lesson: this.strippedLesson(),
       classes: this.hooks.getClasses(),
-      spotlightState: this.spotlightState(),
+      spotlightState: this.spotlightPayload(),
     };
   }
 
@@ -548,8 +549,18 @@ export class Room {
     return rec.states[seg.id] ?? null;
   }
 
+  /** 발표자 닉네임(§5.1). 전면은 roster를 받지 않으므로(§5.2) 페이로드에 직접 싣는다 */
+  private spotlightNickname(): string | null {
+    if (this.spotlight === null) return null;
+    return this.students.get(this.spotlight)?.nickname ?? null;
+  }
+
+  private spotlightPayload(): SpotlightStatePayload {
+    return { state: this.spotlightState(), nickname: this.spotlightNickname() };
+  }
+
   private emitSpotlightState(): void {
-    this.io?.to(this.stageRoomName()).emit('spotlightState', { state: this.spotlightState() });
+    this.io?.to(this.stageRoomName()).emit('spotlightState', this.spotlightPayload());
   }
 
   private takeAutoApplied(rec: StudentRecord): AutoAppliedNotice[] {
@@ -1063,6 +1074,8 @@ export class Room {
     this.byNickname.set(nickname, rec);
     this.log.append({ t: 'admin', ts: this.now(), op: { kind: 'rename', id, nickname } });
     this.rosterDirty();
+    // 발표자 이름이 바뀌면 전면 표시(닉네임)도 따라간다(§5.1 spotlightState)
+    if (this.spotlight === id) this.emitSpotlightState();
     return { ok: true };
   }
 
