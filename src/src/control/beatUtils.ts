@@ -1,5 +1,5 @@
 // 비트 주소 비교·평탄화 유틸 (통제 타임라인·NextBar 판정용).
-import type { Beat, BeatRef, Cursor } from "@gagyebu/live";
+import type { Beat, BeatRef, Cursor } from '@gagyebu/live';
 
 /** 비트 주소 순서 비교 (세그먼트 → 비트) */
 export function cmpRef(a: BeatRef, b: BeatRef): number {
@@ -20,9 +20,7 @@ export interface FlatBeat {
 }
 
 /** lessonBeats 결과를 1차원 목록으로 편다 */
-export function flattenBeats(
-  beats: { segment: number; beats: Beat[] }[] | null,
-): FlatBeat[] {
+export function flattenBeats(beats: { segment: number; beats: Beat[] }[] | null): FlatBeat[] {
   if (!beats) return [];
   const out: FlatBeat[] = [];
   for (const seg of beats) {

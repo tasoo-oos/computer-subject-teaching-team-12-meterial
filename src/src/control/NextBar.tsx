@@ -1,7 +1,7 @@
 // 큰 다음 버튼 + 공개 토글 (docs/live-api.md §10.6 "다음", §5.5 — "다음" 키 하나가 공개 → 다음 비트 순서로).
 // 라벨: live 비트가 공개(reveal) 단계이고 아직 공개 전이면 "결과 공개", 아니면 "다음".
 // 리뷰 중에는 "다음"이 show 비트를 차례로 지나 highMark로 돌아간다(§5.5-0).
-import { ChevronLeft, Eye, EyeOff } from "lucide-react";
+import { ChevronLeft, Eye, EyeOff } from 'lucide-react';
 
 export interface NextBarProps {
   /** 큰 버튼 라벨 — "다음" / "결과 공개" */
@@ -14,14 +14,7 @@ export interface NextBarProps {
   prevDisabled?: boolean;
 }
 
-export function NextBar({
-  label,
-  disabled,
-  revealToggle,
-  onNext,
-  onPrev,
-  prevDisabled,
-}: NextBarProps) {
+export function NextBar({ label, disabled, revealToggle, onNext, onPrev, prevDisabled }: NextBarProps) {
   return (
     <div className="flex items-stretch gap-2.5">
       <button
@@ -48,18 +41,10 @@ export function NextBar({
           type="button"
           className="btn btn-quiet px-4 text-[14px]"
           onClick={() => revealToggle.onToggle(!revealToggle.revealed)}
-          title={
-            revealToggle.revealed
-              ? "공개된 상태 — 눌러 다시 감추기"
-              : "지금 결과를 공개"
-          }
+          title={revealToggle.revealed ? '공개된 상태 — 눌러 다시 감추기' : '지금 결과를 공개'}
         >
-          {revealToggle.revealed ? (
-            <EyeOff size={17} aria-hidden />
-          ) : (
-            <Eye size={17} aria-hidden />
-          )}
-          {revealToggle.revealed ? "비공개" : "공개"}
+          {revealToggle.revealed ? <EyeOff size={17} aria-hidden /> : <Eye size={17} aria-hidden />}
+          {revealToggle.revealed ? '비공개' : '공개'}
         </button>
       ) : null}
     </div>

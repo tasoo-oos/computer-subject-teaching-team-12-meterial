@@ -4,18 +4,9 @@
 //  - 활동 비트   → ACTIVITY_VIEWS[activity].Stage (§4.3 StageProps). 등록 안 된 활동은 중립 자리표시
 //  - stats는 stats.beat가 커서 비트와 같을 때만 넘긴다(§5.7 — 리뷰 중 다른 비트의 통계는 null 취급)
 //  - progress는 lesson.settings.showProgressOnStage일 때만(항상 highMark 기준값)
-import type {
-  Beat,
-  BeatRef,
-  ClassState,
-  Lesson,
-  StatsPayload,
-} from "@gagyebu/live";
-import { ACTIVITY_VIEWS } from "../activities/registry.ts";
-import {
-  SlideSurface,
-  slideOfBeat,
-} from "../activities/slides/SlideCanvas.tsx";
+import type { Beat, BeatRef, ClassState, Lesson, StatsPayload } from '@gagyebu/live';
+import { ACTIVITY_VIEWS } from '../activities/registry.ts';
+import { SlideSurface, slideOfBeat } from '../activities/slides/SlideCanvas.tsx';
 
 export function sameBeat(a: BeatRef, b: BeatRef): boolean {
   return a.segment === b.segment && a.beat === b.beat;
@@ -32,13 +23,7 @@ export interface StageContentProps {
   spotlight: unknown;
 }
 
-export function StageContent({
-  classState,
-  lesson,
-  beats,
-  stats,
-  spotlight,
-}: StageContentProps) {
+export function StageContent({ classState, lesson, beats, stats, spotlight }: StageContentProps) {
   const cursor = classState.cursor;
   const beat = beats?.[cursor.segment]?.beats[cursor.beat] ?? null;
   const segment = lesson.segments[cursor.segment] ?? null;
@@ -46,28 +31,16 @@ export function StageContent({
 
   // stats.beat가 커서 비트와 같을 때만 활동 통계로 넘긴다(§5.7). progress는 항상 highMark 기준값
   const beatStats = stats && sameBeat(stats.beat, cursor) ? stats.stats : null;
-  const progress = lesson.settings.showProgressOnStage
-    ? (stats?.progress ?? null)
-    : null;
+  const progress = lesson.settings.showProgressOnStage ? (stats?.progress ?? null) : null;
 
-  if (segment.kind === "slides") {
+  if (segment.kind === 'slides') {
     const { slideId, step } = slideOfBeat(beat.id);
-    return (
-      <SlideSurface deckId={segment.deck.id} slideId={slideId} step={step} />
-    );
+    return <SlideSurface deckId={segment.deck.id} slideId={slideId} step={step} />;
   }
 
   const Stage = ACTIVITY_VIEWS[segment.activity]?.Stage;
   if (Stage) {
-    return (
-      <Stage
-        beat={beat}
-        revealed={cursor.revealed}
-        stats={beatStats}
-        spotlight={spotlight}
-        progress={progress}
-      />
-    );
+    return <Stage beat={beat} revealed={cursor.revealed} stats={beatStats} spotlight={spotlight} progress={progress} />;
   }
   return <BeatPlaceholder beat={beat} />;
 }
@@ -77,16 +50,9 @@ export function BeatPlaceholder({ beat }: { beat: Beat }) {
   return (
     <div className="paper-texture grid size-full place-items-center px-[120px]">
       <div className="text-center">
-        <p
-          className="hatch mx-auto mb-8 h-[3px] w-[120px] rounded-full"
-          aria-hidden
-        />
-        <h1 className="display text-[72px] leading-tight text-ink">
-          {beat.label}
-        </h1>
-        <p className="mt-6 text-[24px] text-ink-3">
-          이 단계의 전면 화면은 준비 중이에요
-        </p>
+        <p className="hatch mx-auto mb-8 h-[3px] w-[120px] rounded-full" aria-hidden />
+        <h1 className="display text-[72px] leading-tight text-ink">{beat.label}</h1>
+        <p className="mt-6 text-[24px] text-ink-3">이 단계의 전면 화면은 준비 중이에요</p>
       </div>
     </div>
   );
@@ -97,10 +63,7 @@ export function StageMessage({ title, sub }: { title: string; sub?: string }) {
   return (
     <div className="paper-texture grid size-full place-items-center px-[120px]">
       <div className="text-center">
-        <p
-          className="hatch mx-auto mb-8 h-[3px] w-[120px] rounded-full"
-          aria-hidden
-        />
+        <p className="hatch mx-auto mb-8 h-[3px] w-[120px] rounded-full" aria-hidden />
         <h1 className="display text-[72px] leading-tight text-ink">{title}</h1>
         {sub ? <p className="mt-6 text-[26px] text-ink-2">{sub}</p> : null}
       </div>

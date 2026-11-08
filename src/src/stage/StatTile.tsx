@@ -9,12 +9,7 @@ export interface StatTileProps {
   className?: string;
 }
 
-export function StatTile({
-  value,
-  label,
-  unit,
-  className = "",
-}: StatTileProps) {
+export function StatTile({ value, label, unit, className = '' }: StatTileProps) {
   return (
     <div
       className={`flex flex-col items-center justify-center rounded-panel bg-sheet px-10 py-6 text-center shadow-[0_0_0_1px_var(--color-rule)] ${className}`}

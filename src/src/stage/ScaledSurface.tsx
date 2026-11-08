@@ -3,7 +3,7 @@
 // - StageFrame: 화면을 통째로 채우는 표시기(비율 유지 축소 + 남는 곳 여백) — /stage 본판
 // - StageThumb: 고정 폭 축소 모형 — 통제 페이지의 TV 미리보기
 // 안의 콘텐츠(StageContent·JoinWall 등)는 논리 px(1920×1080 기준)로 그린다.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 export const STAGE_W = 1920;
 export const STAGE_H = 1080;
@@ -44,13 +44,7 @@ export function StageFrame({ children }: { children: ReactNode }) {
 }
 
 /** 고정 폭 축소 모형. width에 맞춰 16:9로 줄인다 (통제의 TV 미리보기) */
-export function StageThumb({
-  width,
-  children,
-}: {
-  width: number;
-  children: ReactNode;
-}) {
+export function StageThumb({ width, children }: { width: number; children: ReactNode }) {
   const scale = width / STAGE_W;
   return (
     <div
@@ -63,7 +57,7 @@ export function StageThumb({
           width: STAGE_W,
           height: STAGE_H,
           transform: `scale(${scale})`,
-          transformOrigin: "top left",
+          transformOrigin: 'top left',
         }}
       >
         {children}
@@ -73,13 +67,7 @@ export function StageThumb({
 }
 
 /** 콘테이너 폭에 맞춰 StageThumb 크기를 잰다 */
-export function AutoStageThumb({
-  children,
-  minWidth = 240,
-}: {
-  children: ReactNode;
-  minWidth?: number;
-}) {
+export function AutoStageThumb({ children, minWidth = 240 }: { children: ReactNode; minWidth?: number }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(480);
 
