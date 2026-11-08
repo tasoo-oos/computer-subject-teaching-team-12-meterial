@@ -272,6 +272,8 @@ export interface RosterEntry {
   device: 'laptop' | 'tablet' | 'phone';
   /** 활동이 주는 "지금 있는 장면" 짧은 문구 (미완료 명단용). 없으면 null */
   scene: string | null;
+  /** 기본값 루프 50회 초과로 멈춘 학생(§4.2). 이후 비트에서 done이 되면 다시 false */
+  stalled: boolean;
   /** 기록 이어받기 승인 대기 중인 새 접속 */
   pendingMerge: boolean;
 }
@@ -386,7 +388,7 @@ export interface ActivityLogic<Cfg, S, A, Stats> {
 
 **난수 주입과 로그**: 유일한 난수는 월급이다. 서버가 `init`에 `random`을 넣고, 나온 `actions`(`start { salary }`)를 로그에 남긴다. `init`의 기저 상태는 결정적이어야 하므로(위 계약), 재시작 후 로그 재생은 "기저 + 로그의 actions"로 결정적으로 복원된다. `fallback`·`transition`은 난수 없이 상태만으로 결정된다.
 
-**`autoApplied` 통지 모양**: 서버가 기본값 루프에서 모은 `FallbackResult.notice`를 학생별 큐에 쌓고, 그 학생에게 보내는 다음 `state`/`snapshot` 메시지의 `autoApplied`에 `AutoAppliedNotice[]`로 실어 보낸다(클라이언트가 받으면 화면에 보여 주고 서버는 큐를 비운다). 전이(`transition`) 행동에는 통지가 없다.
+**`autoApplied` 통지 모양**: 서버가 기본값 루프에서 모은 `FallbackResult.notice`를 학생별 큐에 쌓고, 그 학생에게 보내는 다음 `state`/`snapshot` 메시지의 `autoApplied`에 `AutoAppliedNotice[]`로 실어 보낸다(클라이언트가 받으면 화면에 보여 주고 서버는 큐를 비운다). 전이(`transition`) 행동에는 통지가 없다. **빈 문구(`''` — 순차 처리 걸음)는 큐에 넣지 않는다**(§14 #134): 활동이 안내가 필요 없는 걸음에 `''`을 돌려주면 서버·클라이언트 어디에서도 세지 않는다.
 
 **초안(draft) 처리**: `draft { beat, data }`는 서버 메모리에만 있다(로그에 남기지 않는다 — §14 결정 #8). `next` 마감 때 `fallback`의 `draft` 인자로 넘어가고, 그 결과 행동은 `auto` 줄에 남는다. 서버가 비트 도중 재시작하면 초안은 사라지고 기본값은 "초안 없음" 경로로 간다.
 
@@ -414,6 +416,8 @@ export interface StageProps<S, Stats> {
   stats: Stats | null;
   /** 발표자의 상태 (spotlight 없으면 null) */
   spotlight: S | null;
+  /** 발표자 닉네임 (spotlight 없으면 null). 전면 표시용(§5.1, §14 #132) */
+  spotlightName: string | null;
   /** lesson.settings.showProgressOnStage일 때만 null이 아님 */
   progress: ProgressInfo | null;
 }
@@ -470,6 +474,8 @@ export interface JoinPayload {
 export type JoinAck =
   | { ok: true; studentId: string; token: string }
   | { ok: false; reason: 'join-locked' | 'class-full' }
+  // 잘못된 닉네임(빈 값·공백만·trim 뒤 10자 초과). 'join-locked'은 실제로 잠긴 수업에만 쓴다(§14 #130)
+  | { ok: false; reason: 'invalid-nickname' }
   // 같은 닉네임이 이미 있을 때: 서버가 대기 요청을 만들고 pendingId를 돌려준다(§5.8).
   // 학생은 "선생님 승인을 기다리는 중" 화면 or 다른 닉네임으로 다시 join
   | { ok: false; reason: 'nickname-taken'; pendingId: string };
@@ -553,7 +559,7 @@ export interface SnapshotPayload<S = unknown> {
   state?: S | null;
   autoApplied?: AutoAppliedNotice[]; // 학생만
   roster?: RosterEntry[]; // 통제만
-  spotlightState?: S | null; // 전면만
+  spotlightState?: SpotlightStatePayload<S>; // 전면만 (상태 + 발표자 닉네임, §14 #132)
 }
 
 export interface ClassPayload {
@@ -590,6 +596,8 @@ export interface RosterPayload {
 
 export interface SpotlightStatePayload<S = unknown> {
   state: S | null;
+  /** 발표자 닉네임 (spotlight 없으면 null). 전면은 roster를 받지 않으므로(§5.2) 페이로드에 직접 실린다(§14 #132) */
+  nickname: string | null;
 }
 
 export interface ClassesPayload {
@@ -719,8 +727,8 @@ export type LiveDraft = DraftPayload<GagyebuDraft>;
 - `endClass`: `status: 'ended'`, 로그 `end`. 학생 링크는 막히고(들어오면 `ended`), 로그는 남아 CSV 내보내기 가능. 학생 소켓에는 `class`가 전달되고 클라이언트가 끝난 수업 화면을 보여 준다.
 - `lockJoin { on }`: 입장 마감. `join`은 `'join-locked'` 거부.
 - `reveal { on }`: 공개 토글 수동 제어(on→off도 허용). live 비트에서 바뀌면 `highRevealed`도 함께 갱신.
-- `spotlight { studentId | null }`: 발표자 지정·해제. `:stage` 룸에 `spotlightState`(발표자의 활동 상태 또는 null)를 방송한다.
-- `student rename { id, nickname }`: 이름 변경(1~10자, 수업 내 유일).
+- `spotlight { studentId | null }`: 발표자 지정·해제. `:stage` 룸에 `spotlightState`(발표자의 활동 상태 또는 null + **발표자 닉네임**, §14 #132)를 방송한다.
+- `student rename { id, nickname }`: 이름 변경(1~10자, 수업 내 유일). 발표자의 이름이 바뀌면 `spotlightState`를 다시 방송해 전면 표시 닉네임도 따라간다.
 - `student kick { id }`: 내보내기. 해당 소켓에 `kicked { reason: 'kicked' }`를 보내고 연결을 끊는다. 토큰 무효화, roster에서 제거, 로그 `admin`. 상태는 로그에 남는다(재생에도 그 학생의 기록이 이어지다가 `admin kick`에서 끝난다).
 - `student merge { pendingId, intoId }`: **기록 이어받기 승인.** 아래 생명주기 참조.
 
@@ -1176,6 +1184,7 @@ StudentPage = 코드/닉네임/끝남/없음 상태 화면
 ```
 
 - **슬라이드 표시기** `SlideCanvas({ deckId, slideId, step })`: 1920×1080 논리 캔버스를 그리고 기기 화면에 맞춰 비율을 유지해 축소·확대(남는 곳은 여백). TV와 노트북·태블릿·휴대폰이 같은 구도. 조작 요소·진행 표시·커서 반응 없음. 디자인 토큰(색·서체)은 `src/DESIGN.md`를 그대로 쓴다.
+- **자동 처리 안내 카드**: `autoApplied` 알림이 있으면 **하나의 중립 카드**로 정상 흐름 맨 위(콘텐츠 위, 오버레이 아님)에 보여 준다 — 제목 "자동으로 처리된 내용", 짧은 글머리 목록, "닫기" 버튼. 커서 비트가 바뀌면 서버 큐가 비워지므로 카드도 사라진다(§14 #134).
 - 이동 버튼은 라이브 모드에서 모두 숨긴다(§10.8 ScreenProps 계약). 표시형 비트는 버튼이 하나도 없는 화면.
 - **표시형 비트의 Audience·Stage는 `beat.id` + 세그먼트 상태 데이터만으로 그린다** — 학생의 `phase`·`step`을 보지 않는다(§4.1 리뷰 모드: 5월에 안내 카드를 다시 보여 줘야 하므로).
 
@@ -1195,7 +1204,7 @@ StudentPage = 코드/닉네임/끝남/없음 상태 화면
 | 다음 | 큰 버튼. 키보드 **→ / Space / PageDown = next**, **← / PageUp = prev** (발표용 클리커 호환) |
 | 완료 현황 | live 비트 완료/접속/전체(`stats.progress`, **항상 highMark 기준** — 리뷰 중에도), 미완료 명단(이름, 연결 상태, `roster[].scene`) |
 | 기본값 미리보기 | `stats.fallbackPreview` + 지금 넘기면 자동 처리될 인원(미완료 수) |
-| TV 미리보기 | 지금 TV에 보이는 화면의 축소 모형(같은 컴포넌트를 작게) |
+| TV 미리보기 | 지금 TV에 보이는 화면의 축소 모형(같은 컴포넌트를 작게). 발표자 **닉네임**은 통제 소켓이 `spotlightState`를 받지 못하므로(§5.2) roster + `classState.spotlight`에서 클라이언트가 만들어 넘긴다(§14 #132). 발표자 **상태**는 여전히 null — 최종 확인은 실제 `/stage` 탭 |
 | 발표 | 학생 목록에서 `spotlight` 지정·해제 |
 | 학생 관리 | 이름 변경, 내보내기, 기록 이어받기 승인(`pendingMerge` 항목), 입장 마감(`lockJoin`) |
 | 비트별 패널 | `ACTIVITY_VIEWS[id].ControlPanel` (예: 이어진 장면에 있는 학생 수) |
@@ -1493,7 +1502,7 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 74. **CSV 내보내기의 오류 조건**: 통제 쿠키가 없으면 401, 수업 코드가 없거나 레슨에 `exportColumns`가 있는 활동이 없으면 404. 활동 세그먼트가 여러 개면 활동마다 머리글을 붙인 표를 빈 줄로 구분해 이어 붙인다.
 75. **서버 시작 시 재생은 세션 디렉터리(`DATA_DIR/sessions/<code>`) 전부를 읽는다.** `end` 줄이 없으면 열린 채, 있으면 ended로 복원하고 그 코드는 발급 제외 집합(§8.4)에 포함된다. 레슨을 찾을 수 없는 세션은 경고를 남기고 건너뛴다.
 76. **`/api/me`는 control 쿠키를 우선한다.** 두 역할 쿠키가 모두 유효한 브라우저에서 `{ role: 'control' }`을 돌려준다.
-77. **잘못된 닉네임(빈 값·10자 초과)의 `join`은 `'join-locked'`로 거부한다.** `JoinAck`에 별도 이유가 없고 클라이언트가 1~10자를 이미 검증하므로 정상 흐름에서는 발생하지 않는다.
+77. **잘못된 닉네임(빈 값·10자 초과)의 `join`은 `'join-locked'`로 거부한다.** `JoinAck`에 별도 이유가 없고 클라이언트가 1~10자를 이미 검증하므로 정상 흐름에서는 발생하지 않는다. **→ S8에서 해결(#130)**: `JoinAck`에 `'invalid-nickname'` 이유가 생겼고, 서버가 빈 값·공백만·trim 뒤 10자 초과를 이 이유로 거부한다. `'join-locked'`은 실제로 입장이 잠긴(또는 끝난) 수업에만 쓰인다.
 78. **`bots.mjs --auto-next`는 `next { force: true }`를 보낸다.** 확인 대화상자(§5.5-2)를 스크립트가 사람 대신 넘기기 위함이다.
 
 ### S3(클라이언트 셸·슬라이드) 구현 중 확정 (2026-11-08, M3·M8)
@@ -1506,8 +1515,8 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 82. **클라이언트의 `beatsOf`는 `@gagyebu/activity-gagyebu`의 `beats`를 직접 import해 쓴다.** `lessonBeats(lesson, beatsOf)`로 커서 비트를 해석하려면(§10.2 `beat`) 활동의 비트 목록이 클라이언트에도 필요한데, `beats`는 순수 함수(§4.2)라 클라이언트 import가 안전하다. 모르는 활동은 빈 목록(로그로 드러난다). `src/src/activities/beatsOf.ts`.
 83. **단일 HTML 빌드(`pnpm single`)는 `file:` 프로토콜·`*.html` 경로에서 게이트 없이 목업 셸로 돌아간다.** 라우터는 모르는 http 경로를 "없는 수업" 화면(§6.6)으로 보내지만, 단일 HTML 산출물을 브라우저로 바로 열면 스냅숏 목업(`#/<fixture>`)이 통제 로그인 없이 그대로 돌아가야 한다. `mockup` 라우트로 구분한다(`App`→`DevPage mockup`).
 84. **슬라이드 표시기 스모크는 dev 전용 화면 `/dev#/slides`.** M8 검증용. 시험용 덱(sample)을 `rehearsalLesson`의 첫 세그먼트에서 가져와 SlideCanvas로 그리고(단계 공개 포함), 통제 미리보기(SlidePreview)도 함께 둔다. `scripts/smoke-slides.mjs`가 laptop·tablet·tabletPortrait·phone 4크기로 찍는다(오류 있으면 종료 코드 2).
-85. **draft-kit의 `Beat`는 로컬 구조 타입.** draft-kit의 `package.json`(§1.4 의존 목록)에 `@gagyebu/live`가 없는데 패키지.json은 S0 소유라 여기서 더할 수 없다. §4.1 `Beat`와 같은 모양의 로컬 인터페이스를 쓰면 구조 타이핑으로 상호 할당 가능해 계약 모양은 그대로다.
-86. **`join-locked` 거부는 닉네임 양식 안에 일반 안내문으로 보여 준다.** 입장 마감과 잘못된 닉네임(§14 S2-#77)이 같은 이유로 돌아와 구분할 수 없으므로, `useLive`가 status를 `'join-locked'`로 바꾸면 학생 페이지는 죽은 화면 대신 "지금은 입장할 수 없어요 … 닉네임(1~10자)을 확인하고 다시 시도해 주세요" 안내문을 닉네임 양식과 함께 보여 준다(다시 시도 가능).
+85. **draft-kit의 `Beat`는 로컬 구조 타입.** draft-kit의 `package.json`(§1.4 의존 목록)에 `@gagyebu/live`가 없는데 패키지.json은 S0 소유라 여기서 더할 수 없다. §4.1 `Beat`와 같은 모양의 로컬 인터페이스를 쓰면 구조 타이핑으로 상호 할당 가능해 계약 모양은 그대로다. **→ S8에서 해결(#133)**: draft-kit `package.json`에 `@gagyebu/live`(`workspace:*`)를 추가하고 로컬 타입을 `import type { Beat } from '@gagyebu/live'` re-export로 바꿨다.
+86. **`join-locked` 거부는 닉네임 양식 안에 일반 안내문으로 보여 준다.** 입장 마감과 잘못된 닉네임(§14 S2-#77)이 같은 이유로 돌아와 구분할 수 없으므로, `useLive`가 status를 `'join-locked'`로 바꾸면 학생 페이지는 죽은 화면 대신 "지금은 입장할 수 없어요 … 닉네임(1~10자)을 확인하고 다시 시도해 주세요" 안내문을 닉네임 양식과 함께 보여 준다(다시 시도 가능). **→ S8에서 해결(#130)**: 잘못된 닉네임은 전용 이유 `'invalid-nickname'`로 구분된다. `join-locked` 안내문은 입장 마감만 다루고, 잘못된 닉네임은 "닉네임은 1~10자로 입력해 주세요"로 보여 준다.
 
 ### S3 라이브 스모크 중 확정 (2026-11-08, feat/live-classroom 병합 검증)
 
@@ -1537,9 +1546,19 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 
 101. **통제의 레슨 선택자는 클라이언트가 `@gagyebu/lesson`에서 만든다.** 서버에 레슨 목록 HTTP 엔드포인트(`/api/lessons`)가 없어(§6.1 라우트 표), 통제 페이지의 "수업 열기" 선택자는 앱 의존성에 이미 있는 `@gagyebu/lesson`의 `lesson`·`rehearsalLesson`에서 만든다. `openClass(lessonId)`의 서버 쪽 유효성 검사와 같은 id 집합이라 어긋나지 않는다. 나중에 레슨이 서버 전용으로 늘어나면 엔드포인트를 추가하고 이 선택자를 갈아끼운다.
 102. **전면의 "여러 수업 고르기"는 클라이언트가 띄운다.** 서버는 역할 소켓 연결 때 열린 수업이 있으면(여럿이어도) 가장 최근 수업을 자동 선택해 snapshot을 보낸다(§14 S2-#67). 그래서 /stage는 첫 snapshot에서 `classes.length > 1`이면 자동 선택과 무관하게 고르기 화면을 먼저 보여 주고(자동 선택된 코드를 강조), 한 번 고르면 이후 `classes` 갱신(다른 곳에서 수업 열기)으로 다시 뜨지 않는다. 보고 있던 수업이 끝나고 다른 열린 수업이 있으면 다시 고르기, 없으면 "수업이 끝났어요"를 보여 준다.
-103. **통제의 TV 미리보기에서 발표자 상태는 항상 null이다.** `spotlightState`는 `:stage` 룸에만 방송되므로(§5.2) 통제 소켓은 받지 못한다. 미리보기는 같은 `StageContent` 컴포넌트로 그리지만 발표자 화면의 최종 확인은 실제 `/stage` 탭에서 해야 한다.
-104. **`RosterEntry`에 `stalled` 필드가 없어 통제 명단에 stalled 표시를 둘 수 없다.** §4.2는 "roster에 표시"라 하지만 §4.1 타입에는 필드가 없다. 서버(S2 소유)가 `RosterEntry.stalled?: boolean`을 추가하면 통제의 미완료 명단·학생 관리가 바로 표시한다. 지금은 미완료로만 보인다.
+103. **통제의 TV 미리보기에서 발표자 상태는 항상 null이다.** `spotlightState`는 `:stage` 룸에만 방송되므로(§5.2) 통제 소켓은 받지 못한다. 미리보기는 같은 `StageContent` 컴포넌트로 그리지만 발표자 화면의 최종 확인은 실제 `/stage` 탭에서 해야 한다. **→ S8 부분 해결(#132)**: 발표자 **상태**는 여전히 null이지만 **닉네임**은 roster + `classState.spotlight`에서 클라이언트가 만들어 미리보기에 넘긴다.
+104. **`RosterEntry`에 `stalled` 필드가 없어 통제 명단에 stalled 표시를 둘 수 없다.** §4.2는 "roster에 표시"라 하지만 §4.1 타입에는 필드가 없다. 서버(S2 소유)가 `RosterEntry.stalled?: boolean`을 추가하면 통제의 미완료 명단·학생 관리가 바로 표시한다. 지금은 미완료로만 보인다. **→ S8에서 해결(#131)**: `RosterEntry.stalled: boolean`이 추가됐다. 서버가 학생 기록의 stalled 플래그(기본값 루프 50회 초과)를 그대로 실고, 통제의 미완료 명단·학생 관리에 중립 "멈춤" 표시가 붙는다.
 105. **통제에 "새 수업" 버튼을 둔다.** 수업이 열려 있는 동안에는 "수업 열기" 양식이 사라지는데, 리허설로 수업을 하나 더 열어야 할 때가 있다(여러 수업 동시 허용, §5.8). 수업 코드 옆의 "＋ 새 수업"은 기본 레슨(`LESSON_ID`)으로 수업을 하나 더 열고, 서버가 openClass를 호출한 소켓에 새 수업을 자동 선택한다(§14 S2-#67). 열린 수업은 머리글 오른쪽 칩으로 고른다.
 106. **TV 재사용 부품은 `src/src/stage/`에서 내보낸다.** `StageFrame`(레터박스 전체 표시기), `StageThumb`·`AutoStageThumb`(고정·자동 폭 축소 모형), `StageContent`(지금 TV 화면 본체 — 통제 미리보기가 같은 것을 축소해 쓴다), `JoinWall`(QR + 큰 주소 + 입장/접속 인원 + 닉네임 벽, 60명까지), `DistributionBars`(같은 색·데이터 순서·"자동 처리 N명" 별도 줄), `StatTile`(큰 숫자 타일). 전부 1920×1080 논리 px 기준이라 `StageContent` 안(또는 같은 논리 캔버스)에서 쓴다. S5는 활동 Stage 화면에서 이 부품들을 import해 조립한다.
-107. **발표 비트의 TV 화면에는 발표자 닉네임을 표시할 통로가 없다.** `StageProps`(§4.3)는 `spotlight: S | null`(상태)만 주고 닉네임을 주지 않으며, 전면 소켓은 roster를 받지 않는다(§5.2). 계획 §3은 발표 화면에 이름 표시를 전제로 하므로, S5가 발표 화면을 짤 때 닉네임이 필요하면 `spotlightState` 페이로드(또는 `StageProps`)에 닉네임을 실어야 한다 — 서버·문서(S2·S0 소유) 변경이 필요하다. 그 전까지는 닉네임 없이 그리거나 S5가 로컬 완화책을 제안한다.
+107. **발표 비트의 TV 화면에는 발표자 닉네임을 표시할 통로가 없다.** `StageProps`(§4.3)는 `spotlight: S | null`(상태)만 주고 닉네임을 주지 않으며, 전면 소켓은 roster를 받지 않는다(§5.2). 계획 §3은 발표 화면에 이름 표시를 전제로 하므로, S5가 발표 화면을 짤 때 닉네임이 필요하면 `spotlightState` 페이로드(또는 `StageProps`)에 닉네임을 실어야 한다 — 서버·문서(S2·S0 소유) 변경이 필요하다. 그 전까지는 닉네임 없이 그리거나 S5가 로컬 완화책을 제안한다. **→ S8에서 해결(#132)**: `SpotlightStatePayload`에 `nickname: string | null`이 추가됐고 전면 스냅숏의 `spotlightState`도 같은 모양(`{ state, nickname }`)으로 바뀌었다. `useRoleLive.spotlightName` → `StageProps.spotlightName`으로 전면 화면에 전달된다.
 108. **확인 대화상자의 기본 선택지 문구는 `stats.fallbackPreview`가 있을 때만 나온다.** 활동이 `previewFallback`을 주지 않으면(초기 stub 시절의 gagyebu) 문구가 생략되고 "N명이 자동으로 처리됩니다" 안내만 보인다. 활동이 구현되면 같은 코드 경로로 문구가 채워진다 — 통제 화면 변경이 필요 없다.
+
+### S8(플랫폼 계약 후속) 구현 중 확정 (2026-11-08)
+
+> 번호 109~129는 다른 스트림(S5 등)이 쓰고 있다. 이 목록은 130번부터 센다(merge 시 순서 유지).
+
+130. **잘못된 닉네임은 전용 이유 `'invalid-nickname'`로 거부한다.** `JoinAck`(§5.1)에 이유가 추가됐다. 서버는 trim 뒤 빈 값·10자 초과를 이 이유로 돌려주고, `'join-locked'`은 실제로 입장이 잠긴(또는 끝난) 수업에만 쓴다(#77·#86 해결). 클라이언트 닉네임 양식은 **서버 판정을 따르게** 바뀌었다 — 제출 단계에서 미리 막지 않고 그대로 보내며, `'invalid-nickname'` ack에 "닉네임은 1~10자로 입력해 주세요" 안내문을 양식 안에 보여 준다(status는 'open'을 유지해 양식이 사라지지 않는다).
+131. **`RosterEntry.stalled: boolean` 추가(§4.1).** 서버는 학생 기록의 stalled 플래그(기본값 루프 50회 초과, §4.2)를 roster에 그대로 실고, 학생이 이후 비트에서 done으로 판정되면 다시 false로 내린다. `pendingMerge` 대기 항목은 항상 false. 통제의 미완료 명단(ProgressPanel)·학생 관리(StudentPanel)에 중립 "멈춤" 표시가 붙는다(#104 해결).
+132. **발표자 닉네임은 `spotlightState` 페이로드로 전면에 전달한다.** `SpotlightStatePayload`가 `{ state, nickname }` 모양이 되고(§5.1), 전면 스냅숏의 `spotlightState` 필드도 같은 모양으로 바뀌었다(재연결 복원용). 발표자 rename 시에도 다시 방송된다. 클라이언트는 `useRoleLive.spotlightName`으로 노출하고 `StageProps.spotlightName`(§4.3)을 거쳐 활동 Stage 화면에 전달한다(#107 해결). **통제의 TV 미리보기는 서버 변경 없이 클라이언트에서 파생한다**: 통제 소켓은 `spotlightState`를 받지 못하므로(#103) roster에서 `classState.spotlight` 학생의 닉네임을 찾아 넘긴다(발표자 *상태*는 여전히 null).
+133. **draft-kit의 `Beat`는 `@gagyebu/live`의 타입을 그대로 쓴다.** draft-kit `package.json`의 `dependencies`에 `"@gagyebu/live": "workspace:*"`를 추가하고(lockfile 반영), 로컬 구조 타입을 `import type { Beat } from '@gagyebu/live'` re-export로 대체했다(#85 해결). 하위 호환을 위해 `Beat`는 draft-kit에서도 그대로 export된다.
+134. **자동 처리 안내는 하나의 중립 카드로, 빈 문구는 어디에도 세지 않는다.** 학생 화면의 `autoApplied` 표시가 겹친 오버레이 토스트에서 **정상 흐름 맨 위의 카드 하나**(제목 "자동으로 처리된 내용" + 글머리 목록 + "닫기")로 바뀌었다. 커서 비트가 바뀌면 서버 큐가 비워지므로 카드도 사라진다(기존 규칙 그대로). 활동이 안내가 필요 없는 걸음(월 자동 시작·자동 넘기기 등 순차 처리)에 `notice: ''`을 돌려주면 **서버는 큐에 넣지 않고** 클라이언트도 무시한다(§4.2).
