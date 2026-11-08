@@ -42,11 +42,14 @@ export function StudentPage({ code }: { code: string }) {
     if (ack.reason === 'nickname-taken') {
       // 기록 이어받기 대기(§5.8). "선생님 승인을 기다리는 중" 화면 or 다른 닉네임으로 다시 join
       setPending({ nickname, pendingId: ack.pendingId });
+    } else if (ack.reason === 'invalid-nickname') {
+      // 잘못된 닉네임(빈 값·공백만·10자 초과) — 전용 이유로 구분된다(§14 #130)
+      setJoinError('닉네임은 1~10자로 입력해 주세요');
     } else if (ack.reason === 'class-full') {
       setJoinError('수업이 꽉 찼어요. 선생님에게 말씀드려 주세요.');
     }
-    // 'join-locked': 입장 마감과 잘못된 닉네임(§14 S2-#77)을 구분할 수 없어
-    // 훅이 status를 'join-locked'로 바꾸면 닉네임 양식 안에 일반 안내문을 보여 준다
+    // 'join-locked': 실제로 입장이 잠긴 수업. 훅이 status를 'join-locked'로 바꾸면
+    // 닉네임 양식 안에 입장 마감 안내문을 보여 준다(§14 #86).
   };
 
   if (live.status === 'connecting') return <ConnectingScreen />;
@@ -64,7 +67,7 @@ export function StudentPage({ code }: { code: string }) {
     return (
       <NicknameForm
         onSubmit={tryJoin}
-        error={joinError ?? (live.status === 'join-locked' ? '지금은 입장할 수 없어요. 입장이 마감되었을 수 있어요. 닉네임(1~10자)을 확인하고 다시 시도해 주세요.' : null)}
+        error={joinError ?? (live.status === 'join-locked' ? '지금은 입장할 수 없어요. 입장이 마감되었을 수 있어요. 선생님에게 확인해 주세요.' : null)}
       />
     );
   }

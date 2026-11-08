@@ -624,8 +624,11 @@ export class Room {
 
   private doJoin(socket: LiveSocket, p: JoinPayload): JoinAck {
     const nickname = typeof p.nickname === 'string' ? p.nickname.trim() : '';
-    if (this.status === 'ended' || nickname.length < 1 || nickname.length > 10) {
-      return { ok: false, reason: 'join-locked' };
+    if (this.status === 'ended') return { ok: false, reason: 'join-locked' };
+    // 잘못된 닉네임(빈 값·공백만·10자 초과)은 전용 이유로 거부한다(§5.1, §14 #130).
+    // 'join-locked'은 실제로 입장이 잠긴 수업에만 쓴다.
+    if (nickname.length < 1 || nickname.length > 10) {
+      return { ok: false, reason: 'invalid-nickname' };
     }
     if (this.joinLocked) return { ok: false, reason: 'join-locked' };
     if (this.students.size >= this.maxStudents) return { ok: false, reason: 'class-full' };

@@ -197,6 +197,25 @@ describe('역할 소켓 (§5.2)', () => {
   });
 });
 
+describe('join 거부 이유가 소켓 계층까지 그대로 전달된다 (§5.1, §14 #130)', () => {
+  it('빈 값·공백만·10자 초과 닉네임은 invalid-nickname ack, 올바른 닉네임은 입장된다', async () => {
+    const opened = await server.openClass(testLesson.id);
+    if (!opened.ok) throw new Error('openClass 실패');
+    // join은 소켓당 5초에 1회(§5.4) — 시도마다 새 소켓으로 hello+join 한다
+    const tryJoin = async (nickname: string) => {
+      const s = connect(url);
+      sockets.push(s);
+      await emitAck(s, 'hello', { code: opened.code, device: 'laptop' });
+      return emitAck<{ ok: boolean; reason?: string; studentId?: string }>(s, 'join', { nickname });
+    };
+    expect(await tryJoin('')).toEqual({ ok: false, reason: 'invalid-nickname' });
+    expect(await tryJoin('   ')).toEqual({ ok: false, reason: 'invalid-nickname' });
+    expect(await tryJoin('열한글자이상닉네임입니다')).toEqual({ ok: false, reason: 'invalid-nickname' }); // 12자
+    const ok = await tryJoin('하늘');
+    expect(ok.ok).toBe(true);
+  });
+});
+
 describe('활동 예외로도 서버 생존 (§4.2, §14)', () => {
   it('init이 던지는 활동: join은 되고(degraded) act는 server-error, next도 계속된다', async () => {
     const opened = await server.openClass(throwingLesson.id);

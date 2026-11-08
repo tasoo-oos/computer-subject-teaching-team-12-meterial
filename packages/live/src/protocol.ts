@@ -23,7 +23,7 @@ export interface JoinPayload {
 
 export type JoinAck =
   | { ok: true; studentId: string; token: string }
-  | { ok: false; reason: 'join-locked' | 'class-full' }
+  | { ok: false; reason: 'join-locked' | 'class-full' | 'invalid-nickname' }
   // 같은 닉네임이 이미 있을 때: 서버가 대기 요청을 만들고 pendingId를 돌려준다(§5.8).
   // 학생은 "선생님 승인을 기다리는 중" 화면 or 다른 닉네임으로 다시 join
   | { ok: false; reason: 'nickname-taken'; pendingId: string };

@@ -93,16 +93,17 @@ export function KickedScreen({ reason, onRetry }: { reason: 'kicked' | 'merge-re
   );
 }
 
-/** 닉네임 입력 (§8.3: 입장하지 않은 접속자는 모든 비트에서 이 화면) */
+/** 닉네임 입력 (§8.3: 입장하지 않은 접속자는 모든 비트에서 이 화면).
+ *  유효성(1~10자)은 서버가 판정한다(§14 #130) — 잘못된 닉네임은 'invalid-nickname'
+ *  ack로 돌아와 이 양식 안에 안내문으로 보여 주므로, 입력 단계에서 막지 않고 그대로 보낸다. */
 export function NicknameForm({ nickname, onSubmit, error }: { nickname?: string; onSubmit: (nickname: string) => void; error?: string | null }) {
   const [name, setName] = useState(nickname ?? '');
-  const valid = name.trim().length > 0 && name.trim().length <= 10;
   return (
     <div className="paper-texture grid min-h-dvh place-items-center px-5">
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (valid) onSubmit(name.trim());
+          onSubmit(name.trim());
         }}
         className="w-full max-w-[26rem] rounded-panel bg-sheet p-6 shadow-[0_0_0_1px_var(--color-rule),0_20px_40px_-30px_rgba(24,38,74,.5)] sm:p-8"
       >
@@ -114,7 +115,6 @@ export function NicknameForm({ nickname, onSubmit, error }: { nickname?: string;
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            maxLength={10}
             placeholder="예: 하늘"
             autoComplete="off"
             className="h-12 w-full rounded-[8px] bg-white px-3.5 text-[17px] shadow-[inset_0_0_0_1.5px_var(--color-rule)] placeholder:text-ink-3 focus:shadow-[inset_0_0_0_2px_var(--color-ink)]"
@@ -125,7 +125,7 @@ export function NicknameForm({ nickname, onSubmit, error }: { nickname?: string;
             {error}
           </p>
         ) : null}
-        <button type="submit" disabled={!valid} className="btn btn-primary mt-5 h-12 w-full text-[17px]">
+        <button type="submit" className="btn btn-primary mt-5 h-12 w-full text-[17px]">
           <LogIn size={18} aria-hidden />
           입장
         </button>
