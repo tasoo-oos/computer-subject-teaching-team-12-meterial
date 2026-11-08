@@ -530,7 +530,7 @@ export interface GameState {
  *  auto?: true는 서버·활동의 기본값 처리만 붙이고, step이 DecisionRecord.auto로 옮긴다. */
 export type Action =
   | { type: 'start'; nickname: string; salary: Won }
-  | { type: 'submitSurvey'; answers: Partial<Record<QuestionId, string>> }
+  | { type: 'submitSurvey'; answers: Partial<Record<QuestionId, string>>; auto?: true }
   | { type: 'goto'; phase: 'guide' | 'budget' }
   | { type: 'setBudget'; budget: Budget; auto?: true }
   | { type: 'confirmBudget'; auto?: true }
