@@ -986,6 +986,22 @@ export interface GagyebuConfig {
 - **초안**: `budget`·`adjust`에서만 쓴다(§9.5). `GagyebuDraft`가 있으면 그 안에서, 없으면 `state.budget`에서 `balanceBudget`로 합계를 맞춘다. 편집을 한 번도 안 한 학생의 `state.budget`은 추천 가계부다.
 - **notice 문구**는 활동이 만든다: 선택지 fallback은 `"시간 안에 고르지 못해 '<선택지 라벨>'이(가) 자동으로 선택됐어요"`, 가계부는 balanceBudget의 `changes`로 `"제출하지 않아 남는 돈 3만 원이 생활비 여유분으로 들어갔어요"` / `"제출하지 않아 여유 부족분 3만 원을 여가에서 줄였어요"` 형태.
 
+**fallback notice 문구 전체 목록 (S4 구현 확정 — 서버는 전달만 하고 학생 화면은 그대로 보여 준다)**:
+
+| 걸음 | notice |
+| --- | --- |
+| 설문 제출 | `제출하지 않아 모든 문항이 기본 답안으로 제출됐어요` |
+| 가계부 setBudget — 남는 돈 | `제출하지 않아 남는 돈 <formatMan(남는금액)>이(가) 생활비 여유분으로 들어갔어요` |
+| 가계부 setBudget — 부족분 | `제출하지 않아 여유 부족분 <formatMan(부족금액)>을(를) <생활비 여유분 \| 절감 항목 라벨(예: 여가·문화)>에서 줄였어요` |
+| 가계부 확정 | `제출하지 않아 지금 가계부가 자동으로 확정됐어요` |
+| beginMonth (1~11월) | `시간 안에 시작하지 않아 <N>월이 자동으로 시작됐어요` |
+| beginMonth (12월 결산) | `시간 안에 시작하지 않아 12월 결산이 자동으로 진행됐어요` |
+| choose (장면 선택) | `시간 안에 고르지 못해 '<선택지 라벨>'이(가) 자동으로 선택됐어요` |
+| continue (결과 넘기기) | `시간 안에 넘기지 않아 결과 화면이 자동으로 넘어갔어요` |
+| endMonth (뒤처진 달 재현) | `따라잡기 위해 <N>월을 자동으로 마쳤어요` |
+
+가계부 비트의 fallback은 합계가 이미 맞는 학생(편집을 한 번도 안 한 학생의 추천 가계부 등)은 `setBudget`을 건너뛰고 `confirmBudget` 한 걸음으로 끝낸다(진전 보장, §14 #89).
+
 ### 9.4 비트별 Stats (모두 익명, 데이터 순서)
 
 판별자는 `kind`다(비트 id 판별자는 `m12`와 `` `m${number}` ``이 겹쳐 모호해져 폐기 — 감사 R9). 표시형 비트·설문은 `{ kind: 'none' }`을 반환하고 화면이 알아서 그린다.
@@ -1495,3 +1511,20 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 
 87. **입장하지 않은 학생은 `hello` ack ok만으로 `useLive` status가 `'open'`이 된다.** 서버는 join 승인 전까지 그 학생에게 snapshot을 보내지 않으므로(§8.3), snapshot 수신만으로 status를 바꾸면 닉네임 입력 화면(§10.4)이 영영 뜨지 않는다. hello ok = "수업이 열려 있음"이고, 페이지는 status open + 입장 전 조합으로 닉네입 입력 화면을 그린다. 재접속(resumed)이면 이어서 오는 snapshot이 기준을 다시 맞춘다.
 88. **역할 소켓(useRoleLive)은 로그인 게이트를 통과한 뒤에 마운트한다.** 쿠키 없이 연결하면 서버가 즉시 끊고(§14 #66), socket.io는 **서버가 끊은** 연결을 자동 재접속하지 않아 로그인 뒤에도 소켓이 죽어 있다. 그래서 /stage·/control 페이지는 게이트 컴포넌트와 본판 컴포넌트를 나누고, 본판 안에서만 useRoleLive를 쓴다(S6이 페이지를 짤 때도 이 구조를 유지해야 한다).
+
+> 번호 66~88은 S2(라이브 서버)·S3(클라이언트 셸)에서 이미 쓰고 있다. 이 목록은 89번부터 센다(merge 시 순서 유지).
+
+### S4 활동 로직 구현 중 확정 (2026-11-08)
+
+89. **가계부 비트 fallback의 진전 보장.** 합계가 이미 맞는 학생(편집을 한 번도 안 한 추천 가계부 등)은 `setBudget`(무변화 걸음)을 건너뛰고 `confirmBudget` 한 걸음으로 끝낸다. 합계가 안 맞는 편집 중 학생만 `setBudget(balanceBudget(초안 ?? state.budget))` → `confirmBudget` 두 걸음. §9.3의 "두 걸음"은 이 일반적인 경우를 가리킨다.
+90. **`stats` join kind의 `connected`는 활동이 알 수 없다.** `ActivityLogic.stats`는 states 배열만 받으므로(§4.2) 접속 여부를 상태에서 알 수 없다. `connected = states.length`(= joined)로 채우고, **실제 접속 인원은 `StatsPayload.progress.connected`가 담당한다**(항상 실린다, §5.1). 스테이지의 입장 비트 화면은 joined·닉네임 벽만 쓰면 된다. (S2·S5 참고)
+91. **`stats` budget kind: 분포는 확정한 학생만.** `savingsRates`·`shares`는 `initialBudget !== null`(확정) 학생의 `initialBudget` 기준. 아직 제출하지 않은 학생은 분포에서 빼고 `autoCount`로 센다 — 라이브 비트 동안 `autoCount` = "지금 넘기면 자동 처리될 인원"(= 미제출 인원, progress의 pending과 같은 값). 리뷰에서는 전원이 확정했으므로 `autoCount` 0.
+92. **`stats` month kind `autoCount` = 그 달의 자동 처리된 선택 기록 수.** `DecisionRecord.auto === true`인 장면 선택만 센다(statusAction 기록은 선택지가 아니고, 가계부 조정 `setBudget`은 기록 자체가 없으므로 제외). `SceneTally.reached`는 자동 학생 포함 "도달한 학생 수", 막대 `count`는 수동 응답만(§9.4 "분포에서 빼고 autoCount로"). 라이브 비트 동안에는 아직 자동 처리가 돌지 않았으므로 0이고, 리뷰로 돌아볼 때 실제 값이 보인다.
+93. **`stats` month kind `entry`: 시작 장면이 여럿이면 한 덩어리.** 배치 이벤트의 시작 장면이 `entryVariants`로 갈릴 때(8월 `drop`/`dropNoInvest`) 선택지 목록을 데이터 순서로 이어 붙여 하나의 `MonthEntryTally`로 합친다. `sceneId`·`title`·`channel`은 기본 시작 장면(`event.entry`) 기준. 선택지 id는 겹치지 않아 라벨로 구분된다.
+94. **`stats` month kind `chained`/`scheduled` 구분은 장면 단위 정적 분류.** 어떤 선택지의 `next`가 `delayMonths`로 그 장면을 가리키면 '예약'(`scheduled`), `delayMonths` 없이 가리키면 '연쇄'(`chained`), 들어오는 간선이 없으면 시작 장면(entry). 4월 `again`·`check4`, 6월 `check6`, 10월 `revolving`이 scheduled 버킷에 들어간다(§9.4 감사 M2). 장면 배열 순서는 이벤트·장면 데이터 순서(결정적).
+95. **`stats` settlement kind `autoCount` = 자동 처리 기록이 하나라도 있는 학생 수.** 12월에는 선택 장면이 없어 "그 달의 자동 응답 수"가 항상 0이므로, 교사에게 유용한 "1년 동안 자동 처리를 거친 학생 수"로 정의했다. 도전과제 `rate`의 분모는 전체 학생 수.
+96. **`previewFallback`은 §9.4 정의 그대로.** 장면 단계에서만 기본 선택지 라벨을 돌려주고, 그 외 단계(월급날·결과·조정·리포트·설문·가계부)는 `null`. 통제의 기본값 미리보기가 장면 밖 단계에서 비어 보이는 것은 의도된 동작이다(미완료 인원은 progress·fallbackPreview 옆의 pending 수로 보여 준다).
+97. **`allowed` 세부 규칙.** 월 비트 `m1`..`m11`은 `state.month === N`일 때만 `beginMonth`·`choose`·`continue`·`statusAction`(그리고 `step === 'adjust'`일 때만 `setBudget`)를 받는다. `m12` 비트는 `beginMonth`만 받는다(운동화 판매 등 statusAction도 11월 비트에서 하게 한다). `reset`·`goto`·`endMonth`는 모든 비트에서 학생이 보낼 수 없고, `auto` 표시가 붙은 학생 행동은 무조건 거부한다.
+98. **`cfg.guide=false`일 때 가계부로 들어가는 전이.** §9.3의 `guide-6 → budget`와 같은 규칙이 `survey-result → budget`에도 적용된다(`phase === 'guide'`인 학생에게 `goto`). 전이는 항상 "가계부 비트로 들어가는 한 걸음"에 붙는다.
+99. **`init` 기저 상태.** `createInitialState(nickname, 0)` — 월급 0인 결정적 기저에 `start { nickname, salary: rollSalary(ctx.random) }` 행동을 얹는다(§4.2 "기저 + 로그의 actions" 재생 규칙). 난수 소비는 `rollSalary` 호출 한 번뿐이다.
+100. **`locate` 문구.** 시뮬레이션 중 `"N월 · 장면이름"`(장면 title ?? speaker ?? 이벤트 제목), 단계별로 `"N월 · 월급날"`/`"N월 · 결과 확인"`/`"N월 · 가계부 조정"`/`"N월 · 월말 리포트"`. 밖은 `"소비습관 설문"`/`"안내 카드"`/`"가계부 작성"`/`"1년 결산 완료"`. (S5·S6의 미완료 명단 표시 그대로 쓴다.)
