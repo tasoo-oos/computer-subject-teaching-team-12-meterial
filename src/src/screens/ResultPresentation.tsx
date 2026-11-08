@@ -4,7 +4,8 @@ import { NetWorthChart } from '../components/result/NetWorthChart.tsx';
 
 /** 교실 프로젝터용 크게 보기. 멀리서도 읽히는 것만 남긴다.
  *  onExit을 생략하면 닫기 버튼이 없다 — 전면(TV) 발표 비트에서 그대로 재사용한다(§14 #121).
- *  tv=true면 그래프 마지막 값 라벨이 점을 피해 그려진다(§14 #125). dev는 기본값 그대로. */
+ *  tv=true면 그래프 마지막 값 라벨이 점을 피해 그려진다(§14 #125) and 머리말이 "발표 · 닉네임"
+ *  머리표로 바뀐다 — 전면이 절대 겹치지 않게 오버레이 대신 머리말 자리를 쓴다(S7). dev는 기본값 그대로. */
 export function PresentationView({ state, onExit, tv = false }: { state: GameState; onExit?: () => void; tv?: boolean }) {
   const s = state.settlement;
   if (!s) return null;
@@ -19,9 +20,17 @@ export function PresentationView({ state, onExit, tv = false }: { state: GameSta
   return (
     <div className="paper-texture flex min-h-dvh flex-col px-[4vw] py-[3vh]">
       <header className="flex items-center justify-between gap-4">
-        <p className="text-[clamp(16px,1.5vw,22px)] text-ink-2">
-          {state.profile.nickname}님의 첫 월급 1년 · <span className="num">12월 결산</span>
-        </p>
+        {tv ? (
+          /* 전면(TV) 발표 비트: 작은 머리말 대신 "발표 · 닉네임" 머리표가 머리말 자리에 들어간다.
+             예전의 절대 배치 머리표는 이 작은 머리말과 그 아래 제목과 겹쳤다 — 흐름 안에 넣어 해결. */
+          <p className="display text-[clamp(40px,2.7vw,52px)] leading-none text-ink">
+            발표 <span className="text-seal">· {state.profile.nickname}</span>
+          </p>
+        ) : (
+          <p className="text-[clamp(16px,1.5vw,22px)] text-ink-2">
+            {state.profile.nickname}님의 첫 월급 1년 · <span className="num">12월 결산</span>
+          </p>
+        )}
         {onExit ? (
           <button type="button" onClick={onExit} className="btn btn-quiet px-3 text-[15px]">
             <X size={18} aria-hidden />
