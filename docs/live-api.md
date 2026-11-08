@@ -1,7 +1,7 @@
 # 수업 모드 API 명세 (`packages/live`, `server`, `lesson`, `packages/activity-gagyebu`)
 
 - 작성일: 2026-11-09
-- 상태: 명세(구현 전). 이 문서가 구현 계약이다. 여러 에이전트가 서로 말하지 않고 이 문서만 보고 구현할 수 있어야 한다.
+- 상태: 구현됨 (M1~M8, 브랜치 feat/live-classroom). 이 문서가 구현 계약이며, 구현 중 확정된 결정·편차는 §14 「결정 사항」이 기록한다(문서와 코드가 어긋나면 §14를 먼저 본다).
 - 관련 문서: `docs/live-classroom-plan.md`(계획·근거, 이 문서보다 위에 없다), `docs/core-api.md`(core API), `가계부-시나리오-수업-기획서.md` 5~6장(시뮬레이션 규칙), `src/DESIGN.md`(디자인 토큰·화면)
 - 읽는 법: 모든 TypeScript 블록은 그대로 내보내야 하는 시그니처이다. 본문은 한국어, 식별자는 영어. 계획이 침묵하거나 코드와 어긋난 부분은 §14 「결정 사항」에 모두 적어 두었다.
 
@@ -796,14 +796,16 @@ export type LiveDraft = DraftPayload<GagyebuDraft>;
 
 ### 6.6 개발 환경
 
-- 게임 서버: `pnpm server` → `http://localhost:8091` (PORT).
-- Vite 개발 서버: `pnpm dev` → `http://localhost:5173`. `src/vite.config.ts`에 프록시를 추가한다:
+- 게임 서버: 운영 `pnpm server` → `http://localhost:8091` (PORT). 개발은 `pnpm server:dev` → `http://localhost:8092`(`.env` 옆의 `.env.dev`에 `PORT=8092`, `NODE_ENV=development` — `--env-file-if-exists`로 `.env` 위에 덮어쓴다).
+- Vite 개발 서버: `pnpm dev` → `http://localhost:5173`. `src/vite.config.ts`의 프록시(구현됨)는 `GAME_PORT`(기본 8092)로 넘긴다:
 
 ```ts
+const gamePort = process.env.GAME_PORT ?? '8092';
+
 server: {
   proxy: {
-    '/socket.io': { target: 'http://localhost:8091', ws: true },
-    '/api': 'http://localhost:8091',
+    '/socket.io': { target: `http://localhost:${gamePort}`, ws: true },
+    '/api': `http://localhost:${gamePort}`,
   },
 }
 ```
@@ -1348,8 +1350,9 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 - 리버스 프록시는 **Nginx Proxy Guard**, `10.10.2.21` → 게임 서버 `10.10.2.23:8091`. 호스트 `gagyebu.taesoo.uk`.
 - 프록시 설정: **WebSocket on**, 타임아웃 24시간(장시간 수업·재접속 대기), **버퍼링 off**(실시간 방송 지연 방지), **WAF off**(Socket.IO 페이로드 오탐 방지).
 - 그래서 `.env.example`의 기본값이 `PORT=8091`, `TRUSTED_PROXY=10.10.2.21`(§7).
+- **포트 체계 (S10 정리)**: 운영 = 게임 서버 단독 8091(`src/dist` 서비스). 개발 = 게임 서버 8092(`.env.dev`에 `PORT=8092`를 넣고 `pnpm server:dev`) + Vite(5173 `pnpm dev`, 또는 8091 dev-public)가 `GAME_PORT`(기본 8092)로 프록시. 기본값끼리 Vite가 자기 자신(8091)으로 프록시하던 문제를 고쳤다.
 - 실행: `tmux new-session -d -s gagyebu-live -c <repo> 'node --env-file=.env server/src/main.ts'`.
-- **주의**: 지금 개발 서버 tmux 세션 `gagyebu-dev`가 8091을 차지하고 있다(`scripts/dev-public.config.ts`의 Vite). 게임 서버로 넘기기 전에 **사용자가 직접** `tmux kill-session -t gagyebu-dev`로 끄고 새 세션을 띄워야 한다(에이전트가 임의로 끄지 않는다).
+- **주의**: 개발 서버 tmux 세션 `gagyebu-dev`가 8091을 차지하고 있다(`scripts/dev-public.config.ts`의 Vite). 운영 게임 서버도 8091을 쓰므로, `gagyebu-live`를 띄우기 전에 **사용자가 직접** `tmux kill-session -t gagyebu-dev`로 끄고 새 세션을 띄워야 한다(에이전트가 임의로 끄지 않는다).
 - M0 완료 기준: 프록시를 거친 Socket.IO 연결 확인(노트북, 휴대폰 LTE, 가능하면 학교 와이파이). 노트북 덮개 닫았다 열기·휴대폰 30초 잠금 뒤 자동 재접속.
 - **M9(리허설·운영 체크리스트·CSV 실사용)는 이번 문서 범위 밖**이다. 이 문서는 M1~M8의 구현 계약까지만 정한다.
 

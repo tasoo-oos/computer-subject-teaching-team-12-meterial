@@ -9,6 +9,8 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "server": "node --env-file=.env server/src/main.ts",
+    "server:dev": "node --env-file=.env --env-file-if-exists=.env.dev server/src/main.ts",
+    "dev:public": "cd src && pnpm exec vite --config ../scripts/dev-public.config.ts",
     "bots": "node scripts/bots.mjs --url http://localhost:8091",
     "shots": "node scripts/shots.mjs",
     "single": "node scripts/build-single.mjs"

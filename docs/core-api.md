@@ -2,6 +2,7 @@
 
 - 작성일: 2026-10-26
 - 수정일: 2026-11-09 (수업 모드 승인 변경 반영: `docs/live-classroom-plan.md` §13 1~9 + `step()`. 세부는 이 문서가, 수업 모드 계약은 `docs/live-api.md`가 담당)
+- 상태: 구현 완료 — `step()`·§4.3 기본값 함수·부록 A 선택지가 모두 구현됨(브랜치 `feat/live-classroom`, M1·M1')
 - 대상: 화면 앱(`src`)과 이후 엔진 구현
 - 규칙의 근거: `가계부-시나리오-수업-기획서.md` 4~6장
 
@@ -11,21 +12,27 @@
 .
 ├── 가계부-시나리오-수업-기획서.md
 ├── docs/
-│   ├── core-api.md          이 문서
-│   ├── design-brief.md      디자인 시안 요구사항 (비교 단계 기록)
-│   └── design-review.md     시안 비교 기록 (src1 '통장 정리' 채택)
+│   ├── core-api.md             이 문서
+│   ├── live-classroom-plan.md  수업 모드 계획
+│   ├── live-api.md             수업 모드 구현 계약 (§14 결정 기록)
+│   ├── design-brief.md         디자인 시안 요구사항 (비교 단계 기록)
+│   └── design-review.md        시안 비교 기록 (src1 '통장 정리' 채택)
 ├── packages/
-│   ├── core/                화면과 무관한 순수 TypeScript (타입, 데이터, 계산, 엔진, 목업)
+│   ├── core/                   화면과 무관한 순수 TypeScript (타입, 데이터, 계산, 엔진, 목업)
 │   │   └── src/
-│   │       ├── types.ts     모든 공용 타입
-│   │       ├── format.ts    금액·날짜 표기
-│   │       ├── selectors.ts 상태 → 화면용 값 계산
-│   │       ├── engine.ts    상태 생성, 추천 가계부, step (미구현)
-│   │       ├── fixtures.ts  목업 스냅숏 상태
-│   │       └── data/        이벤트, 설문, 안내, 계좌, 상태, 도전과제, 엔딩, 프롬프트, 상수
-│   └── draft-kit/           스냅숏 네비게이터 셸 (디자인 대상 아님)
-├── src/                     화면 앱 (Vite + React + TypeScript + Tailwind CSS v4)
-└── scripts/                 스크린숏, 단일 HTML 빌드, 정적 서버
+│   │       ├── types.ts        모든 공용 타입
+│   │       ├── format.ts       금액·날짜 표기
+│   │       ├── selectors.ts    상태 → 화면용 값 계산
+│   │       ├── engine.ts       상태 생성, 추천 가계부, step (구현됨)
+│   │       ├── fixtures.ts     목업 스냅숏 상태
+│   │       └── data/           이벤트, 설문, 안내, 계좌, 상태, 도전과제, 엔딩, 프롬프트, 상수
+│   ├── live/                   수업 모드 플랫폼 공용: 레슨·비트·커서 타입, 프로토콜 (React 없음)
+│   ├── activity-gagyebu/       가계부 활동 순수 로직: 비트, 진행 판정, 기본값, 집계
+│   └── draft-kit/              스냅숏 네비게이터 셸 (/dev)
+├── server/                     Node 24 게임 서버 (Socket.IO, 세션 로그, 비밀번호 로그인, 정적 파일)
+├── lesson/                     수업 콘텐츠 (세그먼트 순서·설정, 슬라이드 매니페스트)
+├── src/                        화면 앱 (Vite + React + TypeScript + Tailwind CSS v4)
+└── scripts/                    스크린숏, 봇, 단일 HTML 빌드, 외부 공개용 개발 설정
 ```
 
 명령
@@ -33,9 +40,13 @@
 | 명령 | 내용 |
 | --- | --- |
 | `pnpm install` | 의존성 설치 |
-| `pnpm dev` | 화면 앱 개발 서버 (Vite 기본 포트 5173) |
+| `pnpm dev` | 화면 앱 개발 서버 (Vite 기본 포트 5173, 게임 서버 8092 프록시) |
+| `pnpm server` | 게임 서버 (`.env` 필요, PORT 기본 8091) |
+| `pnpm server:dev` | 게임 서버 개발용 (`.env` + `.env.dev` → `PORT=8092` 권장) |
 | `pnpm typecheck` | 전체 타입 검사 |
 | `pnpm build` | 전체 빌드 |
+| `pnpm test` | 전체 테스트 (vitest: core, live, activity-gagyebu, server) |
+| `pnpm bots -- --code 4821 [--n 60] [--lazy 0.1] [--auto-next --control-password <pw>]` | 학생 봇 리허설 |
 | `pnpm shots [--only=id1,id2] [--viewports=laptop,tablet,tabletPortrait,phone]` | `shots/<스냅숏>--<화면크기>.png` 생성. 페이지 오류가 있으면 종료 코드 2 |
 
 화면 앱은 `@gagyebu/core`와 `@gagyebu/draft-kit`을 소스 그대로 가져다 씁니다 (별도 빌드 없음). 모든 import는 패키지 루트에서 합니다.
@@ -45,23 +56,26 @@ import { FIXTURES, formatMan, budgetSummary, EVENTS, type GameState } from '@gag
 import type { ScreenProps } from '@gagyebu/draft-kit';
 ```
 
-> 2026-11-09 이후 `ScreenProps` 계약은 수업 모드용으로 바뀐다(§2.1 참조). 이 문서는 core의 계약을 정하고, 새 `ScreenProps`·어댑터의 정식 명세는 `docs/live-api.md` §10.8~10.9에 있다.
+> 2026-11-09 `ScreenProps` 계약은 수업 모드용으로 바뀌어 구현됐다(§2.1). 이 문서는 core의 계약을 정하고, 새 `ScreenProps`·어댑터의 정식 명세는 `docs/live-api.md` §10.8~10.9에 있다.
 
 ## 2. 화면 앱과의 계약
 
 ### 2.1 화면 컴포넌트
 
-각 화면 앱은 6개 화면 컴포넌트를 `ScreenMap`으로 넘깁니다. `src/src/App.tsx`에 이미 연결되어 있습니다.
+각 화면 앱은 6개 화면 컴포넌트를 `ScreenMap`으로 넘깁니다. 라이브·solo는 활동 레지스트리(`src/src/activities`)에서, dev 스냅숏 셸은 `src/src/dev/DevPage.tsx`에서 이 화면들을 받아 씁니다.
 
 ```ts
 type ScreenId = 'start' | 'survey' | 'guide' | 'budget' | 'sim' | 'result';
 
 interface ScreenProps {
-  state: GameState;     // 스냅숏의 상태 (복사본이라 화면 안에서 고쳐도 됨)
-  ui: FixtureUi;        // GameState에 없는 화면 내부 상태 힌트
-  fixture: Fixture;     // id, label, note
-  go: (fixtureId: string) => void;      // 다른 스냅숏으로 이동
-  goScreen: (screen: ScreenId) => void; // 그 화면의 첫 스냅숏으로 이동
+  state: GameState;      // 현재 상태 (복사본이라 화면 안에서 고쳐도 됨)
+  beat: Beat;            // 현재 비트. id로 세부 표시 결정: 'survey', 'guide-3', 'm2', 'present' …
+  revealed: boolean;     // 공개(reveal) 토글 상태
+  submitted: boolean;    // 이 비트 제출 완료 (라이브: 서버 판정 / dev·solo: false)
+  mode: 'live' | 'solo' | 'dev';
+  dispatch: (action: Action) => void;  // 행동 전송 (라이브: 서버 / solo: step / dev: route 어댑터)
+  draft: (data: unknown) => void;       // 가계부 초안 등 확정 전 값 (2초 묶음)
+  ui?: FixtureUi;        // dev 모드에서만 (스냅숏 힌트). 라이브·solo에서는 undefined
 }
 
 interface FixtureUi {
@@ -73,17 +87,17 @@ interface FixtureUi {
 }
 ```
 
-**수업 모드 전환 후의 `ScreenProps`.** 수업 모드가 들어오면 화면은 `go`/`goScreen` 대신 `dispatch`·`draft`·`submitted`·`mode`를 받습니다. 새 계약의 정식 명세는 `docs/live-api.md` §10.8에 있고, draft-kit은 스냅숏 셸을 그대로 유지하는 어댑터를 제공합니다(live-api.md §10.9). core의 `Action`이 두 계약에서 같은 정의를 쓰는 것이 이 문서의 책임입니다.
-
-- 주소는 `#/<스냅숏 id>`입니다. `?shot`을 붙이면 네비게이터가 숨겨집니다 (스크린숏용).
+- 화면은 **`beat.id`를 먼저** 보고 렌더링합니다. `ui` 힌트는 dev 모드 전용입니다(라이브에서 설문은 한 화면 7문항, 안내는 비트당 1장이므로 `ui.surveyIndex`·`ui.guideIndex`가 필요 없습니다).
+- `mode === 'live'`에서는 이전/다음/"처음부터 다시"/"발표용 크게 보기" 버튼이 없습니다. 제출 버튼만 남습니다. `mode === 'solo' | 'dev'`에서는 화면 스스로 다음 단계로 넘어가는 UI를 가질 수 있습니다.
+- dev 주소는 `/dev#/<스냅숏 id>`입니다(통제 비밀번호 뒤). `?shot`을 붙이면 네비게이터가 숨겨집니다 (스크린숏용).
 - 네비게이터: 오른쪽 아래 버튼, `` ` `` 키로 열고 닫기, `[` `]` 키로 이전/다음 스냅숏.
 - 스냅숏이 바뀌면 화면 컴포넌트가 새로 마운트됩니다 (`key`가 스냅숏 id).
 
-### 2.2 엔진 연결 전에 지킬 것
+### 2.2 화면이 지킬 것
 
-- `step()`의 정식 명세는 아래 4장입니다(2026-11-09 기준). **구현 완료(2026-11-08, M1·M1')** — `step`·`canStep`·§4.3 함수가 모두 동작한다. 화면은 지금도 `state`와 `ui`로 그립니다.
-- 입력, 패널 열기, 금액 나누기 같은 화면 안의 상호작용은 컴포넌트 로컬 상태로 흉내 냅니다. 계산은 아래 선택자를 씁니다.
-- 다음 단계로 넘어가는 버튼은 `go()`나 `goScreen()`으로 그럴듯한 다음 스냅숏에 연결합니다. 예: 설문 결과의 "다음" → `goScreen('guide')`, 2월 장면의 "수리한다" → 로컬로 지불 패널 열기, 확정 → `go('sim-feb-outcome')`.
+- `step()`의 정식 명세는 아래 4장입니다. **구현 완료(2026-11-08, M1·M1')** — `step`·`canStep`·§4.3 함수가 모두 동작한다. 라이브에서는 학생이 `dispatch(action)`을 보내면 서버가 `allowed → apply(step) → 저장 → 응답` 순서로 처리한다(live-api.md §1.2).
+- 지불 패널의 금액 나누기처럼 확정 전 조작은 컴포넌트 로컬 상태입니다. 예외는 가계부 초안으로, 자동 처리 때 쓰려고 편집 중 값을 2초 간격으로 묶어 `draft()`로 보냅니다.
+- dev 모드에서 단계 이동은 `route()` 어댑터가 행동을 스냅숏 이동으로 바꿉니다(live-api.md §10.9). 라이브·solo에서는 `dispatch`가 실제 행동으로 나갑니다.
 - 금액은 직접 계산하지 말고 `selectors.ts`와 `format.ts`를 씁니다.
 
 ## 3. 타입 요약
@@ -468,9 +482,9 @@ await navigator.clipboard.writeText(text);
 
 ## 8. core에 고칠 점이 보이면
 
-원칙은 그대로입니다: 화면 작업 중 데이터나 타입이 부족하면 `packages/core`를 직접 고치지 말고, `src/DESIGN.md`의 "core에 대한 제안" 절에 적습니다. 모아 둔 제안은 `docs/design-review.md` 4장에 정리되어 있습니다.
+**규칙(2026-11-09 갱신).** core는 이 문서(`docs/core-api.md`)의 명세와 짝을 맞춰 고친다. **명세를 같은 변경에서 함께 고치면 `packages/core`를 직접 고칠 수 있다.** 명세에 없는 새 데이터·타입이 필요하면 직접 고치지 말고 `src/DESIGN.md`의 "core에 대한 제안" 절에 적는다. 모아 둔 제안은 `docs/design-review.md` 4장에 정리되어 있다.
 
-**예외(2026-11-09 승인).** 이 문서 §4.2~4.4와 부록 A에 정한 변경 — `step()` 구현, `Action` 변경(`start` 월급, `submitSurvey`), `Choice.fallback`, `DecisionRecord.auto`, 부록 A의 기본 선택지 추가, `balanceBudget`·`defaultAnswers`·`fallbackChoice`·`autoPaymentPlan`·`autoDepositTarget`·`validatePayment`·`monthChoices` — 는 수업 모드 계획(`docs/live-classroom-plan.md` §13)으로 **미리 승인된 core 변경**입니다. M1·M1' 마일스톨에서 이 범위 안에서 `packages/core`를 직접 고칩니다. 범위 밖의 새 제안은 여전히 제안 절차를 따릅니다.
+과거 승인 범위 참고: §4.2~4.4와 부록 A에 정한 변경 — `step()` 구현, `Action` 변경(`start` 월급, `submitSurvey`), `Choice.fallback`, `DecisionRecord.auto`, 부록 A의 기본 선택지, `balanceBudget`·`defaultAnswers`·`fallbackChoice`·`autoPaymentPlan`·`autoDepositTarget`·`validatePayment`·`monthChoices` — 은 수업 모드 계획(`docs/live-classroom-plan.md` §13)으로 승인되어 M1·M1'에서 구현을 끝냈다.
 
 ---
 
