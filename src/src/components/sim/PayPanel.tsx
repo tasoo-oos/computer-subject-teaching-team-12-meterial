@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TriangleAlert, X } from 'lucide-react';
+import { ChevronLeft, TriangleAlert, X } from 'lucide-react';
 import {
   ACCOUNTS,
   formatMan,
@@ -16,6 +16,7 @@ import {
 } from '@gagyebu/core';
 import { cardPlan, sourceLabel } from '../../lib/accounts.ts';
 import { useActBusy } from '../../lib/actBusy.tsx';
+import { useMinWidth } from '../../lib/viewport.ts';
 import { Stepper } from '../Stepper.tsx';
 import { Money } from '../Money.tsx';
 
@@ -38,9 +39,12 @@ interface PayPanelProps {
   confirmLabel?: string;
 }
 
-/** 지불 패널: 계좌별로 나눠 내고, 카드는 일시불·할부를 고른다 */
+/** 지불 패널: 계좌별로 나눠 내고, 카드는 일시불·할부를 고른다.
+ *  노트북·태블릿 가로(≥1024px)는 한 패널에 전부 보이는 오늘의 레이아웃 그대로,
+ *  태블릿 세로·휴대폰은 2단계(수단 고르기 → 금액)로 나눈다(DESIGN.md 6장 문제, §10.11). */
 export function PayPanel({ state, choice, onClose, onConfirm, confirmLabel }: PayPanelProps) {
   const busy = useActBusy();
+  const wide = useMinWidth(1024); // Tailwind lg 기준 — 노트북·태블릿 가로는 한 패널
   const pay = choice.pay ?? choice.fixedPay;
   if (!pay) return null;
   const adjustable = 'adjustable' in pay ? pay.adjustable : undefined;
@@ -56,7 +60,20 @@ export function PayPanel({ state, choice, onClose, onConfirm, confirmLabel }: Pa
   const cardAmount = parts.card ?? 0;
   const plan = cardAmount > 0 ? cardPlan(cardAmount, cardMonths, 'interestFree' in pay ? !!pay.interestFree : false) : null;
 
+  // 좁은 화면 2단계 상태: 1단계에서 낼 수단을 고르고, 2단계에서 수단별 금액을 정한다
+  const [step, setStep] = useState<'sources' | 'amounts'>('sources');
+  const [selected, setSelected] = useState<FundingSource[]>([]);
+
   const setPart = (source: FundingSource, v: Won) => setParts((p) => ({ ...p, [source]: v }));
+  const toggleSource = (source: FundingSource) => {
+    if (selected.includes(source)) {
+      // 선택을 빼면 그 수단에 넣어 둔 금액도 지운다 — 합계가 어긋나지 않게
+      setPart(source, 0);
+      setSelected((prev) => prev.filter((s) => s !== source));
+    } else {
+      setSelected((prev) => [...prev, source]);
+    }
+  };
   // 확정: 계좌별 부분 + 카드를 PaymentPlan으로 엮어 올린다(라이브 서버 검증·엔진이 같은 모양을 쓴다)
   const confirm = () =>
     onConfirm({
@@ -124,6 +141,206 @@ export function PayPanel({ state, choice, onClose, onConfirm, confirmLabel }: Pa
             {confirmLabel ?? '이 방식으로 확정'}
           </button>
         </div>
+      </section>
+    );
+  }
+
+  // ── 좁은 화면(태블릿 세로·휴대폰): 2단계 — 수단 고르기 → 금액 ────────────────
+  if (!wide) {
+    const sourceName = (o: (typeof options)[number]) => (o.source === 'card' ? '신용카드' : ACCOUNTS[o.source as keyof typeof ACCOUNTS].label);
+    return (
+      <section aria-labelledby="pay-title" className="sheet-in rounded-panel bg-sheet shadow-[0_0_0_1px_var(--color-rule)]">
+        {step === 'sources' ? (
+          <>
+            <header className="flex items-start justify-between gap-3 border-b border-rule-soft px-4 py-3">
+              <div>
+                <h3 id="pay-title" className="text-[17px] font-bold">
+                  {to ? '어디서 옮길까요?' : '어느 돈으로 낼까요?'}
+                </h3>
+                <p className="text-[13px] text-ink-2">하나 이상의 수단을 고르세요. 다음 단계에서 금액을 정합니다.</p>
+              </div>
+              <button type="button" onClick={onClose} aria-label="닫기" className="btn btn-quiet min-h-11 px-2.5">
+                <X size={18} aria-hidden />
+              </button>
+            </header>
+            <div className="space-y-2 px-4 py-3">
+              {adjustable ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-[8px] bg-paper px-3 py-2">
+                  <span className="text-[14px] font-semibold">옮길 금액</span>
+                  <Stepper label="옮길 금액" value={amount} onChange={setAmount} step={adjustable.step} min={adjustable.min} max={adjustable.max} size="sm" />
+                </div>
+              ) : null}
+              <ul className="grid gap-2">
+                {options.map((o) => {
+                  const isCard = o.source === 'card';
+                  const on = selected.includes(o.source);
+                  return (
+                    <li key={o.source} className={`rounded-[8px] px-3 py-2 ${on ? 'bg-mark/35 shadow-[inset_0_0_0_1.5px_var(--color-ink-3)]' : 'bg-paper'}`}>
+                      <button
+                        type="button"
+                        onClick={() => toggleSource(o.source)}
+                        aria-pressed={on}
+                        className="flex w-full items-center gap-3 rounded-[6px] text-left"
+                      >
+                        <span
+                          aria-hidden
+                          className={`grid size-5 flex-none place-items-center rounded-[6px] border-2 ${on ? 'border-ink bg-ink text-white' : 'border-ink-3'}`}
+                        >
+                          {on ? '✓' : ''}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[14px] font-semibold leading-tight">{sourceName(o)}</span>
+                          <span className="num block text-[12px] leading-tight text-ink-2">
+                            {isCard ? '한도 없음 · 다음 달 생활비에서 빠짐' : `잔액 ${formatWon(o.max ?? 0)}`}
+                          </span>
+                        </span>
+                      </button>
+                      {o.warning ? (
+                        <p className="mt-1 flex gap-1.5 text-[11.5px] leading-snug text-ink-2">
+                          <TriangleAlert size={12} className="mt-0.5 flex-none text-seal" aria-hidden />
+                          {o.warning}
+                        </p>
+                      ) : null}
+                      {isCard && cardAllowed && on ? (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {(Array.isArray(pay.cardMonths) ? pay.cardMonths : [1]).map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setCardMonths(m)}
+                              aria-pressed={cardMonths === m}
+                              className={`btn min-h-11 px-2 text-[12px] ${cardMonths === m ? 'bg-ink text-white' : 'btn-quiet'}`}
+                            >
+                              {m === 1 ? '일시불' : `${m}개월`}
+                            </button>
+                          ))}
+                          <span className="text-[11.5px] text-ink-3">매달 갚을 돈은 다음 단계에서 계산됩니다.</span>
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+            <footer className="sticky bottom-0 z-10 border-t border-rule bg-sheet/95 px-4 py-3 backdrop-blur-sm">
+              <button
+                type="button"
+                disabled={selected.length === 0}
+                onClick={() => setStep('amounts')}
+                className="btn btn-primary w-full px-5"
+                title={selected.length === 0 ? '낼 수단을 먼저 고르세요' : undefined}
+              >
+                {selected.length === 0 ? '수단을 고르세요' : `다음 — ${selected.length}개 수단`}
+                <ChevronLeft size={16} aria-hidden className="rotate-180" />
+              </button>
+            </footer>
+          </>
+        ) : (
+          <>
+            <header className="flex items-start justify-between gap-3 border-b border-rule-soft px-4 py-3">
+              <div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setStep('sources')}
+                    className="btn btn-quiet min-h-11 px-2 text-[12px]"
+                    aria-label="수단 다시 고르기"
+                  >
+                    <ChevronLeft size={16} aria-hidden />
+                    수단
+                  </button>
+                  <h3 className="text-[17px] font-bold">{to ? '얼마씩 옮길까요?' : '얼마씩 낼까요?'}</h3>
+                </div>
+                <p className="text-[13px] text-ink-2">
+                  {to ? `${ACCOUNTS[to].label}(으)로 옮길 금액을 정하세요. 합계가 맞아야 확정됩니다.` : '수단별 금액을 정하세요. 합계가 맞아야 확정됩니다.'}
+                </p>
+              </div>
+              <button type="button" onClick={onClose} aria-label="닫기" className="btn btn-quiet min-h-11 px-2.5">
+                <X size={18} aria-hidden />
+              </button>
+            </header>
+            <div className="space-y-2 px-4 py-3 pb-[92px]">
+              <ul className="grid gap-2">
+                {options
+                  .filter((o) => selected.includes(o.source))
+                  .map((o) => {
+                    const isCard = o.source === 'card';
+                    const value = parts[o.source] ?? 0;
+                    const p = isCard && value > 0 ? cardPlan(value, cardMonths, 'interestFree' in pay ? !!pay.interestFree : false) : null;
+                    return (
+                      <li key={o.source} className="rounded-[8px] bg-paper px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <div className="min-w-0 flex-1 basis-32">
+                            <p className="text-[14px] font-semibold leading-tight">{sourceName(o)}</p>
+                            <p className="num text-[12px] leading-tight text-ink-2">
+                              {isCard ? '한도 없음 · 다음 달 생활비에서 빠짐' : `잔액 ${formatWon(o.max ?? 0)}`}
+                            </p>
+                          </div>
+                          <Stepper
+                            label={sourceName(o)}
+                            value={value}
+                            onChange={(v) => setPart(o.source, v)}
+                            step={10_000}
+                            min={0}
+                            max={isCard ? amount : (o.max ?? 0)}
+                            size="sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setPart(o.source, Math.min(isCard ? amount : (o.max ?? 0), remaining + value))}
+                            className="btn btn-quiet min-h-11 px-2 text-[12px]"
+                            disabled={remaining === 0}
+                            title="남은 금액 채우기"
+                          >
+                            채우기
+                          </button>
+                        </div>
+                        {o.warning ? (
+                          <p className="mt-1 flex gap-1.5 text-[11.5px] leading-snug text-ink-2">
+                            <TriangleAlert size={12} className="mt-0.5 flex-none text-seal" aria-hidden />
+                            {o.warning}
+                          </p>
+                        ) : null}
+                        {isCard && cardAllowed ? (
+                          <p className="num mt-1 text-[12px] text-ink-2">
+                            {p ? (
+                              <>
+                                매달 <strong className="text-[13px] text-ink">{formatMan(p.monthly)}</strong>
+                                {p.fee > 0 ? ` · 수수료 ${formatMan(p.fee)}` : ' · 무이자'}
+                              </>
+                            ) : (
+                              '금액을 넣으면 매달 갚을 돈을 계산합니다.'
+                            )}
+                          </p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+              </ul>
+            </div>
+            <footer className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-rule bg-sheet/95 px-4 py-3 backdrop-blur-sm">
+              <dl className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px]">
+                <div>
+                  <dt className="text-ink-2">{to ? '옮길 금액' : '낼 금액'}</dt>
+                  <dd className="num text-[16px] font-bold">{formatWon(amount)}</dd>
+                </div>
+                <div>
+                  <dt className="text-ink-2">남은 금액</dt>
+                  <dd className={`num text-[16px] font-bold ${remaining === 0 ? 'text-in' : 'text-seal'}`}>{formatWon(remaining)}</dd>
+                </div>
+              </dl>
+              <button
+                type="button"
+                disabled={remaining !== 0 || busy}
+                onClick={confirm}
+                className="btn btn-primary w-full px-5 sm:w-auto"
+                title={remaining !== 0 ? '합계가 맞아야 확정할 수 있어요' : undefined}
+              >
+                {confirmLabel ?? (to ? '이대로 옮기기' : '이렇게 내기')}
+              </button>
+            </footer>
+          </>
+        )}
       </section>
     );
   }
