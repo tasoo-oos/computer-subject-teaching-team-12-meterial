@@ -1296,12 +1296,11 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 
 ### 11.2 `scripts/shots.mjs` 변경
 
-`/dev`가 통제 로그인 뒤에만 보이므로 스크립트가 서버를 임시로 띄운다:
-
-1. 임시 게임 서버를 자식 프로세스로 실행: `PORT=8190 STAGE_PASSWORD=shots-stage CONTROL_PASSWORD=shots-control COOKIE_SECRET=<고정 32자 이상> DATA_DIR=<임시 디렉터리> node server/src/main.ts`.
-2. Vite를 띄우되 `server.proxy`로 `/api`·`/socket.io`를 8190으로 보낸다(개발 프록시 설정과 동일).
-3. Playwright `request.post('/api/login', { role: 'control', password: 'shots-control' })`로 `Set-Cookie`를 받아 브라우저 컨텍스트에 심는다.
-4. `/dev#/<fixture>?shot`을 찍는다(기존 `--only`, `--viewports`, 오류 검사·종료 코드 2 규칙 그대로).
+> **결정(구현 편차, §14 #79)**: 임시 게임 서버를 띄우지 않는다. 대신 Playwright이 `GET /api/me`를 가로채
+> (`page.route`) `{ role: 'control' }`로 응답하게 해 `/dev` 게이트를 통과시키고, 스크린숏은 Vite 개발 서버에서
+> `/dev#/<fixture>?shot`으로 찍는다(기존과 같은 방식). 서버 소스(`server/**`, S2 소유)에 의존하지 않아
+> 클라이언트 변경 검증이 서버 구현 진도에 막히지 않는다. `--only`, `--viewports`(laptop·tablet·tabletPortrait·phone),
+> 페이지 오류 종료 코드 2 규칙은 그대로다.
 
 ### 11.3 루트 `package.json` 스크립트
 
@@ -1462,3 +1461,16 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 
 64. **덱 비트 라벨의 " (k/n)"은 1부터.** §4.1의 라벨 접미사 k는 사람 표기 기준 1부터(예: " (1/3)", " (2/3)"). 비트 id의 `${slideId}--${k}`에 쓰는 k는 0부터(비트 k = 항목 0..k 공개) 그대로다. 통제 타임라인에 "(0/3)"이 보이는 것이 어색해 S0이 확정했다.
 65. **core `fixtures.ts`의 `structuredClone`을 JSON 복제로 교체.** `packages/activity-gagyebu`의 tsconfig가 DOM·Node lib 없이(`lib: ["ES2022"]`) core를 함께 검사하므로(§1.2 금지 규칙의 정적 검증), DOM 전역인 `structuredClone`이 있는 `fixtures.ts`가 컴파일을 실패했다. 스냅숏 상태는 순수 JSON 값이라 `JSON.parse(JSON.stringify(x))` 복제로 바꿨다(동작 동일). draft-kit 어댑터(§10.9)의 `structuredClone(fixture.state)`은 클라이언트 전용이라 그대로다.
+
+### S3(클라이언트 셸·슬라이드) 구현 중 확정 (2026-11-08, M3·M8)
+
+> 번호 66~78은 S2(라이브 서버) worktree(`live/s2-server`)에서 이미 쓰고 있다. 이 목록은 79번부터 센다(merge 시 순서 유지).
+
+79. **`shots.mjs`는 임시 게임 서버 대신 Playwright `/api/me` 가로채기(§11.2 편차).** `page.route('**/api/me')`가 `{ role: 'control' }`로 응답하게 해 `/dev` 게이트를 통과시키고, 스크린숏은 Vite 개발 서버의 `/dev#/<fixture>?shot`으로 찍는다(기존 방식). 서버 구현(`server/**`, S2 소유)에 의존하지 않아 클라이언트 검증이 서버 진도에 막히지 않는다. `--only`·`--viewports`·페이지 오류 종료 코드 2 규칙은 그대로.
+80. **dev 목업의 "이전" 버튼은 표시행동 `choose { choiceId: 'dev-prev' }`(`DEV_PREV`).** 라이브에는 학생 뒤로 가기가 없어(교사만 prev/goto 리뷰) 대응하는 진짜 Action이 없다. `src/src/dev/route.ts`의 예약 choiceId로 dev 이동임을 표시한다. S5가 라이브 화면(한 화면 설문·비트당 안내 1장)을 정리하며 이 버튼들이 사라지면 함께 없앤다. 그 외 화면 이동은 라이브에서 실제로 나가는 행동(`start`·`submitSurvey`·`goto`·`setBudget`·`confirmBudget`·`beginMonth`·`choose`·`continue`·`endMonth`·`reset`)을 그대로 dispatch하고 `route()`가 같은 스냅숏 그래프로 바꿔 치운다.
+81. **`UseLiveResult`에 `kicked: 'kicked' | 'merge-rejected' | null` 필드를 추가.** §10.2 계약에 없는 덧붙임이다. `kicked` 이벤트(§5.8)로 "승인되지 않았습니다" 화면을 그리려면 학생 페이지가 이유를 알아야 한다. 나머지 필드·시그니처는 계약 그대로. `autoApplied`는 커서 비트가 바뀌면 비운다(통지는 비트마다 의미가 있으므로).
+82. **클라이언트의 `beatsOf`는 `@gagyebu/activity-gagyebu`의 `beats`를 직접 import해 쓴다.** `lessonBeats(lesson, beatsOf)`로 커서 비트를 해석하려면(§10.2 `beat`) 활동의 비트 목록이 클라이언트에도 필요한데, `beats`는 순수 함수(§4.2)라 클라이언트 import가 안전하다. 모르는 활동은 빈 목록(로그로 드러난다). `src/src/activities/beatsOf.ts`.
+83. **단일 HTML 빌드(`pnpm single`)는 `file:` 프로토콜·`*.html` 경로에서 게이트 없이 목업 셸로 돌아간다.** 라우터는 모르는 http 경로를 "없는 수업" 화면(§6.6)으로 보내지만, 단일 HTML 산출물을 브라우저로 바로 열면 스냅숏 목업(`#/<fixture>`)이 통제 로그인 없이 그대로 돌아가야 한다. `mockup` 라우트로 구분한다(`App`→`DevPage mockup`).
+84. **슬라이드 표시기 스모크는 dev 전용 화면 `/dev#/slides`.** M8 검증용. 시험용 덱(sample)을 `rehearsalLesson`의 첫 세그먼트에서 가져와 SlideCanvas로 그리고(단계 공개 포함), 통제 미리보기(SlidePreview)도 함께 둔다. `scripts/smoke-slides.mjs`가 laptop·tablet·tabletPortrait·phone 4크기로 찍는다(오류 있으면 종료 코드 2).
+85. **draft-kit의 `Beat`는 로컬 구조 타입.** draft-kit의 `package.json`(§1.4 의존 목록)에 `@gagyebu/live`가 없는데 패키지.json은 S0 소유라 여기서 더할 수 없다. §4.1 `Beat`와 같은 모양의 로컬 인터페이스를 쓰면 구조 타이핑으로 상호 할당 가능해 계약 모양은 그대로다.
+86. **`join-locked` 거부는 닉네임 양식 안에 일반 안내문으로 보여 준다.** 입장 마감과 잘못된 닉네임(§14 S2-#77)이 같은 이유로 돌아와 구분할 수 없으므로, `useLive`가 status를 `'join-locked'`로 바꾸면 학생 페이지는 죽은 화면 대신 "지금은 입장할 수 없어요 … 닉네임(1~10자)을 확인하고 다시 시도해 주세요" 안내문을 닉네임 양식과 함께 보여 준다(다시 시도 가능).
