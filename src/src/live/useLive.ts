@@ -92,7 +92,13 @@ export function useLive<S = unknown, A = unknown, D = unknown>(code: string): Us
     const sendHello = () => {
       const token = localStorage.getItem(tokenKey(code));
       socket.emit('hello', { code, token: token ?? undefined, device: detectDevice() }, (ack: HelloAck) => {
-        if (ack.ok) return; // snapshot이 status를 'open'으로 바꾼다
+        if (ack.ok) {
+          // 입장하지 않은 학생은 join 전까지 snapshot이 오지 않는다(§8.3) — hello ok만으로
+          // 수업이 열려 있으니 'open'으로 바꾼다. 페이지가 닉네임 입력 화면(§10.4)을 보여 준다.
+          // 재접속(resumed)이면 snapshot이 기준을 다시 맞춘다.
+          setStatus((prev) => (prev === 'ended' || prev === 'not-found' ? prev : 'open'));
+          return;
+        }
         localStorage.removeItem(tokenKey(code));
         setStatus(ack.reason === 'ended' ? 'ended' : 'not-found');
       });

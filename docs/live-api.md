@@ -1490,3 +1490,8 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 84. **슬라이드 표시기 스모크는 dev 전용 화면 `/dev#/slides`.** M8 검증용. 시험용 덱(sample)을 `rehearsalLesson`의 첫 세그먼트에서 가져와 SlideCanvas로 그리고(단계 공개 포함), 통제 미리보기(SlidePreview)도 함께 둔다. `scripts/smoke-slides.mjs`가 laptop·tablet·tabletPortrait·phone 4크기로 찍는다(오류 있으면 종료 코드 2).
 85. **draft-kit의 `Beat`는 로컬 구조 타입.** draft-kit의 `package.json`(§1.4 의존 목록)에 `@gagyebu/live`가 없는데 패키지.json은 S0 소유라 여기서 더할 수 없다. §4.1 `Beat`와 같은 모양의 로컬 인터페이스를 쓰면 구조 타이핑으로 상호 할당 가능해 계약 모양은 그대로다.
 86. **`join-locked` 거부는 닉네임 양식 안에 일반 안내문으로 보여 준다.** 입장 마감과 잘못된 닉네임(§14 S2-#77)이 같은 이유로 돌아와 구분할 수 없으므로, `useLive`가 status를 `'join-locked'`로 바꾸면 학생 페이지는 죽은 화면 대신 "지금은 입장할 수 없어요 … 닉네임(1~10자)을 확인하고 다시 시도해 주세요" 안내문을 닉네임 양식과 함께 보여 준다(다시 시도 가능).
+
+### S3 라이브 스모크 중 확정 (2026-11-08, feat/live-classroom 병합 검증)
+
+87. **입장하지 않은 학생은 `hello` ack ok만으로 `useLive` status가 `'open'`이 된다.** 서버는 join 승인 전까지 그 학생에게 snapshot을 보내지 않으므로(§8.3), snapshot 수신만으로 status를 바꾸면 닉네임 입력 화면(§10.4)이 영영 뜨지 않는다. hello ok = "수업이 열려 있음"이고, 페이지는 status open + 입장 전 조합으로 닉네입 입력 화면을 그린다. 재접속(resumed)이면 이어서 오는 snapshot이 기준을 다시 맞춘다.
+88. **역할 소켓(useRoleLive)은 로그인 게이트를 통과한 뒤에 마운트한다.** 쿠키 없이 연결하면 서버가 즉시 끊고(§14 #66), socket.io는 **서버가 끊은** 연결을 자동 재접속하지 않아 로그인 뒤에도 소켓이 죽어 있다. 그래서 /stage·/control 페이지는 게이트 컴포넌트와 본판 컴포넌트를 나누고, 본판 안에서만 useRoleLive를 쓴다(S6이 페이지를 짤 때도 이 구조를 유지해야 한다).
