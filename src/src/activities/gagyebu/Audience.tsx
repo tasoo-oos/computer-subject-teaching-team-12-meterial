@@ -4,7 +4,7 @@
 //   guide-N → 카드 한 장, budget → 가계부 편집, m1..m12 → 한 달 시뮬레이션, present → 내 결과.
 // 라이브에서 제출을 마친(marked done) 작업 비트는 대기 화면(§10.3) — 읽기 전용 요약 + AI 프롬프트 복사.
 // 표시형 비트는 학생의 phase·step과 무관하게 beat.id + 상태 데이터만으로 그린다(§4.1 리뷰 모드).
-import { useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import type { ActAck, Beat } from '@gagyebu/live';
 import { eventForMonth, getScene, type Action, type GameState, type ScreenId } from '@gagyebu/core';
 import type { ScreenProps } from '@gagyebu/draft-kit';
@@ -15,6 +15,7 @@ import { ReportStage } from '../../components/sim/ReportStage.tsx';
 import { WaitingScreen } from '../../live/WaitingScreen.tsx';
 import { ActBusyContext } from '../../lib/actBusy.tsx';
 import { actRejectText } from '../../lib/actNotice.ts';
+import { SimFlowContext, type SimFlow } from '../../lib/simFlow.tsx';
 import { budgetPrompt, scenePrompt } from '../../lib/prompts.ts';
 import { BudgetScreen } from '../../screens/BudgetScreen.tsx';
 import { GuideScreen } from '../../screens/GuideScreen.tsx';
@@ -51,6 +52,13 @@ function isMonth(beatId: string): boolean {
 export function Audience({ state, beat, revealed, submitted, mode, dispatch, draft }: GagyebuAudienceProps) {
   // 행동 큐(라이브): ack 전 다음 행동을 무시하지 않고 순서대로 보낸다(가계부 setBudget → confirmBudget 연속 제출).
   const [busy, setBusy] = useState(false);
+  // 월급날 2단 진행 게이트(§14 #122): "월급 받기"를 누른 달의 내역을 확인하는 동안에는
+  // 조용한 달처럼 beginMonth 직후 done이 되더라도 대기 화면으로 바꾸지 않는다.
+  const [paydayGate, setPaydayGate] = useState<number | null>(null);
+  const flow: SimFlow = useMemo(() => ({ paydayGate, setPaydayGate }), [paydayGate]);
+  useEffect(() => {
+    setPaydayGate(null); // 비트가 바뀌면 월급날 게이트를 연다(월은 비트와 1:1)
+  }, [beat.id]);
   const [notice, setNotice] = useState<string | null>(null);
   const queueRef = useRef<Action[]>([]);
   const runningRef = useRef(false);
@@ -100,8 +108,9 @@ export function Audience({ state, beat, revealed, submitted, mode, dispatch, dra
     return <DegradedScreen beat={beat} />;
   }
 
-  // 라이브 제출 완료 → 대기 화면(§10.3). join(입장)과 12월 결산(결과 화면 자체)은 제외.
-  if (mode === 'live' && submitted && beat.mode === 'work' && beat.id !== 'join' && !resultBeat) {
+  // 라이브 제출 완료 → 대기 화면(§10.3). join(입장)·12월 결산(결과 화면 자체),
+  // 월급날 내역 확인 중(게이트 열림)은 제외.
+  if (mode === 'live' && submitted && beat.mode === 'work' && beat.id !== 'join' && !resultBeat && paydayGate !== state.month) {
     return (
       <ActBusyContext.Provider value={false}>
         <WaitingScreen>{waitingChildren(beat.id, state)}</WaitingScreen>
@@ -124,7 +133,9 @@ export function Audience({ state, beat, revealed, submitted, mode, dispatch, dra
 
   return (
     <ActBusyContext.Provider value={busy}>
-      <Screen state={state} beat={beat} revealed={revealed} submitted={submitted} mode={mode} dispatch={queuedDispatch} draft={draft} />
+      <SimFlowContext.Provider value={flow}>
+        <Screen state={state} beat={beat} revealed={revealed} submitted={submitted} mode={mode} dispatch={queuedDispatch} draft={draft} />
+      </SimFlowContext.Provider>
       {notice ? (
         <div className="fixed inset-x-0 bottom-4 z-50 grid justify-center gap-2 px-4" role="status" aria-live="polite">
           <p className="sheet-in max-w-[26rem] rounded-[10px] bg-sheet px-4 py-3 text-[14px] font-medium shadow-[0_0_0_1px_var(--color-rule),0_12px_28px_-14px_rgba(24,38,74,.6)]">
