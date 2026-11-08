@@ -19,7 +19,14 @@ export function BeatPanel({ classState, lesson, beats, stats, roster }: BeatPane
   const cursor = classState.cursor;
   const beat = beats?.[cursor.segment]?.beats[cursor.beat] ?? null;
   const segment = lesson.segments[cursor.segment] ?? null;
-  if (!beat || !segment) return null;
+  if (!beat || !segment) {
+    // 커서가 실재하지 않는 비트(빈 도입 덱 레슨의 열림 직후) — 수업 시작 안내
+    return (
+      <p className="text-[13px] text-ink-2">
+        아직 수업이 시작되지 않았어요. <b>다음</b>을 누르면 첫 단계부터 시작합니다.
+      </p>
+    );
+  }
 
   if (segment.kind === 'slides') {
     return <SlidePreview deck={segment.deck} beatId={beat.id} cursor={cursor} />;

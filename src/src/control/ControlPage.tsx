@@ -98,7 +98,9 @@ function ControlShell({ onUnauthorized, onLoggedOut }: { onUnauthorized: () => v
   const revealPending = !!(active && atLive && cursorBeat?.reveal && !cls!.cursor.revealed);
   const nextLabel = revealPending ? '결과 공개' : '다음';
   const isLastLive = !!(active && lastRef && cmpRef(cls!.highMark, lastRef) === 0);
-  const nextDisabled = !active || !cursorBeat || (atLive && isLastLive && !revealPending) || role.status !== 'open';
+  // 커서가 실재하지 않는 비트(빈 도입 덱 레슨의 열림 직후 {0,0})를 가리켜도 next는 유효하다 —
+  // 서버 nextRefOf가 다음 실재 비트로 옮긴다. 마지막 비트에서만 끈다.
+  const nextDisabled = !active || flat.length === 0 || (atLive && isLastLive && !revealPending) || role.status !== 'open';
   const prevDisabled =
     !active ||
     !cursorRef ||
