@@ -16,6 +16,7 @@ import type {
   ProgressInfo,
   RosterEntry,
   SnapshotPayload,
+  SpotlightStatePayload,
   StatePayload,
   StatsPayload,
   ActAck,
@@ -459,6 +460,7 @@ export class Room {
       late: rec.late,
       device: rec.device,
       scene: this.locateOf(rec),
+      stalled: rec.stalled,
       pendingMerge: false,
     }));
     for (const [pendingId, p] of this.pendingMerges) {
@@ -470,6 +472,7 @@ export class Room {
         late: false,
         device: p.device,
         scene: null,
+        stalled: false,
         pendingMerge: true,
       });
     }
@@ -523,7 +526,7 @@ export class Room {
       class: this.classState(),
       lesson: this.strippedLesson(),
       classes: this.hooks.getClasses(),
-      spotlightState: this.spotlightState(),
+      spotlightState: this.spotlightPayload(),
     };
   }
 
@@ -546,8 +549,18 @@ export class Room {
     return rec.states[seg.id] ?? null;
   }
 
+  /** 발표자 닉네임(§5.1). 전면은 roster를 받지 않으므로(§5.2) 페이로드에 직접 싣는다 */
+  private spotlightNickname(): string | null {
+    if (this.spotlight === null) return null;
+    return this.students.get(this.spotlight)?.nickname ?? null;
+  }
+
+  private spotlightPayload(): SpotlightStatePayload {
+    return { state: this.spotlightState(), nickname: this.spotlightNickname() };
+  }
+
   private emitSpotlightState(): void {
-    this.io?.to(this.stageRoomName()).emit('spotlightState', { state: this.spotlightState() });
+    this.io?.to(this.stageRoomName()).emit('spotlightState', this.spotlightPayload());
   }
 
   private takeAutoApplied(rec: StudentRecord): AutoAppliedNotice[] {
@@ -624,8 +637,11 @@ export class Room {
 
   private doJoin(socket: LiveSocket, p: JoinPayload): JoinAck {
     const nickname = typeof p.nickname === 'string' ? p.nickname.trim() : '';
-    if (this.status === 'ended' || nickname.length < 1 || nickname.length > 10) {
-      return { ok: false, reason: 'join-locked' };
+    if (this.status === 'ended') return { ok: false, reason: 'join-locked' };
+    // 잘못된 닉네임(빈 값·공백만·10자 초과)은 전용 이유로 거부한다(§5.1, §14 #130).
+    // 'join-locked'은 실제로 입장이 잠긴 수업에만 쓴다.
+    if (nickname.length < 1 || nickname.length > 10) {
+      return { ok: false, reason: 'invalid-nickname' };
     }
     if (this.joinLocked) return { ok: false, reason: 'join-locked' };
     if (this.students.size >= this.maxStudents) return { ok: false, reason: 'class-full' };
@@ -905,7 +921,10 @@ export class Room {
     rec.draft = undefined; // 초안은 이 비트에서 소진(§4.2)
     if (notify) {
       const beatId = beat?.id ?? `${ref.segment}/${ref.beat}`;
-      for (const message of notices) rec.autoApplied.push({ beatId, message });
+      // 빈 안내 문구('' — 순차 처리 걸음 등)는 큐에 넣지 않는다(§14 #134). 화면에도 세지 않는다.
+      for (const message of notices) {
+        if (message) rec.autoApplied.push({ beatId, message });
+      }
     }
     if (actions.length === 0 && !overflow) return; // 적용한 것이 없으면 줄을 남기지 않는다
     this.log.append({
@@ -1058,6 +1077,8 @@ export class Room {
     this.byNickname.set(nickname, rec);
     this.log.append({ t: 'admin', ts: this.now(), op: { kind: 'rename', id, nickname } });
     this.rosterDirty();
+    // 발표자 이름이 바뀌면 전면 표시(닉네임)도 따라간다(§5.1 spotlightState)
+    if (this.spotlight === id) this.emitSpotlightState();
     return { ok: true };
   }
 

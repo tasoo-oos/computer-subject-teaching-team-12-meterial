@@ -75,6 +75,7 @@ function StageShell({ onUnauthorized }: { onUnauthorized: () => void }) {
             beats={role.beats}
             stats={role.stats}
             spotlight={role.spotlightState}
+            spotlightName={role.spotlightName}
           />
         </StageFrame>
       )}

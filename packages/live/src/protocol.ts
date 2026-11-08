@@ -23,7 +23,7 @@ export interface JoinPayload {
 
 export type JoinAck =
   | { ok: true; studentId: string; token: string }
-  | { ok: false; reason: 'join-locked' | 'class-full' }
+  | { ok: false; reason: 'join-locked' | 'class-full' | 'invalid-nickname' }
   // 같은 닉네임이 이미 있을 때: 서버가 대기 요청을 만들고 pendingId를 돌려준다(§5.8).
   // 학생은 "선생님 승인을 기다리는 중" 화면 or 다른 닉네임으로 다시 join
   | { ok: false; reason: 'nickname-taken'; pendingId: string };
@@ -107,7 +107,8 @@ export interface SnapshotPayload<S = unknown> {
   state?: S | null;
   autoApplied?: AutoAppliedNotice[]; // 학생만
   roster?: RosterEntry[]; // 통제만
-  spotlightState?: S | null; // 전면만
+  /** 전면만. 발표자 상태와 닉네임(§5.1 SpotlightStatePayload) */
+  spotlightState?: SpotlightStatePayload<S>;
 }
 
 export interface ClassPayload {
@@ -144,6 +145,8 @@ export interface RosterPayload {
 
 export interface SpotlightStatePayload<S = unknown> {
   state: S | null;
+  /** 발표자 닉네임 (spotlight 없으면 null). 전면 화면 표시용 — 로스터는 전면에 안 간다(§5.2) */
+  nickname: string | null;
 }
 
 export interface ClassesPayload {

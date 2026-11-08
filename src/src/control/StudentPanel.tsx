@@ -133,6 +133,15 @@ export function StudentPanel({ roster, spotlightId, onSpotlight, onRename, onKic
                   >
                     {r.done ? '완료' : '진행 중'}
                   </span>
+                  {r.stalled ? (
+                    // 기본값 루프 50회 초과로 멈춤(§4.2) — 중립 표시, 이후 비트에서 풀린다
+                    <span
+                      className="shrink-0 rounded-[4px] bg-rule-soft px-1 py-px text-[10px] font-bold text-ink-2"
+                      title="자동 처리가 멈춤(기본값 50회 초과). 다음 단계에서 다시 따라잡을 수 있어요"
+                    >
+                      멈춤
+                    </span>
+                  ) : null}
                   {r.late ? (
                     <span className="shrink-0 rounded-[4px] bg-in-soft px-1 py-px text-[10px] font-bold text-in">
                       지각

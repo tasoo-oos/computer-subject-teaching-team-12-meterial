@@ -108,6 +108,11 @@ function ControlShell({ onUnauthorized, onLoggedOut }: { onUnauthorized: () => v
     !flat.some((b) => b.beat.mode === 'show' && cmpRef(b.ref, cursorRef) < 0);
 
   const stats = role.stats;
+  // TV 미리보기의 발표자 닉네임: 통제 소켓은 spotlightState를 받지 못하므로(§5.2)
+  // roster + classState.spotlight에서 클라이언트가 만든다(§14 #132 — 서버 변경 없이 더 단순한 쪽).
+  const spotlightName = cls?.spotlight
+    ? (role.roster.find((r) => r.studentId === cls.spotlight)?.nickname ?? null)
+    : null;
 
   return (
     <div className="paper-texture flex h-dvh flex-col overflow-hidden">
@@ -167,7 +172,13 @@ function ControlShell({ onUnauthorized, onLoggedOut }: { onUnauthorized: () => v
                 </p>
               </div>
               <div className="mx-auto w-full max-w-[640px] shrink-0">
-                <TVPreview classState={cls} lesson={role.lesson!} beats={role.beats} stats={stats} />
+                <TVPreview
+                  classState={cls}
+                  lesson={role.lesson!}
+                  beats={role.beats}
+                  stats={stats}
+                  spotlightName={spotlightName}
+                />
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto rounded-panel bg-sheet p-3 shadow-[0_0_0_1px_var(--color-rule)]">
                 <BeatPanel
