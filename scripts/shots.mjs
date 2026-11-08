@@ -1,5 +1,9 @@
-// 앱 스크린숏: node scripts/shots.mjs [--only=id1,id2] [--viewports=laptop,tablet,phone]
+// 앱 스크린숏: node scripts/shots.mjs [--only=id1,id2] [--viewports=laptop,tablet,tabletPortrait,phone]
 // 결과: shots/<fixture>--<viewport>.png
+//
+// /dev가 통제 로그인 뒤에만 보이므로 임시 게임 서버 대신 Playwright가 GET /api/me를 가로채
+// { role: 'control' }로 응답한다(§11.2 결정 — 서버 없이 스크린숏이 항상 돌게 하기 위한 편차, §14 #79).
+// 찍는 주소는 /dev#/<fixture>?shot (Vite 개발 서버를 직접 띄운다, 기존과 동일).
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
@@ -44,7 +48,7 @@ try {
     if (FIXTURES) ids = FIXTURES.map((f) => f.id);
     else {
       const p = await browser.newPage();
-      await p.goto(`${base}?shot`);
+      await p.goto(`${base}dev?shot`);
       ids = await p.evaluate(async () => (await import('/@id/@gagyebu/core')).FIXTURES.map((f) => f.id));
       await p.close();
     }
@@ -54,10 +58,14 @@ try {
     const size = VIEWPORTS[vp];
     if (!size) throw new Error(`알 수 없는 viewport: ${vp}`);
     const page = await browser.newPage({ viewport: size, deviceScaleFactor: 1 });
+    // /dev 게이트: 통제 쿠키가 있는 것처럼 응답한다 (임시 서버·로그인 대신, §11.2)
+    await page.route('**/api/me', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ role: 'control' }) }),
+    );
     page.on('pageerror', (e) => errors.push(`[${vp}] ${e.message}`));
     page.on('console', (m) => m.type() === 'error' && errors.push(`[${vp}] console: ${m.text()}`));
     for (const id of ids) {
-      await page.goto(`${base}?shot#/${id}`);
+      await page.goto(`${base}dev?shot#/${id}`);
       await page.waitForLoadState('networkidle');
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(Number(opt.wait ?? 600));

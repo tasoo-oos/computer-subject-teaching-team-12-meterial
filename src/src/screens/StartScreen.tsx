@@ -4,17 +4,21 @@ import type { ScreenProps } from '@gagyebu/draft-kit';
 import { FlowHeader } from '../components/FlowHeader.tsx';
 import { useCountUp } from '../lib/motion.ts';
 
-export function StartScreen({ state, ui, go, goScreen }: ScreenProps) {
-  const stage = ui.startStage ?? 'name';
+export function StartScreen({ state, dispatch, ui }: ScreenProps) {
+  const stage = ui?.startStage ?? 'name';
   return (
     <div className="paper-texture min-h-dvh">
       <FlowHeader current="start" />
-      {stage === 'name' ? <NameStage onSubmit={() => go('start-reveal')} /> : <RevealStage state={state} onNext={() => goScreen('survey')} />}
+      {stage === 'name' ? (
+        <NameStage salary={state.profile.salary} onSubmit={(nickname) => dispatch({ type: 'start', nickname, salary: state.profile.salary })} />
+      ) : (
+        <RevealStage state={state} onNext={() => dispatch({ type: 'continue' })} />
+      )}
     </div>
   );
 }
 
-function NameStage({ onSubmit }: { onSubmit: (name: string) => void }) {
+function NameStage({ salary, onSubmit }: { salary: number; onSubmit: (name: string) => void }) {
   const [name, setName] = useState('');
   const valid = name.trim().length > 0;
   return (

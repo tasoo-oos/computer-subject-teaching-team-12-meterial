@@ -23,14 +23,20 @@ import { PaydayStage } from '../components/sim/PaydayStage.tsx';
 import { ReportStage } from '../components/sim/ReportStage.tsx';
 import { SceneCard } from '../components/sim/SceneCard.tsx';
 import { StatusPanel } from '../components/sim/StatusPanel.tsx';
-import { NEXT_FIXTURE, SCENE_FIXTURE } from '../components/sim/routes.ts';
 import { scenePrompt } from '../lib/prompts.ts';
 
-export function SimScreen({ state, ui, fixture, go, goScreen }: ScreenProps) {
+export function SimScreen({ state, dispatch, ui }: ScreenProps) {
   const [step, setStep] = useState(state.step);
-  const [openChoice, setOpenChoice] = useState<string | null>(ui.openChoiceId ?? null);
+  const [openChoice, setOpenChoice] = useState<string | null>(ui?.openChoiceId ?? null);
   const [reason, setReason] = useState<string | null>(null);
-  const next = () => go(NEXT_FIXTURE[fixture.id] ?? 'result-balanced');
+  // 단계마다 라이브에서 실제로 나가는 행동으로 넘긴다. dev 어댑터(src/src/dev/route.ts)가 같은 스냅숏 그래프로 이동시킨다.
+  const next = () => {
+    if (step === 'payday') dispatch({ type: 'beginMonth' });
+    else if (step === 'outcome') dispatch({ type: 'continue' });
+    else if (step === 'report') dispatch({ type: 'endMonth' });
+    else if (step === 'adjust') dispatch({ type: 'setBudget', budget: state.budget });
+    else dispatch({ type: 'endMonth' });
+  };
   const sceneRef = state.current;
   const fetched = sceneRef ? getScene(sceneRef) : null;
   const opened = fetched?.scene.choices.find((c) => c.id === openChoice) ?? null;
@@ -47,21 +53,15 @@ export function SimScreen({ state, ui, fixture, go, goScreen }: ScreenProps) {
       setOpenChoice(c.id);
       return;
     }
-    if (c.next) {
-      const key = `${sceneRef?.eventId ?? ''}/${c.next.scene}`;
-      // 같은 달에 이어지는 장면이면 그 장면 스냅숏으로. 예약 장면이면 다음 스냅숏으로
-      if (!c.next.delayMonths && SCENE_FIXTURE[key]) go(SCENE_FIXTURE[key]!);
-      else next();
-      return;
-    }
-    next();
+    // 같은 달에 이어지는 장면인지, 예약 장면인지는 dev 어댑터의 route가 기존 SCENE_FIXTURE 규칙으로 판단한다
+    dispatch({ type: 'choose', choiceId: c.id });
   };
 
   const closePanel = () => setOpenChoice(null);
 
   const confirmPanel = () => {
     setOpenChoice(null);
-    next();
+    if (opened) dispatch({ type: 'choose', choiceId: opened.id });
   };
 
   return (
@@ -139,7 +139,7 @@ export function SimScreen({ state, ui, fixture, go, goScreen }: ScreenProps) {
             </p>
           </div>
           {step !== 'adjust' && state.month === 12 ? (
-            <button type="button" onClick={() => goScreen('result')} className="btn btn-primary w-full">
+            <button type="button" onClick={() => dispatch({ type: 'endMonth' })} className="btn btn-primary w-full">
               1년 결산 보기
               <ChevronRight size={16} aria-hidden />
             </button>

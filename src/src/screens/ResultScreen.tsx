@@ -19,8 +19,8 @@ import { DecisionTimeline } from '../components/result/DecisionTimeline.tsx';
 import { NetWorthChart } from '../components/result/NetWorthChart.tsx';
 import { PresentationView } from './ResultPresentation.tsx';
 
-export function ResultScreen({ state, ui, go }: ScreenProps) {
-  if (ui.presentation) return <PresentationView state={state} onExit={() => go('result-balanced')} />;
+export function ResultScreen({ state, dispatch, ui }: ScreenProps) {
+  if (ui?.presentation) return <PresentationView state={state} onExit={() => dispatch({ type: 'continue' })} />;
   const s = state.settlement;
   if (!s) return null;
   const ending = ENDINGS[s.ending];
@@ -79,11 +79,11 @@ export function ResultScreen({ state, ui, go }: ScreenProps) {
             )}
 
             <div className="mt-4 flex flex-wrap gap-2">
-              <button type="button" onClick={() => go('result-present')} className="btn btn-primary">
+              <button type="button" onClick={() => dispatch({ type: 'continue' })} className="btn btn-primary">
                 <Presentation size={17} aria-hidden />
                 발표용 크게 보기
               </button>
-              <button type="button" onClick={() => go('start-name')} className="btn btn-quiet">
+              <button type="button" onClick={() => dispatch({ type: 'reset' })} className="btn btn-quiet">
                 처음부터 다시
               </button>
             </div>

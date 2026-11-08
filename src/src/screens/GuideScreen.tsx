@@ -4,9 +4,10 @@ import { ACCOUNT_ORDER, ACCOUNTS, GUIDE_CARDS, formatPct } from '@gagyebu/core';
 import type { ScreenProps } from '@gagyebu/draft-kit';
 import { FlowHeader } from '../components/FlowHeader.tsx';
 import { PassbookCover } from '../components/PassbookCover.tsx';
+import { DEV_PREV } from '../dev/route.ts';
 
-export function GuideScreen({ state, ui, go, goScreen }: ScreenProps) {
-  const [index, setIndex] = useState(ui.guideIndex ?? 0);
+export function GuideScreen({ state, dispatch, ui }: ScreenProps) {
+  const [index, setIndex] = useState(ui?.guideIndex ?? 0);
   const card = GUIDE_CARDS[index]!;
   const last = index === GUIDE_CARDS.length - 1;
   const isSplit = card.id === 'split-accounts';
@@ -78,11 +79,15 @@ export function GuideScreen({ state, ui, go, goScreen }: ScreenProps) {
         </article>
 
         <div className="mt-6 flex items-center justify-between gap-3">
-          <button type="button" onClick={() => (index === 0 ? go('survey-result') : setIndex(index - 1))} className="btn btn-quiet">
+          <button type="button" onClick={() => (index === 0 ? dispatch(DEV_PREV) : setIndex(index - 1))} className="btn btn-quiet">
             <ChevronLeft size={18} aria-hidden />
             이전
           </button>
-          <button type="button" onClick={() => (last ? goScreen('budget') : setIndex(index + 1))} className="btn btn-primary px-6">
+          <button
+            type="button"
+            onClick={() => (last ? dispatch({ type: 'goto', phase: 'budget' }) : setIndex(index + 1))}
+            className="btn btn-primary px-6"
+          >
             {last ? '가계부 짜러 가기' : '다음 카드'}
             {last ? null : <ChevronRight size={18} aria-hidden />}
           </button>

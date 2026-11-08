@@ -8,7 +8,7 @@ import { FlowHeader } from '../components/FlowHeader.tsx';
 import { PromptCopy } from '../components/PromptCopy.tsx';
 import { budgetPrompt } from '../lib/prompts.ts';
 
-export function BudgetScreen({ state, go, goScreen }: ScreenProps) {
+export function BudgetScreen({ state, dispatch }: ScreenProps) {
   const [budget, setBudget] = useState(state.budget);
   const salary = state.profile.salary;
   const recommended = state.survey.result?.recommended ?? null;
@@ -44,11 +44,16 @@ export function BudgetScreen({ state, go, goScreen }: ScreenProps) {
               </button>
             </BudgetTotals>
             <div className="mt-4 flex items-center justify-between gap-3">
-              <button type="button" onClick={() => go('guide-1')} className="btn btn-quiet">
+              <button type="button" onClick={() => dispatch({ type: 'goto', phase: 'guide' })} className="btn btn-quiet">
                 <ChevronLeft size={18} aria-hidden />
                 이전
               </button>
-              <button type="button" disabled={!valid} onClick={() => goScreen('sim')} className="btn btn-primary flex-1 px-5">
+              <button
+                type="button"
+                disabled={!valid}
+                onClick={() => dispatch({ type: 'confirmBudget' })}
+                className="btn btn-primary flex-1 px-5"
+              >
                 이 가계부로 1년 시작
               </button>
             </div>
