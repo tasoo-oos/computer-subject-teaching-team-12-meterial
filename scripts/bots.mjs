@@ -122,7 +122,9 @@ function gagyebuAction(state, beatId, bot, rng) {
   if (beatId === 'budget' && state.phase === 'budget') {
     if (!bot.budgetSet) {
       bot.budgetSet = true;
-      return { type: 'setBudget', budget: core.recommendBudget(state.survey.answers, state.profile.salary) };
+      // recommendBudget는 SurveyResult를 돌려준다 — 가계부는 .recommended다
+      const { recommended } = core.recommendBudget(state.survey.answers, state.profile.salary);
+      return { type: 'setBudget', budget: recommended };
     }
     return { type: 'confirmBudget' };
   }
@@ -182,11 +184,24 @@ function isLastBeat(ref) {
   );
 }
 
+/** live 비트가 바뀌면 settled·done을 초기화한다 — 둘 다 지난 비트 값이 남아 있다 */
+function markBeat(bot) {
+  if (!bot.classState) return;
+  const hm = bot.classState.highMark;
+  const key = `${hm.segment}/${hm.beat}`;
+  if (bot.lastBeat !== key) {
+    bot.lastBeat = key;
+    bot.settled = false;
+    bot.done = false; // 이 비트의 done은 ack·state·snapshot이 다시 채운다
+  }
+}
+
 /** 봇 하나의 work 비트 행동 루프: done이거나 행동이 없을 때까지 순서대로 */
 async function pump(bot) {
-  if (bot.busy || bot.lazy) return;
+  if (bot.busy || bot.lazy || !bot.authed) return; // 재접속 hello 전의 pump는 not-allowed로 죽는다
   bot.busy = true;
   try {
+    bot.settled = false;
     for (let guard = 0; guard < 20; guard++) {
       if (bot.done || !bot.classState || bot.classState.status !== 'open') break;
       const { cursor, highMark } = bot.classState;
@@ -202,10 +217,24 @@ async function pump(bot) {
         break;
       }
       if (!action) break;
-      const ack = await new Promise((resolveAck) => {
-        bot.socket.emit('act', { seq: ++bot.seq, beat: highMark, action }, resolveAck);
-      });
+      // 속도 제한(소켓당 초당 4회, §5.4) — 봇은 사람보다 빠르다: 250ms 간격 + too-fast 재시도
+      await new Promise((r) => setTimeout(r, 250));
+      let ack = null;
+      for (let attempt = 0; ; attempt++) {
+        ack = await new Promise((resolveAck) => {
+          bot.socket.emit('act', { seq: ++bot.seq, beat: highMark, action }, resolveAck);
+        });
+        if (ack && ack.ok !== true && ack.reason === 'too-fast' && attempt < 4) {
+          await new Promise((r) => setTimeout(r, 400));
+          continue;
+        }
+        break;
+      }
       if (!ack || ack.ok !== true) {
+        if (ack && ack.reason === 'stale-beat') {
+          // 커서가 이미 지나갔다 — 다음 class 이벤트에 갱신된 커서로 다시 행동한다
+          break;
+        }
         fail(bot, `${beat.id} act 거부: ${ack && ack.reason}`);
         break;
       }
@@ -214,6 +243,7 @@ async function pump(bot) {
       if (bot.done) break;
     }
   } finally {
+    bot.settled = true;
     bot.busy = false;
   }
 }
@@ -239,6 +269,10 @@ async function spawnBot(i) {
     busy: false,
     seq: 0,
     budgetSet: false,
+    token: null,
+    authed: false, // 서버가 이 소켓을 학생으로 인식했는지(재접속 hello 완료)
+    settled: false, // 이 live 비트에서 봇이 할 일을 마쳤다(done이거나 더 보낼 행동 없음)
+    lastBeat: null,
     autoApplied: 0,
     reachedLast: false,
   };
@@ -249,10 +283,12 @@ async function spawnBot(i) {
     if (p.state !== undefined) bot.state = p.state;
     if (p.you) bot.done = p.you.done;
     if (p.autoApplied) bot.autoApplied += p.autoApplied.length;
+    markBeat(bot);
     maybeFinished(bot);
   });
   bot.socket.on('class', (p) => {
     bot.classState = p.class;
+    markBeat(bot);
     maybeFinished(bot);
     void pump(bot);
   });
@@ -260,6 +296,39 @@ async function spawnBot(i) {
     bot.state = p.state;
     bot.done = p.done;
     if (p.autoApplied) bot.autoApplied += p.autoApplied.length;
+    // 전이(endMonth)로 바뀐 상태는 class보다 늦게 온다 — 상태가 갱신되면 다시 행동한다
+    void pump(bot);
+  });
+  // 서버가 죽는 동안 소켓.io가 버퍼에 쌓은 act는 재접속 직후(hello보다 먼저) 세상에
+  // 나가 'not-allowed'로 죽는다 — 끊기는 순간 버퍼를 비운다(못 나간 ack는 재접속
+  // 처리가 pump를 다시 깨운다).
+  bot.socket.on('disconnect', () => {
+    bot.authed = false; // 재접속 hello 전에 class 이벤트가 pump를 깨우면 not-allowed로 죽는다
+    bot.socket.sendBuffer.length = 0;
+  });
+  // 서버 재시작 뒤 재접속: 토큰으로 기존 학생 재개(§8.3). 재접속 hello는 소켓당
+  // 5초 제한이 무시되지 않으므로 최초 연결(token 없음)은 건너뛴다.
+  bot.socket.on('connect', async () => {
+    if (!bot.token) return;
+    const hello2 = await new Promise((res) =>
+      bot.socket.emit('hello', { code: args.code, token: bot.token, device: 'laptop' }, res),
+    );
+    if (!hello2.ok) {
+      fail(bot, `재접속 hello: ${hello2.reason}`);
+      return;
+    }
+    // snapshot이 classState를 갱신한 뒤에 행동해야 stale-beat에 걸리지 않는다
+    await new Promise((res) => {
+      const t = setTimeout(res, 2000);
+      bot.socket.once('snapshot', () => {
+        clearTimeout(t);
+        res();
+      });
+    });
+    // 끊기며 못 돌아온 act ack로 pump가 멈춰 있을 수 있다 — 다시 깨운다
+    bot.authed = true;
+    bot.busy = false;
+    void pump(bot);
   });
   const hello = await new Promise((res) => bot.socket.emit('hello', { code: args.code, device: 'laptop' }, res));
   if (!hello.ok) {
@@ -276,10 +345,14 @@ async function spawnBot(i) {
       return;
     }
     bot.nickname = alt;
+    bot.token = retry.token;
   } else if (!join.ok) {
     fail(bot, `join: ${join.reason}`);
     return;
+  } else {
+    bot.token = join.token;
   }
+  bot.authed = true;
 }
 
 function maybeFinished(bot) {
@@ -335,8 +408,18 @@ function startAutoNext(cookie) {
     try {
       while (latest && latest.status === 'open' && !isLastBeat(latest.cursor)) {
         const beat = beatAt(latest.cursor);
-        const waitMs = beat && beat.mode === 'work' ? 800 : 150;
-        await new Promise((r) => setTimeout(r, waitMs));
+        if (beat && beat.mode === 'work') {
+          // 봇들이 이 비트에서 할 일을 마칠 때까지 기다린다(비lazy·실패 봇 기준, 최대 6s).
+          // lazy 봇은 끝내지 않으므로 기다림 대상에서 빼고 next(force)가 기본값으로 채운다.
+          const deadline = Date.now() + 6000;
+          const ready = () =>
+            bots.filter((b) => !b.lazy).every((b) => b.settled || failures.has(b.nickname));
+          while (Date.now() < deadline && !ready()) {
+            await new Promise((r) => setTimeout(r, 100));
+          }
+        } else {
+          await new Promise((r) => setTimeout(r, 150));
+        }
         const ack = await new Promise((res) => socket.emit('next', { force: true }, res));
         if (ack && ack.ok !== true && ack.reason && ack.reason !== 'confirm-required') {
           if (ack.reason === 'invalid-target') return; // 마지막 비트

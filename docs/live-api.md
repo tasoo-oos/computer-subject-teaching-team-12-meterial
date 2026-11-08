@@ -1308,6 +1308,8 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 - 봇마다 소켓 하나. `hello`+`join`(닉네임 `bot-01`…) 후 `snapshot`으로 상태를 유지한다.
 - `class`가 오면 커서 비트를 따라가고, work 비트에서 lazy가 아니면 행동한다: 설문 → 시드로 고른 답, 가계부 → 추천 가계부 확정(`recommendBudget`+`confirmBudget`), 장면 → `choiceAvailability`로 열린 선택지 중 시드로 하나 + `pay`가 있으면 `autoPaymentPlan` + `deposit`이 있으면 첫 계좌. core와 활동 로직을 상대 경로(`../packages/.../src/index.ts`)로 직접 import해 계산한다(Node 24 타입 스트리핑).
 - lazy 봇은 아무것도 보내지 않는다. `--auto-next`가 없으면 교사 역할은 사람이 통제 페이지에서 한다.
+- 행동 간 250ms 간격을 두고 `too-fast`(소켓당 초당 4회, §5.4)는 잠시 뒤 재시도한다. `--auto-next`는 work 비트에서 비lazy 봇이 할 일을 마칠 때까지(최대 6s) 기다렸다가 `next { force: true }`를 보낸다.
+- 서버 재시작 등으로 연결이 끊기면 발급받은 토큰으로 재접속 hello를 보내 기존 학생으로 이어서 행동한다(§8.3). 끊기는 순간 소켓.io 버퍼에 쌓인 행동은 버린다(재접속 hello보다 먼저 나가 `not-allowed`로 죽는 것을 막는다).
 - 매 비트마다 한 줄 진행 로그, 마지막에 요약(완주/자동 처리/실패 인원). 모든 비lazy 봇이 `present` 비트에 도달하면 종료 코드 0.
 
 ### 11.2 `scripts/shots.mjs` 변경
