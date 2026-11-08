@@ -1,16 +1,35 @@
 // 스냅숏 네비게이터 개발 도구. 같은 셸로 화면과 목업 상태를 오간다.
 // 이 파일의 생김새는 디자인 대상이 아니다.
-import { useEffect, useMemo, useState, type ComponentType, type CSSProperties } from 'react';
-import { FIXTURES, SCREEN_LABEL, SCREEN_ORDER, type Fixture, type FixtureUi, type GameState, type ScreenId } from '@gagyebu/core';
+// ScreenProps는 docs/live-api.md §10.8, DraftShell는 §10.9 계약을 따른다.
+import { useEffect, useMemo, useState, type ComponentType, type CSSProperties, type ReactElement } from 'react';
+import { FIXTURES, SCREEN_LABEL, SCREEN_ORDER, type Action, type FixtureUi, type GameState, type ScreenId } from '@gagyebu/core';
 
+/**
+ * 비트 (docs/live-api.md §4.1 Beat와 구조가 같다).
+ * draft-kit은 @gagyebu/live를 의존하지 않는다(package.json은 S0 소유라 여기서 못 더한다).
+ * 구조 타이핑으로 live의 Beat와 상호 할당 가능하므로 계약 모양은 그대로다.
+ */
+export interface Beat {
+  id: string;
+  label: string;
+  mode: 'show' | 'work';
+  reveal?: boolean;
+  notes?: string;
+}
+
+/** 기존 화면의 새 계약 (docs/live-api.md §10.8). 라이브·solo·dev 같은 화면 자산으로 그린다 */
 export interface ScreenProps {
   state: GameState;
-  ui: FixtureUi;
-  fixture: Fixture;
-  /** 다른 스냅숏으로 이동 (예: "다음" 버튼이 다음 화면의 첫 스냅숏으로) */
-  go: (fixtureId: string) => void;
-  /** 다음/이전 화면(ScreenId 기준)의 첫 스냅숏으로 이동 */
-  goScreen: (screen: ScreenId) => void;
+  /** 현재 비트. id로 세부 표시 결정: 'survey', 'guide-3', 'm2', 'present' … */
+  beat: Beat;
+  revealed: boolean;
+  /** 이 비트 제출 완료 (라이브: 서버 판정 / dev·solo: false) */
+  submitted: boolean;
+  mode: 'live' | 'solo' | 'dev';
+  dispatch: (action: Action) => void;
+  draft: (data: unknown) => void;
+  /** dev 모드에서만 (스냅숏 힌트). 라이브·solo에서는 undefined */
+  ui?: FixtureUi;
 }
 
 export type ScreenMap = Record<ScreenId, ComponentType<ScreenProps>>;
@@ -23,7 +42,20 @@ function readHash(): string {
 /** 스크린숏 모드: ?shot 이 붙으면 네비게이터를 숨긴다 */
 const SHOT = new URLSearchParams(window.location.search).has('shot');
 
-export function DraftShell({ screens, title }: { screens: ScreenMap; title: string }) {
+/** 스냅숏 셸 (docs/live-api.md §10.9). route·beatOf는 src/src/dev/가 제공한다 */
+export function DraftShell({
+  screens,
+  title,
+  route,
+  beatOf,
+}: {
+  screens: ScreenMap;
+  title: string;
+  /** 스냅숏 id + 행동 → 이동할 스냅숏 id. null이면 무시 */
+  route: (fixtureId: string, action: Action) => string | null;
+  /** 스냅숏 id → 비트 (라이브 비트 id와 같은 id를 쓴다) */
+  beatOf: (fixtureId: string) => Beat;
+}): ReactElement {
   const [id, setId] = useState(readHash);
   const [open, setOpen] = useState(false);
 
@@ -38,10 +70,6 @@ export function DraftShell({ screens, title }: { screens: ScreenMap; title: stri
 
   const go = (next: string) => {
     window.location.hash = `/${next}`;
-  };
-  const goScreen = (screen: ScreenId) => {
-    const f = FIXTURES.find((x) => x.screen === screen);
-    if (f) go(f.id);
   };
 
   useEffect(() => {
@@ -64,10 +92,25 @@ export function DraftShell({ screens, title }: { screens: ScreenMap; title: stri
   const Screen = screens[fixture.screen];
   // 같은 화면 안에서 스냅숏이 바뀌면 화면 내부 상태를 초기화한다
   const state = useMemo(() => structuredClone(fixture.state), [fixture]);
+  // §10.9: dev 모드 props. dispatch는 route가 정한 다음 스냅숏으로, draft는 아무것도 안 한다
+  const dispatch = (action: Action) => {
+    const next = route(fixture.id, action);
+    if (next) go(next);
+  };
 
   return (
     <>
-      <Screen key={fixture.id} state={state} ui={fixture.ui} fixture={fixture} go={go} goScreen={goScreen} />
+      <Screen
+        key={fixture.id}
+        state={state}
+        beat={beatOf(fixture.id)}
+        revealed={true}
+        submitted={false}
+        mode="dev"
+        dispatch={dispatch}
+        draft={() => {}}
+        ui={fixture.ui}
+      />
       {!SHOT && <Navigator open={open} setOpen={setOpen} current={fixture} title={title} go={go} />}
     </>
   );
@@ -82,7 +125,7 @@ function Navigator({
 }: {
   open: boolean;
   setOpen: (o: boolean) => void;
-  current: Fixture;
+  current: { id: string; label: string; note: string };
   title: string;
   go: (id: string) => void;
 }) {

@@ -14,9 +14,10 @@ import { FlowHeader } from '../components/FlowHeader.tsx';
 import { Money } from '../components/Money.tsx';
 import { RatioBar } from '../components/RatioBar.tsx';
 import { Spine } from '../components/Spine.tsx';
+import { DEV_PREV } from '../dev/route.ts';
 
-export function SurveyScreen({ state, ui, go, goScreen }: ScreenProps) {
-  const index = ui.surveyIndex ?? 0;
+export function SurveyScreen({ state, dispatch, ui }: ScreenProps) {
+  const index = ui?.surveyIndex ?? 0;
   return (
     <div className="paper-texture min-h-dvh">
       <FlowHeader current="survey" nickname={state.profile.nickname} />
@@ -24,11 +25,11 @@ export function SurveyScreen({ state, ui, go, goScreen }: ScreenProps) {
         <Question
           index={index}
           initial={state.survey.answers[SURVEY[index]!.id] ?? null}
-          onPrev={() => (index === 0 ? go('start-reveal') : go('survey-q1'))}
-          onNext={() => go(index === SURVEY.length - 1 ? 'survey-result' : 'survey-q7')}
+          onPrev={() => dispatch(DEV_PREV)}
+          onNext={() => dispatch({ type: 'submitSurvey', answers: {} })}
         />
       ) : (
-        <Result state={state} onPrev={() => go('survey-q7')} onNext={() => goScreen('guide')} />
+        <Result state={state} onPrev={() => dispatch(DEV_PREV)} onNext={() => dispatch({ type: 'goto', phase: 'guide' })} />
       )}
     </div>
   );
