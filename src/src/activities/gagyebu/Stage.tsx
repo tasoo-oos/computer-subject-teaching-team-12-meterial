@@ -32,7 +32,7 @@ import { StatTile } from '../../stage/StatTile.tsx';
 import type { StageProps } from '../registry.ts';
 
 export function Stage(props: StageProps<GameState | null, GagyebuStats>) {
-  const { beat, revealed, stats, spotlight, progress, code } = props;
+  const { beat, revealed, stats, spotlight, spotlightName, progress, code } = props;
   const id = beat.id;
 
   if (id === 'join') {
@@ -59,7 +59,7 @@ export function Stage(props: StageProps<GameState | null, GagyebuStats>) {
     if (month === 1 || month === 4 || month === 10) return <QuietMonthStage month={month} revealed={revealed} stats={stats} />;
     return <EventMonthStage month={month} revealed={revealed} stats={stats} />;
   }
-  if (id === 'present') return <PresentStage spotlight={spotlight} />;
+  if (id === 'present') return <PresentStage spotlight={spotlight} spotlightName={spotlightName} />;
   return <StageMessage title={beat.label} sub="이 단계의 전면 화면은 준비 중이에요" />;
 }
 
@@ -575,7 +575,9 @@ function SettlementStage({ revealed, stats }: { revealed: boolean; stats: Gagyeb
 }
 
 /** 발표 비트: 지정한 학생의 결과 크게 (닉네임은 발표뿐 — PresentationView 안에 있다) */
-function PresentStage({ spotlight }: { spotlight: GameState | null }) {
+/** 발표 비트: 지정한 학생의 결과 크게. 닉네임은 발표 때만 TV에 나온다(계획 §0).
+ *  닉네임은 서버가 주는 spotlightName(§14 #132 — rename 반영)을 우선하고, 없으면 상태의 profile.nickname. */
+function PresentStage({ spotlight, spotlightName }: { spotlight: GameState | null; spotlightName: string | null }) {
   if (!spotlight) {
     return (
       <StageMessage
@@ -587,5 +589,10 @@ function PresentStage({ spotlight }: { spotlight: GameState | null }) {
   if (!spotlight.settlement) {
     return <StageMessage title="발표" sub="발표자의 결과를 준비하는 중이에요" />;
   }
-  return <PresentationView state={spotlight} />;
+  const name = spotlightName ?? spotlight.profile.nickname;
+  const state =
+    name === spotlight.profile.nickname
+      ? spotlight
+      : { ...spotlight, profile: { ...spotlight.profile, nickname: name } };
+  return <PresentationView state={state} />;
 }
