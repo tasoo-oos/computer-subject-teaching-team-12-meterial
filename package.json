@@ -7,6 +7,9 @@
     "dev": "pnpm --filter @gagyebu/app dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "server": "node --env-file=.env server/src/main.ts",
+    "bots": "node scripts/bots.mjs --url http://localhost:8091",
     "shots": "node scripts/shots.mjs",
     "single": "node scripts/build-single.mjs"
   },

@@ -283,7 +283,8 @@ export interface RosterEntry {
 
 ```ts
 /** 덱 매니페스트를 show 비트 목록으로 만든다 (서버·클라이언트 공용).
- *  비트 라벨은 SlideManifest.label ?? slideId. steps가 있으면 " (k/n)"을 덧붙인다. */
+ *  비트 라벨은 SlideManifest.label ?? slideId. steps가 있으면 " (k/n)"을 덧붙인다
+ *  (k는 사람 표기 기준 1부터 — 예: (1/3). 비트 id의 k는 0부터, §14 #64). */
 export function deckBeats(deck: DeckManifest): Beat[];
 ```
 
@@ -1456,3 +1457,8 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 61. **소켓 이벤트 맵도 제네릭.** `ClientToServerEvents<A, D>`·`ServerToClientEvents<S, St>`. 앱은 `src/src/activities/gagyebu/liveTypes.ts`에서 `ClientToServerEvents<Action, GagyebuDraft>`·`ServerToClientEvents<GameState, GagyebuStats>`로 좁히고 `useLive<S, A, D>`가 받는다.
 62. **`DecisionRecord.eventId`는 `EventId | ''`** (core-api.md §4.2). 현재 장면이 없는 statusAction 기록을 위한 빈 문자열 sentinel.
 63. **`admin merge` 로그 줄에 새 토큰 포함**(join 줄과 같은 방식) — 재생이 merge 뒤 유효한 토큰을 복원한다(§8.2·§5.8).
+
+### S0 구현 중 확정 (2026-11-08)
+
+64. **덱 비트 라벨의 " (k/n)"은 1부터.** §4.1의 라벨 접미사 k는 사람 표기 기준 1부터(예: " (1/3)", " (2/3)"). 비트 id의 `${slideId}--${k}`에 쓰는 k는 0부터(비트 k = 항목 0..k 공개) 그대로다. 통제 타임라인에 "(0/3)"이 보이는 것이 어색해 S0이 확정했다.
+65. **core `fixtures.ts`의 `structuredClone`을 JSON 복제로 교체.** `packages/activity-gagyebu`의 tsconfig가 DOM·Node lib 없이(`lib: ["ES2022"]`) core를 함께 검사하므로(§1.2 금지 규칙의 정적 검증), DOM 전역인 `structuredClone`이 있는 `fixtures.ts`가 컴파일을 실패했다. 스냅숏 상태는 순수 JSON 값이라 `JSON.parse(JSON.stringify(x))` 복제로 바꿨다(동작 동일). draft-kit 어댑터(§10.9)의 `structuredClone(fixture.state)`은 클라이언트 전용이라 그대로다.

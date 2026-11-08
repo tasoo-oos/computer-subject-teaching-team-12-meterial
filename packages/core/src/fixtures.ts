@@ -61,7 +61,8 @@ export interface Fixture {
 // ---------------------------------------------------------------------------
 // 근사 시뮬레이션 도구
 
-const clone = <T>(x: T): T => structuredClone(x);
+// 순수 JSON 복제 — DOM·Node 전역(structuredClone) 없이 모든 환경(lib ES2022)에서 쓸 수 있어야 한다.
+const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
 
 function runPayday(s: GameState, m: MonthNo) {
   const b = s.budget;
@@ -145,7 +146,14 @@ function closeMonth(s: GameState, m: MonthNo) {
     debt: totalDebt(s),
     satisfaction: s.satisfaction,
     credit: s.credit,
-    eventIds: [...new Set(s.decisions.filter((d) => d.month === m).map((d) => d.eventId))],
+    eventIds: [
+      ...new Set(
+        s.decisions
+          .filter((d) => d.month === m)
+          .map((d) => d.eventId)
+          .filter((id): id is EventId => id !== ''),
+      ),
+    ],
   });
   s.current = null;
   s.queue = [];

@@ -255,6 +255,8 @@ export interface Choice {
   requires?: Condition;
   /** requires를 못 채웠을 때 보여 줄 이유 */
   lockedReason?: string;
+  /** 이 장면의 기본 선택지(2026-11-09 추가, docs/core-api.md §3.3). 모든 장면에 정확히 하나, requires 없음 */
+  fallback?: true;
   effects?: Effect[];
   next?: NextScene;
   feedback: string;
@@ -457,7 +459,8 @@ export interface MonthRecord {
 
 export interface DecisionRecord {
   month: MonthNo;
-  eventId: EventId;
+  /** 현재 장면이 없는 statusAction 기록을 위한 빈 문자열 sentinel (2026-11-09, docs/core-api.md §4.2) */
+  eventId: EventId | '';
   eventCode: string;
   sceneId: SceneId;
   choiceId: string;
@@ -465,6 +468,8 @@ export interface DecisionRecord {
   kind: ChoiceKind;
   payment?: PaymentPlan;
   tags: ChoiceTag[];
+  /** 자동 처리된 선택 (2026-11-09 추가, docs/core-api.md §4.2) */
+  auto?: boolean;
 }
 
 export interface SavingsMaturity {
@@ -520,17 +525,45 @@ export interface GameState {
   settlement: Settlement | null;
 }
 
-/** step(state, action)에 넣는 행동 */
+/** step(state, action)에 넣는 행동 (2026-11-09 변경, docs/core-api.md §4.2).
+ *  start가 salary를 받고, 설문은 submitSurvey 하나로 합쳐진다(answer·finishSurvey 삭제).
+ *  auto?: true는 서버·활동의 기본값 처리만 붙이고, step이 DecisionRecord.auto로 옮긴다. */
 export type Action =
-  | { type: 'start'; nickname: string }
-  | { type: 'answer'; question: QuestionId; option: string }
-  | { type: 'finishSurvey' }
-  | { type: 'goto'; phase: Phase }
-  | { type: 'setBudget'; budget: Budget }
-  | { type: 'confirmBudget' }
+  | { type: 'start'; nickname: string; salary: Won }
+  | { type: 'submitSurvey'; answers: Partial<Record<QuestionId, string>> }
+  | { type: 'goto'; phase: 'guide' | 'budget' }
+  | { type: 'setBudget'; budget: Budget; auto?: true }
+  | { type: 'confirmBudget'; auto?: true }
   | { type: 'beginMonth' }
-  | { type: 'choose'; choiceId: string; payment?: PaymentPlan; depositTo?: AccountId; amount?: Won }
+  | { type: 'choose'; choiceId: string; payment?: PaymentPlan; depositTo?: AccountId; amount?: Won; auto?: true }
   | { type: 'continue' }
   | { type: 'statusAction'; status: StatusId; action: StatusActionId; depositTo?: AccountId }
   | { type: 'endMonth' }
   | { type: 'reset' };
+
+// ---------------------------------------------------------------------------
+// 기본값·자동 처리 (docs/core-api.md §4.3)
+
+/** 합계 맞추기(balanceBudget)로 바뀐 가계부 항목. 학생 안내 문구용 */
+export interface BudgetChange {
+  key: TransferAccountId | ExpenseId | 'livingBuffer';
+  before: Won;
+  after: Won;
+}
+
+/** 지불 계획 검증 실패 이유 (validatePayment) */
+export type PaymentIssue =
+  | {
+      kind: 'sum-mismatch' | 'amount-out-of-range' | 'source-not-allowed' | 'over-balance' | 'card-months-not-allowed' | 'negative-part';
+      detail: string;
+    };
+
+/** StepError의 오류 코드 (docs/core-api.md §4.2) */
+export type StepErrorCode =
+  | 'invalid-phase' // 지금 phase에서 쓸 수 없는 행동
+  | 'invalid-step' // 시뮬레이션 안 단계가 맞지 않음 (예: 장면 없는 상태에서 choose)
+  | 'unknown-choice' // 현재 장면에 없는 선택지
+  | 'choice-locked' // requires 조건을 못 채움
+  | 'budget-invalid' // 합계가 맞지 않거나 음수 항목
+  | 'payment-invalid' // 지불 계획 검증 실패 (validatePayment와 같은 이유)
+  | 'already-finished'; // phase 'result' 뒤의 행동 (reset 제외)

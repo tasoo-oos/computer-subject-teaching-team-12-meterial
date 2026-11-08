@@ -1,0 +1,24 @@
+{
+  "name": "@gagyebu/server",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/main.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@gagyebu/live": "workspace:*",
+    "@gagyebu/activity-gagyebu": "workspace:*",
+    "@gagyebu/lesson": "workspace:*",
+    "socket.io": "^4.8.4",
+    "cookie": "^1.0.2"
+  },
+  "devDependencies": {
+    "@types/cookie": "^1.0.0",
+    "@types/node": "^24.19.2",
+    "vitest": "^5.1.0"
+  }
+}

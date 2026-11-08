@@ -1,0 +1,15 @@
+{
+  "name": "@gagyebu/lesson",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./lesson.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@gagyebu/live": "workspace:*",
+    "@gagyebu/activity-gagyebu": "workspace:*"
+  }
+}

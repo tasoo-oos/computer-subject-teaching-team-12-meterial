@@ -1,0 +1,19 @@
+{
+  "name": "@gagyebu/activity-gagyebu",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@gagyebu/core": "workspace:*",
+    "@gagyebu/live": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^5.1.0"
+  }
+}
