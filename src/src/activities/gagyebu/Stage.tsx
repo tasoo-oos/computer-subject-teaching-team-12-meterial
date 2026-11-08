@@ -79,10 +79,10 @@ function StageShell({
   wide?: boolean;
 }) {
   return (
-    <div className="paper-texture flex size-full flex-col px-[110px] py-[48px]">
+    <div className="paper-texture flex size-full flex-col px-[110px] py-[42px]">
       {kicker ? <p className="text-[28px] font-semibold text-ink-2">{kicker}</p> : null}
-      {title ? <h1 className={`display leading-[1.06] text-ink ${wide ? '' : 'mt-2 text-[72px]'}`}>{title}</h1> : null}
-      <div className={`min-h-0 flex-1 ${title ? 'mt-[24px]' : ''}`}>{children}</div>
+      {title ? <h1 className={`display leading-[1.06] text-ink ${wide ? '' : 'mt-1.5 text-[72px]'}`}>{title}</h1> : null}
+      <div className={`min-h-0 flex-1 ${title ? 'mt-[20px]' : ''}`}>{children}</div>
     </div>
   );
 }
@@ -519,7 +519,7 @@ function EventMonthStage({ month, revealed, stats }: { month: number; revealed: 
           </div>
           <div className="min-h-0">
             {[...ms.chained, ...ms.scheduled].length > 0 ? (
-              <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-4">
                 {[...ms.chained, ...ms.scheduled].map((t) => (
                   <SceneTallyBlock key={t.sceneId} tally={t} />
                 ))}
@@ -528,7 +528,7 @@ function EventMonthStage({ month, revealed, stats }: { month: number; revealed: 
               <p className="text-[28px] text-ink-3">이어진 장면은 아직 없어요.</p>
             )}
             {event.lesson ? (
-              <p className="mt-6 rounded-[10px] bg-mark/70 px-8 py-5 text-[30px] leading-relaxed">
+              <p className="mt-5 rounded-[10px] bg-mark/70 px-7 py-4 text-[28px] leading-relaxed">
                 <span className="font-bold">교훈 </span>
                 {event.lesson}
               </p>
@@ -544,7 +544,7 @@ function EventMonthStage({ month, revealed, stats }: { month: number; revealed: 
 function SceneTallyBlock({ tally }: { tally: SceneTally }) {
   return (
     <div>
-      <p className="mb-2 text-[28px] font-bold text-ink">
+      <p className="mb-1 text-[28px] font-bold text-ink">
         {tally.title}
         <span className="num ml-3 text-[24px] font-semibold text-ink-3">{tally.reached}명 도달</span>
       </p>

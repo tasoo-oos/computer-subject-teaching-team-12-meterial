@@ -22,14 +22,14 @@ export interface DistributionBarsProps {
 export function DistributionBars({ items, total, autoLine, className = '' }: DistributionBarsProps) {
   const sum = total ?? items.reduce((acc, it) => acc + it.count, 0);
   return (
-    <div className={`@container flex flex-col gap-[14px] ${className}`}>
+    <div className={`@container flex flex-col gap-[10px] ${className}`}>
       {items.map((it) => {
         const pct = sum > 0 ? (it.count / sum) * 100 : 0;
         return (
-          <div key={it.label} className="flex flex-col gap-1 @min-[850px]:flex-row @min-[850px]:items-center @min-[850px]:gap-5">
+          <div key={it.label} className="flex flex-col gap-0.5 @min-[850px]:flex-row @min-[850px]:items-center @min-[850px]:gap-5">
             {/* 좁은 컨테이너: 라벨+인수 한 줄. 넓은 컨테이너: contents로 풀어 한 줄 레이아웃에 참여 */}
             <div className="flex items-baseline justify-between gap-3 @min-[850px]:contents">
-              <p className="line-clamp-2 text-[28px] leading-[1.25] font-semibold text-ink @min-[850px]:w-[440px] @min-[850px]:shrink-0">
+              <p className="line-clamp-2 text-[28px] leading-[1.2] font-semibold text-ink @min-[850px]:w-[440px] @min-[850px]:shrink-0">
                 {it.label}
               </p>
               <p className="num shrink-0 text-[28px] font-bold text-ink @min-[850px]:w-[110px] @min-[850px]:text-right">
@@ -37,7 +37,7 @@ export function DistributionBars({ items, total, autoLine, className = '' }: Dis
                 <span className="text-[19px] font-semibold text-ink-3">명</span>
               </p>
             </div>
-            <div className="h-[38px] w-full overflow-hidden rounded-[6px] bg-sheet shadow-[inset_0_0_0_1.5px_var(--color-rule-soft)] @min-[850px]:h-[46px] @min-[850px]:min-w-[280px] @min-[850px]:flex-1">
+            <div className="h-[30px] w-full overflow-hidden rounded-[6px] bg-sheet shadow-[inset_0_0_0_1.5px_var(--color-rule-soft)] @min-[850px]:h-[46px] @min-[850px]:min-w-[280px] @min-[850px]:flex-1">
               {/* 같은 색 막대 — 좋고 나쁨·많고 적음을 색으로 구분하지 않는다 */}
               <div className="h-full rounded-[4px] bg-ink" style={{ width: `${pct}%` }} />
             </div>
