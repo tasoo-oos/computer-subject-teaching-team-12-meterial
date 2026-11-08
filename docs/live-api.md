@@ -62,7 +62,7 @@ src(app): 전부 + socket.io-client, qrcode
 - `@gagyebu/activity-gagyebu`: `core` + `live`. **React·DOM·Node 전용 API 금지.** 순수 함수만. core 타입(`GameState`·`Action`)을 아는 유일한 live 계층.
 - `@gagyebu/lesson`: `live` + `activity-gagyebu`(설정 타입). 데이터만 담는다. **React 금지.**
 - `@gagyebu/server`: `live` + `activity-gagyebu` + `lesson` + `socket.io`, `cookie`. Node 전용. **`@gagyebu/core`를 직접 import하지 않는다** — 활동 로직은 오직 `server/src/activities.ts` 레지스트리를 통해서만 쓰고, 게임 상태·행동은 `unknown`으로 다룬다. 다른 실습이 core를 갈아끼워도 서버는 그대로다.
-- `@gagyebu/app`: 전부 + `socket.io-client`, `qrcode`. React 화면. 소켓 타이핑을 활동 계층(`useLive<S>`·`ActivityViews<S, A, Stats>`)에서 좁힌다.
+- `@gagyebu/app`: 전부 + `socket.io-client`, `qrcode`. React 화면. 소켓 타이핑을 활동 계층(`useLive<S, A, D>`·`ActivityViews<S, A, Stats>`·`liveTypes.ts`, §5.1)에서 좁힌다.
 
 금지 규칙(정적 검증 가능해야 한다): `packages/live`, `packages/activity-gagyebu`에서 `react`, `react-dom`, `node:*`, `DOM` 타입(`window`, `document`) import 금지. `packages/live`에서 `@gagyebu/core` import 금지. 타입만 쓸 때는 `import type`으로.
 
@@ -299,7 +299,8 @@ export function lessonBeats(lesson: Lesson, beatsOf: (activityId: string, config
 - 리뷰 중에는 아무 것도 재실행하지 않는다: `next`는 커서를 앞의 show 비트들 순서대로, 끝에서는 `highMark` 자신으로만 전진시킨다(마감·확인·기본값·전이 없음). 지나간 비트의 마감/전이를 다시 돌리면(예: 이미 sim에 들어간 학생에게 `goto budget` 재적용) `StepError`가 나므로 금지한다.
 - 리뷰 중 학생 `act`는 `'stale-beat'`로 거부된다.
 - 커서가 `highMark`로 돌아오면 `cursor.revealed = highRevealed`로 공개 상태를 복원한다.
-- 완료 인원·미완료 명단·집계(`stats`·`progress`)는 **항상 highMark 비트 기준**이다(리뷰 중에도 통제·TV의 "지금" 숫자는 live 비트를 가리킨다).
+- **TV는 커서를 따라간다** — 리뷰 중에는 되돌아본 비트(예: 월급 분포, 안내 카드)를 보여 준다. 서버는 리뷰 이동(prev·goto·리뷰 중 next)마다 **커서 비트 기준** `stats`를 다시 계산해 보내고, `StatsPayload.beat`로 어느 비트의 통계인지 알려 준다. `progress`·`fallbackPreview`는 **항상 highMark 기준**으로 실린다.
+- 완료 인원·미완료 명단(`progress`·roster의 done)은 **항상 highMark 비트 기준**이다.
 - 학생·TV의 표시형 비트 화면은 `beat.id` + (세그먼트) 상태 데이터만으로 그린다 — 학생의 `phase`·`step`을 보지 않는다. 그래야 5월에 안내 카드 3장을 리뷰로 다시 보여 줄 수 있다.
 
 ### 4.2 `ActivityLogic` (계획 §5.4 정제)
@@ -358,6 +359,9 @@ export interface ActivityLogic<Cfg, S, A, Stats> {
   locate?(s: S): string | null;
   /** 통제 페이지 "기본값 미리보기"용, 지금 넘기면 적용될 선택지 이름 */
   previewFallback?(s: S, beat: number, cfg: Cfg): string | null;
+  /** CSV 내보내기(§8.5). 열 순서와 행 변환을 활동이 정의하고 서버는 조립만 한다 */
+  exportColumns?: string[];
+  exportRows?(s: S, student: { studentId: string; nickname: string }): Record<string, string | number | boolean>[];
 }
 ```
 
@@ -375,6 +379,7 @@ export interface ActivityLogic<Cfg, S, A, Stats> {
 | `stats` | `act`·`next`·`reveal` 뒤 재계산. 전송은 초당 최대 4회로 묶음 |
 | `locate` | `roster` 방송 직전, 학생별 1회 |
 | `previewFallback` | `stats`와 함께 계산해 통제 `stats` 페이로드의 `fallbackPreview`에 싣는다. 대상은 미완료 학생 중 studentId 오름차순 첫 학생(§9.4) |
+| `exportColumns`·`exportRows` | CSV 내보내기 요청(`GET /api/export/<code>.csv`) 때 학생마다 1회 (§8.5) |
 
 **기본값 루프의 종료 보장**: `fallback`은 한 번 호출될 때마다 상태를 반드시 진전시켜야 한다(같은 행동을 두 번 반환하면 안 된다). 서버는 학생·비트마다 **최대 50회** 반복하고, 50회를 넘기면 루프를 끊고 그 학생을 `stalled`로 표시한다(로그 `auto` 줄에 `overflow: true`, roster에 표시). 수업은 계속 진행되고 서버는 죽지 않는다. `stalled` 학생은 이후 비트에서 `done`이 true로 판정되면 다시 정상 흐름에 합류한다.
 
@@ -567,12 +572,14 @@ export interface StatePayload<S = unknown> {
 }
 
 export interface StatsPayload<Stats = unknown> {
-  /** 집계 기준 비트 = highMark (리뷰 중에도 live 비트) */
+  /** 이 통계가 속한 비트. 라이브에서는 highMark와 같고, 리뷰 중에는 커서 비트(§5.7).
+   *  수신자는 자기가 그리는 비트와 같을 때만 활동 통계를 그린다(다르면 null로 취급). */
   beat: BeatRef;
   stats: Stats; // 활동별 Stats (§9.4). show 비트는 { kind: 'none' } (§9.4)
-  progress: ProgressInfo; // 항상 포함. Stage는 showProgressOnStage일 때만 그린다
+  /** 완료 인원 — 항상 live 비트(highMark) 기준 (리뷰 중에도) */
+  progress: ProgressInfo; // Stage는 showProgressOnStage일 때만 그린다
   /** 미완료 학생이 있으면 그중 첫 미완료 학생(studentId 오름차순)의 현재 장면에서
-   *  적용될 기본 선택지 라벨. 미완료가 없으면 null (통제 기본값 미리보기) */
+   *  적용될 기본 선택지 라벨. 미완료가 없으면 null — 항상 highMark 기준 (통제 기본값 미리보기) */
   fallbackPreview: string | null;
 }
 
@@ -599,12 +606,13 @@ export interface KickedPayload {
   reason: 'kicked' | 'merge-rejected';
 }
 
-// ── socket.io 타이핑 (기본값 = unknown; 앱의 활동 계층이 제네릭으로 좁힌다) ──
-export interface ClientToServerEvents {
+// ── socket.io 타이핑 (기본값 = unknown; 앱은 src/src/activities/gagyebu/liveTypes.ts에서
+//    ClientToServerEvents<Action, GagyebuDraft>·ServerToClientEvents<GameState, GagyebuStats>로 좁혀 내보낸다) ──
+export interface ClientToServerEvents<A = unknown, D = unknown> {
   hello: (p: HelloPayload, ack: (r: HelloAck) => void) => void;
   join: (p: JoinPayload, ack: (r: JoinAck) => void) => void;
-  act: (p: ActPayload, ack: (r: ActAck) => void) => void;
-  draft: (p: DraftPayload) => void;
+  act: (p: ActPayload<A>, ack: (r: ActAck) => void) => void;
+  draft: (p: DraftPayload<D>) => void;
   select: (p: SelectPayload, ack: (r: CmdAck) => void) => void; // 전면·통제
   next: (p: NextPayload, ack: (r: CmdAck) => void) => void; // 통제
   prev: (p: void, ack: (r: CmdAck) => void) => void; // 통제
@@ -617,17 +625,39 @@ export interface ClientToServerEvents {
   lockJoin: (p: { on: boolean }, ack: (r: CmdAck) => void) => void; // 통제
 }
 
-export interface ServerToClientEvents {
-  snapshot: (p: SnapshotPayload) => void;
+export interface ServerToClientEvents<S = unknown, St = unknown> {
+  snapshot: (p: SnapshotPayload<S>) => void;
   class: (p: ClassPayload) => void;
-  state: (p: StatePayload) => void; // 해당 학생 소켓에만
-  stats: (p: StatsPayload) => void; // :stage·:control 룸만 (§5.2)
+  state: (p: StatePayload<S>) => void; // 해당 학생 소켓에만
+  stats: (p: StatsPayload<St>) => void; // :stage·:control 룸만 (§5.2)
   roster: (p: RosterPayload) => void; // :control 룸
-  spotlightState: (p: SpotlightStatePayload) => void; // :stage 룸
+  spotlightState: (p: SpotlightStatePayload<S>) => void; // :stage 룸
   classes: (p: ClassesPayload) => void; // :stage·:control 룸
   joined: (p: JoinedPayload) => void; // 승인 대기 소켓에만 (§5.8)
   kicked: (p: KickedPayload) => void; // 내보내기·merge 거부된 소켓에만 (§5.8)
 }
+```
+
+앱의 활동 계층에서 좁힌 타입(`src/src/activities/gagyebu/liveTypes.ts`, 계약):
+
+```ts
+// src/src/activities/gagyebu/liveTypes.ts
+import type { Action, GameState } from '@gagyebu/core';
+import type {
+  ClientToServerEvents, ServerToClientEvents, DraftPayload, ActPayload, ActAck,
+  SnapshotPayload, StatePayload, StatsPayload, SpotlightStatePayload,
+} from '@gagyebu/live';
+import type { GagyebuDraft, GagyebuStats } from '@gagyebu/activity-gagyebu';
+
+export type LiveClientToServer = ClientToServerEvents<Action, GagyebuDraft>;
+export type LiveServerToClient = ServerToClientEvents<GameState, GagyebuStats>;
+export type LiveActPayload = ActPayload<Action>;
+export type LiveActAck = ActAck<GameState>;
+export type LiveSnapshot = SnapshotPayload<GameState>;
+export type LiveState = StatePayload<GameState>;
+export type LiveStats = StatsPayload<GagyebuStats>;
+export type LiveSpotlight = SpotlightStatePayload<GameState>;
+export type LiveDraft = DraftPayload<GagyebuDraft>;
 ```
 
 ### 5.2 연결·인증·룸
@@ -660,7 +690,7 @@ export interface ServerToClientEvents {
 
 모든 학생 행동과 교사 명령은 수업 하나의 **직렬 큐**(§8.1)로 들어가 순서대로 처리된다. `next` 하나의 처리:
 
-0. **리뷰 복귀.** `cursor < highMark`(리뷰 중)면 마감·확인·기본값·전이를 전혀 실행하지 않는다. 커서를 **앞의 show 비트들 순서대로**, 더 없으면 `highMark` 자신으로 전진한다. `highMark`에 도착하면 `cursor.revealed = highRevealed`로 공개 상태를 복원한다. version++, 로그 `cursor`, `class` 방송, ack `{ ok: true }`. 끝.
+0. **리뷰 복귀.** `cursor < highMark`(리뷰 중)면 마감·확인·기본값·전이를 전혀 실행하지 않는다. 커서를 **앞의 show 비트들 순서대로**, 더 없으면 `highMark` 자신으로 전진한다. `highMark`에 도착하면 `cursor.revealed = highRevealed`로 공개 상태를 복원한다. 이동한 비트 기준 `stats`를 다시 계산해 `:stage`·`:control`에 방송(§5.7), version++, 로그 `cursor`, `class` 방송, ack `{ ok: true }`. 끝.
 1. **공개 단계 먼저.** 현재(live) 비트가 `reveal: true`이고 `cursor.revealed === false`면 `revealed = true`(`highRevealed = true`도 함께), version++, 로그 `reveal`, 전체에 `class` 방송, `stats` 재계산·방송. 끝. ("다음" 키 하나가 `공개 → 다음 비트` 순서로 동작한다)
 2. **마감 확인.** `pending` = live 비트에서 `done(s, beat)`이 false인 학생 수. `pending > 0`이고 활동 설정 `confirmForce`이고 `force`가 없으면 ack `{ ok: false, reason: 'confirm-required', pending }`. 통제 페이지가 대화상자를 띄우고 확인하면 `next { force: true }`로 다시 보낸다.
 3. **기본값 루프.** pending 학생 각각에 대해: `r = fallback(s, beat, cfg, draft)` → `apply(r.action)` → `s` 교체, `r.notice`를 그 학생의 autoApplied 큐에 추가 → `done`이 true가 될 때까지 반복(최대 50회, 초과 시 §4.2의 `stalled` 처리). 학생 하나의 루프 전체(적용된 행동·통지·overflow 여부)를 로그 `auto` 줄 하나로 기록한다.
@@ -680,7 +710,7 @@ export interface ServerToClientEvents {
 - `goto` 대상: `highMark` 이내의 **show 비트**, 또는 **`highMark` 자신**(live 비트로 돌아가기 — work 비트여도 된다). 현재보다 앞으로의 건너뛰기는 없다(작업 비트를 건너뛴 학생 상태가 생기지 않게).
 - `prev`: 현재보다 앞선 show 비트 중 가장 가까운 것으로 이동. 없으면 `'invalid-target'`.
 - 이동해서 `cursor < highMark`가 되면 **리뷰 상태**(§4.1): `cursor.revealed = false`, version++, 로그 `cursor`, `class` 방송. 학생 `act`는 `'stale-beat'` 거부. `highMark`로 돌아오면 `highRevealed` 복원.
-- 리뷰 중 통제의 "다음"은 §5.5의 0단계(커서 전진만)로 처리된다. 집계·완료 인원은 항상 highMark 기준이므로 리뷰 중에도 변하지 않는다.
+- **리뷰 이동(prev·goto·리뷰 중 next)마다 서버는 커서 비트 기준 `stats`를 다시 계산해 보낸다**(TV가 되돌아본 비트를 그리므로). `StatsPayload.beat`가 어느 비트의 통계인지 알려 주고, `progress`·`fallbackPreview`는 highMark 기준값을 계속 실는다. Stage·통제는 **`stats.beat`가 자기가 그리는 비트와 같을 때만** 활동 통계를 그리고, 다르면 null로 취급한다. 통제의 완료 현황은 항상 highMark 기준(progress).
 
 ### 5.8 교사·학생 관리 명령
 
@@ -697,8 +727,8 @@ export interface ServerToClientEvents {
 
 1. `join { nickname }`에서 닉네임이 이미 있으면: 서버는 **대기 요청**(roster에 `pendingMerge: true` 항목, 상태 없음)을 만들고 `JoinAck { ok: false, reason: 'nickname-taken', pendingId }`를 돌려준다. 승인 전까지 그 소켓은 아무 행동도 못 한다.
 2. 대기 학생 화면: "선생님 승인을 기다리는 중" + 다른 닉네임으로 다시 `join`할 수 있는 입력란(다시 join하면 대기 요청은 취소된다).
-3. 통제 페이지 roster에 대기 항목이 "기록 이어받기 승인" 버튼과 함께 보인다. 승인: `student merge { pendingId, intoId }` → 서버가 ① `intoId`의 기존 소켓이 아직 연결돼 있으면 `kicked { reason: 'kicked' }`로 끊고 기존 토큰을 무효화한다 ② 대기 소켓이 `intoId`의 기록(상태·닉네임)을 이어받는다 ③ 새 토큰을 발급해 대기 소켓에 `joined { studentId, token, nickname }`을 보내고 `snapshot`을 전달한다 ④ 로그 `admin merge`. 거부: `student kick { pendingId }` → 대기 소켓에 `kicked { reason: 'merge-rejected' }`, 화면은 "승인되지 않았습니다. 다른 닉네임으로 다시 시도해 주세요" (다시 `join` 가능).
-4. **재생 의미**: `admin merge` 줄이 오면 재생은 `intoId` 기록이 새 토큰을 갖는 것으로 복원한다(merge 시점 이전의 `intoId` 행동은 그대로 이어지고, merge 뒤 행동은 새 소켓이 한 것과 동일하게 순서대로 적용). `admin kick` 줄이 오면 그 학생의 기록은 거기서 끝난다.
+3. 통제 페이지 roster에 대기 항목이 "기록 이어받기 승인" 버튼과 함께 보인다. 승인: `student merge { pendingId, intoId }` → 서버가 ① `intoId`의 기존 소켓이 아직 연결돼 있으면 `kicked { reason: 'kicked' }`로 끊고 기존 토큰을 무효화한다 ② 대기 소켓이 `intoId`의 기록(상태·닉네임)을 이어받는다 ③ 새 토큰을 발급해 대기 소켓에 `joined { studentId, token, nickname }`을 보내고 `snapshot`을 전달한다 ④ 로그 `admin merge`(줄에 **새 토큰을 포함**해 기록 — 재생이 그 토큰을 복원한다). 거부: `student kick { pendingId }` → 대기 소켓에 `kicked { reason: 'merge-rejected' }`, 화면은 "승인되지 않았습니다. 다른 닉네임으로 다시 시도해 주세요" (다시 `join` 가능).
+4. **재생 의미**: `admin merge` 줄(새 토큰 포함)이 오면 재생은 `intoId` 기록이 **그 토큰**을 갖는 것으로 복원한다(merge 시점 이전의 `intoId` 행동은 그대로 이어지고, merge 뒤 행동은 새 소켓이 한 것과 동일하게 순서대로 적용). `admin kick` 줄이 오면 그 학생의 기록은 거기서 끝난다.
 
 ---
 
@@ -834,7 +864,7 @@ export type LogLine =
   | { t: 'admin'; ts: number;
       op: { kind: 'rename'; id: string; nickname: string }
         | { kind: 'kick'; id: string }
-        | { kind: 'merge'; pendingId: string; intoId: string }
+        | { kind: 'merge'; pendingId: string; intoId: string; token: string } // 새 토큰을 함께 기록(재생 복원용)
         | { kind: 'lockJoin'; on: boolean } }
   | { t: 'end'; ts: number };
 ```
@@ -853,7 +883,7 @@ export type LogLine =
   - 커서가 `join` 비트보다 **앞의 슬라이드 세그먼트**에 있을 때 입장하면 지각이 아니다 — `init`만 하고 현재 비트에서 기다린다.
   - 활동 세그먼트가 이미 **끝난 뒤**(뒤 슬라이드 등) 입장하면 지각 합류로 **활동 전체**를 채운다.
   - 입장하지 않은 접속자는 `join`이 잠기지 않는 한 모든 비트에서 닉네임 입력 화면을 본다(클라이언트 규칙, §10.4).
-- **지각 합류 채우기 (결정)**: `join` 승인 시 서버는 **활동 세그먼트의 처음 비트부터 현재(live) 비트까지 순서대로** 걷는다. 각 `work` 비트에서 기본값 루프를 돌리고(§5.5의 3단계와 같은 규칙, 통지 없음), 비트 b에서 b+1으로 넘어갈 때 `transition(b, b+1)`을 **`next`와 똑같이** 적용한다(안 그러면 guide-6→budget의 `goto`가 건너뛰어져 `confirmBudget`이 실패한다). 매 걸음을 `auto { kind: 'backfill' }`·`transition` 줄로 기록한다. show 비트는 상태 조작 없이 건너뛴다.
+- **지각 합류 채우기 (결정)**: `join` 승인 시 서버는 **live 비트 "바로 앞"까지의 비트들**(활동 세그먼트 처음부터 highMark 직전까지)을 순서대로 걷는다. 각 `work` 비트에서 기본값 루프를 돌리고(§5.5의 3단계와 같은 규칙, 통지 없음), 비트 b에서 b+1으로 넘어갈 때 `transition(b, b+1)`을 **`next`와 똑같이** 적용한다 — **live 비트로 들어가는 전이도 포함**(안 그러면 guide-6→budget의 `goto`가 건너뛰어져 `confirmBudget`이 실패한다). 매 걸음을 `auto { kind: 'backfill' }`·`transition` 줄로 기록한다. show 비트는 상태 조작 없이 건너뛴다. **live 비트 자체는 채우지 않는다** — work 비트면 그 학생은 그 비트에서 정상적으로 참여하고, show 비트면 그냥 보면 된다.
 
 ### 8.4 수업 코드
 
@@ -862,13 +892,11 @@ export type LogLine =
 
 ### 8.5 CSV 내보내기
 
-`GET /api/export/<code>.csv`(통제 쿠키 필수). 로그를 재생해 선택 기록을 CSV로 만든다. 열:
+`GET /api/export/<code>.csv`(통제 쿠키 필수). 서버는 core를 모르므로 **활동 레지스트리의 내보내기 계약(`exportColumns`·`exportRows`, §4.2)으로 일반적으로 조립**한다:
 
-```
-studentId, nickname, month, eventCode, sceneId, choiceId, choiceLabel, kind, auto, tags, payment
-```
-
-`payment`는 `PaymentPlan`의 요약 문자열(예: `emergency:520000;card:80000/3`). `auto` 열은 자동 처리된 선택 `true`. BOM으로 시작해 한글이 엑셀에서 깨지지 않게 한다.
+- 열 머리글 = 활동의 `exportColumns`. 각 학생의 최종 상태에 `exportRows(s, { studentId, nickname })`를 호출해 행을 얻는다. 이 문서의 서버는 BOM 추가, CSV 이스케이프(`"`·쉼표·줄바꿈), 인코딩만 책임진다.
+- 가계부 활동의 열(활동이 정의): `studentId, nickname, month, eventCode, sceneId, choiceId, choiceLabel, kind, auto, tags, payment`. `payment` 등 `PaymentPlan`을 문자열로 만드는 방식(예: `emergency:520000;card:80000/3`)은 **activity-gagyebu가** 구현한다(§9). `auto` 열은 자동 처리된 선택 `true`.
+- 로그 재생으로 복원한 상태에서 뽑는다(재생은 §8.2 규칙).
 
 ### 8.6 파일 구성
 
@@ -1038,7 +1066,14 @@ export interface GagyebuDraft {
 
 **플랫폼이 소유한다.** 토큰 발급, roster, 이름 유효성(1~10자, 수업 내 유일), rename·kick·merge, 지각 입장 규칙은 전부 `@gagyebu/live`/서버에 있다. 활동은 `init`으로 닉네임을 받아 `start` 행동에 넣을 뿐이다. `join` 비트의 `done`은 플랫폼이 판정하고(입장 승인 = done), 활동은 `join` 비트에서 항상 true를 반환한다.
 
-### 9.7 파일 구성
+### 9.7 CSV 내보내기 구현
+
+`ActivityLogic`의 `exportColumns`·`exportRows`(§4.2)를 아래처럼 구현한다:
+
+- `exportColumns`: `['studentId', 'nickname', 'month', 'eventCode', 'sceneId', 'choiceId', 'choiceLabel', 'kind', 'auto', 'tags', 'payment']`
+- `exportRows(state, { studentId, nickname })`: `state.decisions`를 기록 순서대로 행으로 펼친다. `studentId`·`nickname`은 인자 값을, 나머지 열은 `DecisionRecord` 필드에서. `payment`는 `PaymentPlan` → `"emergency:520000;card:80000/3"` 형식 문자열, `tags`는 `;` 결합, `auto`는 boolean. (이 변환은 core에 두지 않고 activity-gagyebu가 소유한다 — 서버가 core를 모르기 때문, §1.2.)
+
+### 9.8 파일 구성
 
 ```
 packages/activity-gagyebu/
@@ -1050,6 +1085,7 @@ packages/activity-gagyebu/
     progress.ts      // done/fallback/transition (§9.3)
     stats.ts         // GagyebuStats 계산 (§9.4)
     draft.ts         // GagyebuDraft
+    export.ts        // exportColumns·exportRows (§9.7)
 ```
 
 ---
@@ -1074,13 +1110,13 @@ packages/activity-gagyebu/
 ### 10.2 `useLive` 훅
 
 ```ts
-// src/src/live/useLive.ts (계약) — 게임 타입은 제네릭 S로 감춘다(§1.2).
-// 앱의 활동 계층이 useLive<GameState>로 좁힌다.
+// src/src/live/useLive.ts (계약) — 게임 타입은 제네릭으로 감춘다(§1.2).
+// 앱의 활동 계층이 useLive<GameState, Action, GagyebuDraft>로 좁힌다(liveTypes.ts, §5.1).
 export type LiveStatus =
   | 'connecting' | 'open' | 'reconnecting'
   | 'ended' | 'not-found' | 'join-locked';
 
-export interface UseLiveResult<S = unknown> {
+export interface UseLiveResult<S = unknown, A = unknown, D = unknown> {
   status: LiveStatus;
   classState: ClassState | null;
   lesson: Lesson | null;
@@ -1095,12 +1131,12 @@ export interface UseLiveResult<S = unknown> {
   /** 커서 비트 (lessonBeats로 해석). 없으면 null */
   beat: Beat | null;
   join(nickname: string): Promise<JoinAck>;
-  dispatch(action: unknown): Promise<ActAck<S>>;
+  dispatch(action: A): Promise<ActAck<S>>;
   /** 2초 간격으로 묶어 draft 이벤트로 전송. 제출 직전 flush는 훅이 한다(§5.4) */
-  draft(data: unknown): void;
+  draft(data: D): void;
 }
 
-export function useLive<S = unknown>(code: string): UseLiveResult<S>;
+export function useLive<S = unknown, A = unknown, D = unknown>(code: string): UseLiveResult<S, A, D>;
 ```
 
 - `useLive`는 `hello` → `snapshot` 흐름, 재접속(Socket.IO 내장 자동 재접속), version 기반 낡은 메시지 버림(§5.3), 토큰 저장(`localStorage['gg_token_<code>']`), `ended`/`not-found` 시 토큰 삭제를 모두 책임진다.
@@ -1128,9 +1164,10 @@ StudentPage = 코드/닉네임/끝남/없음 상태 화면
 
 ### 10.5 전면 화면 (Stage)
 
-- 같은 `SlideCanvas`(슬라이드 비트), 활동 비트는 `ACTIVITY_VIEWS[id].Stage` + `stats` + `spotlightState`.
+- **TV는 커서를 따라간다**(리뷰 중에는 되돌아본 비트를 그린다). 같은 `SlideCanvas`(슬라이드 비트), 활동 비트는 `ACTIVITY_VIEWS[id].Stage` + `stats` + `spotlightState`.
+- **`stats`는 `stats.beat`가 지금 그리는 비트와 같을 때만** 활동 통계로 넘긴다(다르면 null로 취급, §5.7). 리뷰 중 커서 비트의 통계(예: 월급 분포)는 이 규칙으로 그려진다.
 - 입장 비트: QR 코드(`qrcode` 라이브러리), 큰 주소 `gagyebu.taesoo.uk/<code>`, 입장 인원, 닉네임 벽.
-- `lesson.settings.showProgressOnStage`일 때만 `progress`를 그린다. 기본은 통제 페이지에만 완료 인원이 보인다.
+- `lesson.settings.showProgressOnStage`일 때만 `progress`를 그린다(항상 highMark 기준). 기본은 통제 페이지에만 완료 인원이 보인다.
 
 ### 10.6 통제 페이지 (Control) — 계획 §10
 
@@ -1139,7 +1176,7 @@ StudentPage = 코드/닉네임/끝남/없음 상태 화면
 | 수업 | 수업 열기(코드 발급, 화면에 크게), 끝내기, 학생 링크 복사, TV 화면 열기(`/stage` 새 탭), 로그아웃(`POST /api/logout`) |
 | 타임라인 | 세그먼트·비트 목록(`lessonBeats`). 현재 위치 강조, 표시형 비트는 클릭해 `goto` |
 | 다음 | 큰 버튼. 키보드 **→ / Space / PageDown = next**, **← / PageUp = prev** (발표용 클리커 호환) |
-| 완료 현황 | live 비트 완료/접속/전체(`stats.progress`, 항상 highMark 기준), 미완료 명단(이름, 연결 상태, `roster[].scene`) |
+| 완료 현황 | live 비트 완료/접속/전체(`stats.progress`, **항상 highMark 기준** — 리뷰 중에도), 미완료 명단(이름, 연결 상태, `roster[].scene`) |
 | 기본값 미리보기 | `stats.fallbackPreview` + 지금 넘기면 자동 처리될 인원(미완료 수) |
 | TV 미리보기 | 지금 TV에 보이는 화면의 축소 모형(같은 컴포넌트를 작게) |
 | 발표 | 학생 목록에서 `spotlight` 지정·해제 |
@@ -1219,7 +1256,7 @@ src/src/
   live/               // useLive.ts, socket.ts, banner.tsx, useWakeLock.ts, WaitingScreen.tsx
   activities/
     registry.ts       // ACTIVITY_VIEWS (§4.3)
-    gagyebu/          // Audience.tsx, Stage.tsx, ControlPanel.tsx (기존 screens/ 재사용)
+    gagyebu/          // liveTypes.ts(§5.1), Audience.tsx, Stage.tsx, ControlPanel.tsx (기존 screens/ 재사용)
     slides/           // SlideCanvas.tsx, registry.tsx, decks/*.tsx
   stage/              // StagePage.tsx
   control/            // ControlPage.tsx (§10.6 영역별 컴포넌트)
@@ -1391,7 +1428,7 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 ### 감사 반영 (2026-11-09 2차, 문서 개정으로 정한 것)
 
 38. **live의 core 의존 제거 (R1).** 플랫폼은 게임 규칙을 모른다. 프로토콜 페이로드는 전부 `unknown` 기본 제네릭(`ActPayload<A>`·`ActAck<S>`·`SnapshotPayload<S>`·`StatePayload<S>`·`SpotlightStatePayload<S>`), 로그 행동은 `unknown`. 서버는 활동 레지스트리로만 활동 로직을 쓰고 core를 직접 import하지 않는다. 학생 상태는 세그먼트 id별(`StudentRecord.states`), `join` 때 모든 활동 세그먼트마다 `init`. `state` 메시지는 커서의 활동 세그먼트 상태(+세그먼트 인덱스), 슬라이드 세그먼트면 null.
-39. **리뷰 모드 (R2).** live 비트 = `highMark`. 리뷰 중 `next`는 커서만 전진(show 비트 순서대로, 끝은 highMark 자신), 마감·확인·기본값·전이 재실행 없음(지나간 전이를 다시 돌리면 `goto budget`이 sim 학생에게 `StepError`). 학생 행동은 `'stale-beat'` 거부. `highMark` 복귀 시 `highRevealed`로 공개 상태 복원. 완료 인원·집계는 항상 highMark 기준. 표시형 비트 화면은 `beat.id`+상태만으로 렌더(학생 `phase`/`step` 아님).
+39. **리뷰 모드 (R2).** live 비트 = `highMark`. 리뷰 중 `next`는 커서만 전진(show 비트 순서대로, 끝은 highMark 자신), 마감·확인·기본값·전이 재실행 없음(지나간 전이를 다시 돌리면 `goto budget`이 sim 학생에게 `StepError`). 학생 행동은 `'stale-beat'` 거부. `highMark` 복귀 시 `highRevealed`로 공개 상태 복원. 완료 인원은 항상 highMark 기준(집계의 커서 추종은 59번 참조). 표시형 비트 화면은 `beat.id`+상태만으로 렌더(학생 `phase`/`step` 아님).
 40. **전이 행동 로그 (R3).** `transition` 줄을 추가하고 재생이 live와 같은 순서로 적용한다. 없으면 재생 결과가 실제와 달라진다.
 41. **지각 채우기·stalled 재현 (R4).** 채우기는 활동 세그먼트 처음부터 순서대로 "work 비트마다 fallback 루프 → `transition(b, b+1)`"을 `next`와 똑같이 실행(로그: `auto { kind: 'backfill' }`·`transition`). 월 비트 fallback에 `month < N && step === 'report' → endMonth(반복)` 추가. 슬라이드 도중 입장은 지각 아님(init만), 입장 전 접속자는 모든 비트에서 닉네임 화면, 활동이 끝난 뒤 입장하면 활동 전체를 채움.
 42. **fallback 선택 규칙은 `kind`가 아니라 `pay`/`deposit` 존재 기준 (R5).** `gamble`+`pay`(`tryTen`·`flip3`) 포함. `adjustable`이면 행동에 `amount: min`을 명시하고 그 금액 기준으로 지불 계획.
@@ -1410,3 +1447,12 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 55. **M0 배포 사실 (minor).** 프록시 Nginx Proxy Guard `10.10.2.21` → `10.10.2.23:8091`(WebSocket on, 24h 타임아웃, 버퍼링 off, WAF off), `.env.example` 기본값 `TRUSTED_PROXY=10.10.2.21`·`PORT=8091`, tmux `gagyebu-live` 실행 명령, 기존 `gagyebu-dev`(8091 점유)는 사용자가 직접 종료. M9(리허설·운영)는 이번 범위 밖.
 56. **전체 상태 전송의 근거 (minor).** 12개월 GameState ≈ 15~25KB JSON, 60명 ≈ 1.5MB 메모리, `state` 메시지 1건 ≈ 25KB — partial patch 없이 전체 전송(§5.3).
 57. **덱 매니페스트/렌더 레지스트리 분리는 계획 §9와의 차이 (minor).** 계획은 `lesson/slides/<덱>/index.ts`가 렌더 컴포넌트까지 내보내게 했지만, 그러면 서버가 React를 import해야 한다. §2.2의 분리(매니페스트는 서버 안전 데이터, 렌더는 `src/src/activities/slides/registry.tsx`)로 바꿨다.
+
+### 재감사 반영 (2026-11-09 3차)
+
+58. **CSV 내보내기는 활동 계약으로 일반화.** `ActivityLogic`에 `exportColumns?`·`exportRows?` 추가. 서버(§8.5)는 레지스트리에서 열·행을 받아 BOM·이스케이프만 담당하고, 열 정의와 `PaymentPlan`→문자열 변환은 activity-gagyebu가 소유(§9.7). 서버가 core를 모르므로(R1) 이 경로여야 한다.
+59. **리뷰 중 TV는 커서를 따라간다.** 리뷰 이동(prev·goto·리뷰 중 next)마다 서버는 **커서 비트 기준** stats를 다시 계산해 보내고 `StatsPayload.beat`로 소속 비트를 알린다. `progress`·`fallbackPreview`는 항상 highMark 기준. Stage·통제는 `stats.beat`가 그리는 비트와 같을 때만 활동 통계를 그린다(다르면 null). 통제 완료 현황은 항상 highMark.
+60. **지각 채우기는 live 비트 "바로 앞"까지.** live 비트로 들어가는 전이는 포함하고 live 비트 자체는 채우지 않는다 — work 비트면 정상 참여(§8.3).
+61. **소켓 이벤트 맵도 제네릭.** `ClientToServerEvents<A, D>`·`ServerToClientEvents<S, St>`. 앱은 `src/src/activities/gagyebu/liveTypes.ts`에서 `ClientToServerEvents<Action, GagyebuDraft>`·`ServerToClientEvents<GameState, GagyebuStats>`로 좁히고 `useLive<S, A, D>`가 받는다.
+62. **`DecisionRecord.eventId`는 `EventId | ''`** (core-api.md §4.2). 현재 장면이 없는 statusAction 기록을 위한 빈 문자열 sentinel.
+63. **`admin merge` 로그 줄에 새 토큰 포함**(join 줄과 같은 방식) — 재생이 merge 뒤 유효한 토큰을 복원한다(§8.2·§5.8).

@@ -275,7 +275,7 @@ stateDiagram-v2
 | `continue` | `step === 'outcome'` | `lastOutcome.next`가 있으면 그 장면으로(`step: 'scene'`), `budgetReason`이 있으면 `step: 'adjust'`, 둘 다 없으면 `step: 'report'` |
 | `statusAction { … }` | `phase === 'sim'`, 상태가 있고 행동이 그 상태에 정의됨, `depositTo` 필요하면 유효 | 상태 행동 적용(운동화 팔기: 시세 입금, 상태 제거), `decisions`에 기록(아래 규칙) |
 
-**`statusAction`의 `DecisionRecord` (2026-11-09 추가).** 상태 행동도 선택 기록에 남는다. 필드 규칙:
+**`statusAction`의 `DecisionRecord` (2026-11-09 추가).** 상태 행동도 선택 기록에 남는다. 이를 위해 **`DecisionRecord.eventId` 타입이 `EventId | ''`로 넓어진다**(타입 변경 — 현재 장면이 없을 때의 기록을 위한 빈 문자열 sentinel. `eventCode`·`sceneId`는 원래 `string`이라 그대로). 필드 규칙:
 
 - `month`: 현재 달. `eventId`·`eventCode`: 그달 현재 장면(`current`)이 있으면 그 이벤트, 없으면 빈 문자열. `sceneId`: 현재 장면이 있으면 그 id, 없으면 `status:<statusId>`(예: `status:sneakers`).
 - `choiceId`: 행동 id(예: `sellSneakers`), `choiceLabel`: 행동 라벨(예: "지금 시세로 팔기"), `kind`: `'free'`(선택지가 아니라 상태 행동임을 나타내는 규칙).
