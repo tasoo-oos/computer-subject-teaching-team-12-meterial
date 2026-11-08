@@ -21,6 +21,7 @@ import type { FallbackResult } from '@gagyebu/live';
 import { beats } from './beats.ts';
 import type { GagyebuConfig } from './config.ts';
 import type { GagyebuDraft } from './draft.ts';
+import { sceneLabel } from './stats.ts';
 
 /** 비트 인덱스 → 비트 id. 없는 인덱스면 null */
 function beatId(cfg: GagyebuConfig, beat: number): string | null {
@@ -301,7 +302,12 @@ export function locate(s: GameState): string | null {
       if (s.current) {
         try {
           const { event, scene } = getScene(s.current);
-          return `${m} · ${scene.title ?? scene.speaker ?? event.title}`;
+          // 시작 장면은 이벤트 제목이 더 알려 주지만, 이어진 장면이 이벤트 제목으로
+          // 떨어지면 정체를 알 수 없다 — 장면 스스로의 이름(§14 #125)으로 폴백한다
+          const isEntry =
+            event.entry === scene.id || (event.entryVariants ?? []).some((v) => v.scene === scene.id);
+          const name = scene.title ?? scene.speaker ?? (isEntry ? event.title : sceneLabel(scene));
+          return `${m} · ${name}`;
         } catch {
           return `${m} · 장면`;
         }

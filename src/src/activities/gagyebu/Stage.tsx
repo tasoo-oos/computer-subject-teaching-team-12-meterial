@@ -107,13 +107,33 @@ function ProgressTiles({ progress, label = '완료' }: { progress: { done: numbe
   );
 }
 
-/** 값들을 익명 점으로 펼친 띠 (월급 분포·순자산 분포). 같은 색 점, 정렬 없음 */
-function DotBand({ values, lo, hi, loLabel, midLabel, hiLabel }: { values: number[]; lo: number; hi: number; loLabel: string; midLabel?: string; hiLabel: string }) {
+/** 값들을 익명 점으로 펼친 띠 (월급 분포·순자산 분포). 같은 색 점, 정렬 없음.
+ *  기준/평균 표식(midValue)은 실제 값의 x 위치에 선다 — 띠의 중앙이 아니라(§14 #125). */
+function DotBand({
+  values,
+  lo,
+  hi,
+  loLabel,
+  midLabel,
+  midValue,
+  hiLabel,
+}: {
+  values: number[];
+  lo: number;
+  hi: number;
+  loLabel: string;
+  midLabel?: string;
+  /** 표식의 실제 값 (월급 기준·순자산 평균). 없으면 표식을 그리지 않는다 */
+  midValue?: number;
+  hiLabel: string;
+}) {
   const span = Math.max(1, hi - lo);
+  const midPos = midValue !== undefined ? Math.min(1, Math.max(0, (midValue - lo) / span)) : null;
+  const dot = (pos: number) => 4 + pos * 92; // 점/표식의 left %
   return (
     <div>
       <div className="relative h-[150px] rounded-panel bg-sheet shadow-[0_0_0_1px_var(--color-rule)]">
-        <span aria-hidden className="absolute inset-y-6 left-1/2 w-px bg-rule" />
+        {midPos !== null ? <span aria-hidden className="absolute inset-y-6 w-px -translate-x-1/2 bg-ink-3" style={{ left: `${dot(midPos)}%` }} /> : null}
         {values.map((v, i) => {
           const pos = Math.min(1, Math.max(0, (v - lo) / span));
           // 겹침을 줄이는 결정적 지터 (정렬·순위가 아니라 그리기 위치일 뿐)
@@ -123,16 +143,25 @@ function DotBand({ values, lo, hi, loLabel, midLabel, hiLabel }: { values: numbe
               key={i}
               aria-hidden
               className="absolute size-[20px] -translate-x-1/2 rounded-full bg-ink"
-              style={{ left: `${4 + pos * 92}%`, top: `calc(50% + ${jitter * 13}px)` }}
+              style={{ left: `${dot(pos)}%`, top: `calc(50% + ${jitter * 13}px)` }}
             />
           );
         })}
         {values.length === 0 ? <p className="absolute inset-0 grid place-items-center text-[28px] text-ink-3">아직 데이터가 없어요</p> : null}
       </div>
-      <div className="num mt-3 flex justify-between text-[28px] text-ink-3">
-        <span>{loLabel}</span>
-        {midLabel ? <span>{midLabel}</span> : null}
-        <span>{hiLabel}</span>
+      <div className="num relative mt-3 text-[28px] text-ink-3">
+        <div className="flex justify-between">
+          <span>{loLabel}</span>
+          <span>{hiLabel}</span>
+        </div>
+        {midLabel && midPos !== null ? (
+          <span
+            className="absolute top-0 -translate-x-1/2 whitespace-nowrap font-semibold text-ink-2"
+            style={{ left: `${Math.min(85, Math.max(15, dot(midPos)))}%` }}
+          >
+            {midLabel}
+          </span>
+        ) : null}
       </div>
     </div>
   );
@@ -227,6 +256,7 @@ function SalaryStage({ stats }: { stats: GagyebuStats | null }) {
             hi={hi}
             loLabel={formatMan(lo)}
             midLabel={`기준 ${formatMan(base)}`}
+            midValue={base}
             hiLabel={formatMan(hi)}
           />
         ) : (
@@ -385,8 +415,10 @@ function BudgetStage({ revealed, stats, progress }: { revealed: boolean; stats: 
                 </div>
               ))}
             </div>
-            {budget.autoCount > 0 ? (
-              <p className="mt-5 self-end rounded-[6px] bg-mark/70 px-4 py-1.5 text-[24px] font-semibold text-ink">
+            {/* 미제출 인원은 완료 인원과 같은 종류라 통제 페이지 전용이다 — progress가 제공될 때
+                (lesson.settings.showProgressOnStage)만 함께 보여 준다(§14 #125) */}
+            {progress !== null && budget.autoCount > 0 ? (
+              <p className="mt-5 self-start rounded-[6px] bg-mark/70 px-4 py-1.5 text-[24px] font-semibold text-ink">
                 아직 제출하지 않아 자동 처리될 수 있어요 {budget.autoCount}명
               </p>
             ) : null}
@@ -422,6 +454,7 @@ function QuietMonthStage({ month, revealed, stats }: { month: number; revealed: 
                 hi={hi}
                 loLabel={formatMan(Math.min(lo, 0))}
                 midLabel={avg === null ? undefined : `평균 ${formatMan(avg)}`}
+                midValue={avg ?? undefined}
                 hiLabel={formatMan(hi)}
               />
             ) : (
@@ -483,17 +516,12 @@ function EventMonthStage({ month, revealed, stats }: { month: number; revealed: 
                 <DistributionBars items={entry.choices.map((c) => ({ label: c.label, count: c.count }))} autoLine={autoLine} />
               </>
             ) : null}
-            {ms.inChained > 0 ? (
-              <p className="mt-6 text-[28px] font-semibold text-ink-2">
-                지금 이어진 장면에 {ms.inChained}명이 있어요
-              </p>
-            ) : null}
           </div>
           <div className="min-h-0">
             {[...ms.chained, ...ms.scheduled].length > 0 ? (
               <div className="flex flex-col gap-6">
                 {[...ms.chained, ...ms.scheduled].map((t) => (
-                  <SceneTallyBlock key={t.sceneId} tally={t} compact />
+                  <SceneTallyBlock key={t.sceneId} tally={t} />
                 ))}
               </div>
             ) : (
@@ -512,8 +540,8 @@ function EventMonthStage({ month, revealed, stats }: { month: number; revealed: 
   );
 }
 
-/** 이어진·예약 장면 하나의 분포 블록 */
-function SceneTallyBlock({ tally, compact = false }: { tally: SceneTally; compact?: boolean }) {
+/** 이어진·예약 장면 하나의 분포 블록 — 좁은 오른쪽 기둥에서는 막대가 알아서 쌓인다(§14 #125) */
+function SceneTallyBlock({ tally }: { tally: SceneTally }) {
   return (
     <div>
       <p className="mb-2 text-[28px] font-bold text-ink">
@@ -523,7 +551,6 @@ function SceneTallyBlock({ tally, compact = false }: { tally: SceneTally; compac
       <DistributionBars
         items={tally.choices.map((c) => ({ label: c.label, count: c.count }))}
         total={tally.reached}
-        className={compact ? '[&>div]:h-[38px] [&>div>div]:h-[38px]' : ''}
       />
     </div>
   );
@@ -556,14 +583,17 @@ function SettlementStage({ revealed, stats }: { revealed: boolean; stats: Gagyeb
           </div>
           <div className="min-h-0">
             <p className="mb-4 text-[30px] font-bold">도전과제 달성률</p>
-            <div className="flex max-h-[640px] flex-col gap-2.5 overflow-hidden">
+            {/* 13개 전부 보이게 두 단으로 (한 단 13줄은 1080px를 넘는다, §14 #125) */}
+            <div className="grid grid-cols-2 gap-x-8 gap-y-3">
               {st.achievements.map((a) => (
-                <div key={a.achievementId} className="flex items-center gap-4">
-                  <p className="w-[420px] shrink-0 truncate text-[26px] font-semibold text-ink">{a.label}</p>
-                  <div className="h-[26px] flex-1 overflow-hidden rounded-[5px] bg-sheet shadow-[inset_0_0_0_1.5px_var(--color-rule-soft)]">
-                    <div className="h-full rounded-[4px] bg-ink" style={{ width: `${a.rate * 100}%` }} />
+                <div key={a.achievementId}>
+                  <p className="truncate text-[28px] leading-tight font-semibold text-ink">{a.label}</p>
+                  <div className="mt-1 flex items-center gap-3">
+                    <div className="h-[22px] flex-1 overflow-hidden rounded-[5px] bg-sheet shadow-[inset_0_0_0_1.5px_var(--color-rule-soft)]">
+                      <div className="h-full rounded-[4px] bg-ink" style={{ width: `${a.rate * 100}%` }} />
+                    </div>
+                    <p className="num w-[100px] shrink-0 text-right text-[26px] font-bold">{formatPct(a.rate)}</p>
                   </div>
-                  <p className="num w-[100px] shrink-0 text-right text-[26px] font-bold">{formatPct(a.rate)}</p>
                 </div>
               ))}
             </div>
@@ -594,5 +624,16 @@ function PresentStage({ spotlight, spotlightName }: { spotlight: GameState | nul
     name === spotlight.profile.nickname
       ? spotlight
       : { ...spotlight, profile: { ...spotlight.profile, nickname: name } };
-  return <PresentationView state={state} />;
+  // 발표자 이름을 크게 — 발표 때만 닉네임이 TV에 나온다(계획 §0). PresentationView의
+  // 작은 머리말 위에 얹는다(min-h-dvh 화면이라 위에 더하면 1080px를 넘친다, §14 #125).
+  return (
+    <div className="relative size-full overflow-hidden">
+      <div className="absolute left-[70px] top-[36px] z-10 rounded-panel bg-sheet/95 px-8 py-4 shadow-[0_0_0_1px_var(--color-rule),0_16px_40px_-24px_rgba(24,38,74,.6)]">
+        <p className="display text-[52px] leading-none text-ink">
+          발표 <span className="text-seal">· {name}</span>
+        </p>
+      </div>
+      <PresentationView state={state} tv />
+    </div>
+  );
 }

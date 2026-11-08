@@ -65,8 +65,9 @@ export function JoinWall({ code, joined, connected, nicknames = [], className = 
             {connected != null ? <StatTile value={connected} label="접속 중" unit="명" className="flex-1" /> : null}
           </div>
         ) : null}
-        {/* 닉네임 벽 — 60명까지 들어가게(넘치는 칸은 숨긴다) */}
-        <div className="mt-7 flex min-h-0 flex-1 flex-wrap content-start gap-2.5 overflow-hidden">
+        {/* 닉네임 벽 — 60명까지 들어가게(넘치는 칸은 숨긴다). flex-1을 빼야
+            QR 카드와 세로 중앙이 맞는다(늘어나면 열 전체가 위로 붙는다, §14 #125) */}
+        <div className="mt-7 flex max-h-[560px] flex-wrap content-start gap-2.5 overflow-hidden">
           {nicknames.length === 0 ? (
             <p className="text-[24px] text-ink-3">먼저 들어온 순서대로 이름이 나와요</p>
           ) : (

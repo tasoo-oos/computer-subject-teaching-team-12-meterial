@@ -144,6 +144,28 @@ function sceneTitleOf(event: GameEvent, sceneId: SceneId): string {
   return event.scenes[sceneId]?.title ?? event.title;
 }
 
+/** 장면의 짧은 이름 — 이어진·예약 장면처럼 장면 밖 맥락이 없을 때 쓴다(§14 #125).
+ *  장면 제목 → 발신자 → 채널 → 본문 앞부분 순. 이벤트 제목으로 떨어지면
+ *  "가정의 달"처럼 이어진 장면의 정체를 알 수 없어진다. */
+export function sceneLabel(scene: Scene): string {
+  if (scene.title) return scene.title;
+  if (scene.speaker) return scene.speaker;
+  switch (scene.channel) {
+    case 'messenger':
+      return '메신저';
+    case 'sms':
+      return '문자';
+    case 'news':
+      return '뉴스 속보';
+    case 'app':
+      return '앱 알림';
+    default:
+      break;
+  }
+  const flat = scene.text.replace(/\s+/g, ' ').trim();
+  return flat.length > 20 ? `${flat.slice(0, 20)}…` : flat;
+}
+
 /** 월 비트 집계 (m1..m11) */
 function monthStats(states: GameState[], month: number): GagyebuStats {
   const batch = eventForMonth(month);
@@ -206,7 +228,8 @@ function monthStats(states: GameState[], month: number): GagyebuStats {
       if (kind === 'entry') continue; // 배치 이벤트 시작 장면은 entry 덩어리로
       const tally: SceneTally = {
         sceneId,
-        title: sceneTitleOf(event, sceneId),
+        // 이어진·예약 장면은 장면 스스로의 이름(발신자·채널 폴백) — 이벤트 제목이면 정체를 알 수 없다(§14 #125)
+        title: sceneLabel(scene),
         reached: acc.reached,
         choices: tallyChoices(scene, acc),
       };

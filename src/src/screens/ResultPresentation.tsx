@@ -3,8 +3,9 @@ import { ENDINGS, formatMan, satisfactionBand, totalDebt, type GameState } from 
 import { NetWorthChart } from '../components/result/NetWorthChart.tsx';
 
 /** 교실 프로젝터용 크게 보기. 멀리서도 읽히는 것만 남긴다.
- *  onExit을 생략하면 닫기 버튼이 없다 — 전면(TV) 발표 비트에서 그대로 재사용한다(§14 #121). */
-export function PresentationView({ state, onExit }: { state: GameState; onExit?: () => void }) {
+ *  onExit을 생략하면 닫기 버튼이 없다 — 전면(TV) 발표 비트에서 그대로 재사용한다(§14 #121).
+ *  tv=true면 그래프 마지막 값 라벨이 점을 피해 그려진다(§14 #125). dev는 기본값 그대로. */
+export function PresentationView({ state, onExit, tv = false }: { state: GameState; onExit?: () => void; tv?: boolean }) {
   const s = state.settlement;
   if (!s) return null;
   const ending = ENDINGS[s.ending];
@@ -57,7 +58,7 @@ export function PresentationView({ state, onExit }: { state: GameState; onExit?:
               {formatMan(state.history[0]?.netWorth ?? 0)} → {formatMan(s.netWorth)}
             </span>
           </figcaption>
-          <NetWorthChart state={state} large height={330} />
+          <NetWorthChart state={state} large height={330} endLabelBeside={tv} />
         </figure>
       </div>
 

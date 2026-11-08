@@ -32,4 +32,4 @@ export type { GagyebuDraft } from './draft.ts';
 export type { GagyebuStats, MonthEntryTally, SceneTally } from './stats.ts';
 export { exportColumns, exportRows, formatPaymentPlan } from './export.ts';
 export { allowed, done, fallback, transition, locate, previewFallback } from './progress.ts';
-export { stats } from './stats.ts';
+export { stats, sceneLabel } from './stats.ts';
