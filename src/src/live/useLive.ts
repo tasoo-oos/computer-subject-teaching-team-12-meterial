@@ -2,6 +2,11 @@
 // Socket.IO 내장 자동 재접속, version 기반 낡은 메시지 버림(§5.3), 토큰 저장(localStorage['gg_token_<code>']),
 // ended/not-found/kicked 시 토큰 삭제, join/joined/merge-pending 흐름(§5.8), dispatch 단일 in-flight,
 // draft 2초 묶음 + 제출 직전 flush(§5.4)를 모두 책임진다.
+//
+// 감사 S9(M2, §14 #143): 서버가 의도적으로 끊은 소켓(io server disconnect)은 자동 재접속이
+// 없다 — kicked 뒤에는 직접 다시 연결해 "다시 입장하기"가 새 연결에서 동작하게 하고,
+// 같은 기록의 다른 탭이 이 소켓을 대체한 경우에는 'replaced' 상태로 안내 화면을 보여 준다.
+// join·dispatch는 타임아웃으로 항상 결말이 나서 UI가 멈추지 않는다.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ActAck,
@@ -18,7 +23,20 @@ import { lessonBeats } from '@gagyebu/live';
 import { beatsOf } from '../activities/beatsOf.ts';
 import { createStudentSocket, type StudentSocket } from './socket.ts';
 
-export type LiveStatus = 'connecting' | 'open' | 'reconnecting' | 'ended' | 'not-found' | 'join-locked';
+export type LiveStatus =
+  | 'connecting'
+  | 'open'
+  | 'reconnecting'
+  | 'ended'
+  | 'not-found'
+  | 'join-locked'
+  /** 같은 기록의 다른 탭이 이 소켓을 대체했다(§5.8) — 자동 이어보기 없음(§14 #143) */
+  | 'replaced';
+
+/** 서버 join 속도 제한 창(§5.4)과 같은 값 — 클라이언트 재시도 스로틀(§14 #149) */
+export const JOIN_RETRY_MS = 5000;
+/** join·act ack가 돌아오지 않아도 UI가 멈추지 않게 하는 타임아웃(§14 #143) */
+const ACK_TIMEOUT_MS = 10_000;
 
 export interface UseLiveResult<S = unknown, A = unknown, D = unknown> {
   status: LiveStatus;
@@ -68,6 +86,8 @@ export function useLive<S = unknown, A = unknown, D = unknown>(code: string): Us
   const beatKeyRef = useRef('');
   const pendingActRef = useRef(false);
   const seqRef = useRef(0);
+  const kickedRef = useRef<KickedPayload['reason'] | null>(null);
+  const lastJoinRef = useRef(0);
   const draftRef = useRef<{ data: D | null; dirty: boolean; timer: number }>({ data: null, dirty: false, timer: 0 });
 
   classRef.current = classState;
@@ -96,7 +116,7 @@ export function useLive<S = unknown, A = unknown, D = unknown>(code: string): Us
           // 입장하지 않은 학생은 join 전까지 snapshot이 오지 않는다(§8.3) — hello ok만으로
           // 수업이 열려 있으니 'open'으로 바꾼다. 페이지가 닉네임 입력 화면(§10.4)을 보여 준다.
           // 재접속(resumed)이면 snapshot이 기준을 다시 맞춘다.
-          setStatus((prev) => (prev === 'ended' || prev === 'not-found' ? prev : 'open'));
+          setStatus((prev) => (prev === 'ended' || prev === 'not-found' || prev === 'replaced' ? prev : 'open'));
           return;
         }
         localStorage.removeItem(tokenKey(code));
@@ -114,7 +134,7 @@ export function useLive<S = unknown, A = unknown, D = unknown>(code: string): Us
       setState((p.state ?? null) as S | null);
       setSubmitted(p.you?.done ?? false);
       if (p.autoApplied?.length) pushAutoApplied(p.autoApplied);
-      setStatus((prev) => (prev === 'ended' || prev === 'not-found' ? prev : 'open'));
+      setStatus((prev) => (prev === 'ended' || prev === 'not-found' || prev === 'replaced' ? prev : 'open'));
     });
     socket.on('class', (p) => {
       if (p.class.version < versionRef.current) return; // 낡은 메시지 조용히 버림(§5.3)
@@ -138,14 +158,32 @@ export function useLive<S = unknown, A = unknown, D = unknown>(code: string): Us
       localStorage.setItem(tokenKey(code), p.token);
       setYou({ studentId: p.studentId, nickname: p.nickname });
       setKicked(null);
+      kickedRef.current = null;
     });
     socket.on('kicked', (p) => {
       localStorage.removeItem(tokenKey(code));
+      kickedRef.current = p.reason;
       setKicked(p.reason);
       setYou(null);
     });
-    socket.on('disconnect', () => {
-      setStatus((prev) => (prev === 'ended' || prev === 'not-found' ? prev : 'reconnecting'));
+    socket.on('disconnect', (reason: string) => {
+      // 끊기며 못 나간 패킷이 재접속 hello보다 먼저 나가는 것을 막는다(§14 #143) —
+      // join이 hello 없이 도착하면 서버가 join-locked로 오해한다.
+      socket.sendBuffer.length = 0;
+      if (reason === 'io server disconnect') {
+        if (kickedRef.current) {
+          // 서버가 의도적으로 끊었다(내보내기·merge 거부) — socket.io는 이 연결을 자동
+          // 재접속하지 않으므로 직접 다시 연결한다. "다시 입장하기"가 새 연결에서 동작한다.
+          setStatus((prev) => (prev === 'ended' || prev === 'not-found' ? prev : 'reconnecting'));
+          socket.connect();
+        } else {
+          // kicked 없이 서버가 끊었다 = 같은 기록의 다른 탭이 이 소켓을 대체했다(§5.8).
+          // 재접속하면 그 탭의 기록을 다시 훔치게 되므로 여기서 멈추고 안내 화면을 보여 준다.
+          setStatus('replaced');
+        }
+        return;
+      }
+      setStatus((prev) => (prev === 'ended' || prev === 'not-found' || prev === 'replaced' ? prev : 'reconnecting'));
     });
 
     return () => {
@@ -190,18 +228,42 @@ export function useLive<S = unknown, A = unknown, D = unknown>(code: string): Us
           resolve({ ok: false, reason: 'join-locked' });
           return;
         }
-        socket.emit('join', { nickname }, (ack: JoinAck) => {
-          if (ack.ok) {
-            localStorage.setItem(tokenKey(code), ack.token);
-            setYou({ studentId: ack.studentId, nickname });
-            setKicked(null);
-          } else if (ack.reason === 'join-locked') {
-            setStatus('join-locked');
+        const ts = Date.now();
+        if (ts - lastJoinRef.current < JOIN_RETRY_MS) {
+          // 서버가 5초 제한으로 조용히 버리는 재시도(§5.4) — 대기 없이 즉시 돌려준다.
+          // status는 바꾸지 않는다(입장 마감 안내와 구분). 버튼은 카운트다운으로 막힌다(§14 #149).
+          resolve({ ok: false, reason: 'join-locked' });
+          return;
+        }
+        lastJoinRef.current = ts;
+        let settled = false;
+        const finish = (ack: JoinAck, fromServer: boolean): void => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timer);
+          socket.off('connect', emitJoin);
+          if (fromServer) {
+            if (ack.ok) {
+              localStorage.setItem(tokenKey(code), ack.token);
+              setYou({ studentId: ack.studentId, nickname });
+              setKicked(null);
+              kickedRef.current = null;
+            } else if (ack.reason === 'join-locked') {
+              setStatus('join-locked');
+            }
+            // 'invalid-nickname': 잘못된 닉네임 거부(§5.1). status는 'open'을 유지해
+            // 닉네임 양식이 그대로 있게 하고, 페이지가 ack 이유로 안내문을 보여 준다(§14 #130).
           }
-          // 'invalid-nickname': 잘못된 닉네임 거부(§5.1). status는 'open'을 유지해
-          // 닉네임 양식이 그대로 있게 하고, 페이지가 ack 이유로 안내문을 보여 준다(§14 #130).
           resolve(ack);
-        });
+        };
+        const emitJoin = () => {
+          // 연결을 기다렸다 hello(connect 핸들러) 뒤에 보낸다 — hello보다 join이 먼저
+          // 나가면 서버가 join-locked로 오해한다(§14 #143).
+          socket.emit('join', { nickname }, (ack: JoinAck) => finish(ack, true));
+        };
+        const timer = window.setTimeout(() => finish({ ok: false, reason: 'join-locked' }, false), ACK_TIMEOUT_MS);
+        if (socket.connected) emitJoin();
+        else socket.once('connect', emitJoin);
       }),
     [code],
   );
@@ -232,7 +294,11 @@ export function useLive<S = unknown, A = unknown, D = unknown>(code: string): Us
           beat: { segment: cls.cursor.segment, beat: cls.cursor.beat },
           action,
         };
-        socket.emit('act', payload, (ack: ActAck<unknown>) => {
+        let settled = false;
+        const finish = (ack: ActAck<unknown>): void => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timer);
           pendingActRef.current = false;
           const r = ack as ActAck<S>;
           if (r.ok) {
@@ -244,7 +310,13 @@ export function useLive<S = unknown, A = unknown, D = unknown>(code: string): Us
             setStatus('ended');
           }
           resolve(r);
-        });
+        };
+        socket.emit('act', payload, (ack: ActAck<unknown>) => finish(ack));
+        // 끊긴 채로 보낸 행동은 ack이 돌아오지 않는다 — UI가 멈추지 않게 타임아웃(§14 #143)
+        const timer = window.setTimeout(
+          () => finish({ ok: false, reason: 'server-error', message: '연결이 불안정해요. 잠시 후 다시 시도해 주세요.' }),
+          ACK_TIMEOUT_MS,
+        );
       }),
     [code, sendDraft],
   );
