@@ -420,7 +420,24 @@ function startAutoNext(cookie) {
         } else {
           await new Promise((r) => setTimeout(r, 150));
         }
-        const ack = await new Promise((res) => socket.emit('next', { force: true }, res));
+        // 서버가 응답 중간에 죽으면 ack는 영영 돌아오지 않는다(socket.io가 연결이 끊길 때
+        // 대기 중인 ack를 조용히 지운다) — 타임아웃을 걸어 루프가 멈추지 않게 하고,
+        // 재접속 후 최신 커서로 다시 시도한다.
+        const ack = await new Promise((res) => {
+          const t = setTimeout(() => res(null), 5000);
+          socket.emit('next', { force: true }, (a) => {
+            clearTimeout(t);
+            res(a);
+          });
+        });
+        if (ack === null) {
+          if (!socket.connected) {
+            await new Promise((r) => setTimeout(r, 500));
+            continue; // 재접속을 기다리며 최신 커서로 다시 시도
+          }
+          log('next 응답 없음 — 재시도');
+          continue;
+        }
         if (ack && ack.ok !== true && ack.reason && ack.reason !== 'confirm-required') {
           if (ack.reason === 'invalid-target') return; // 마지막 비트
           if (ack.reason === 'rate-limited') {
