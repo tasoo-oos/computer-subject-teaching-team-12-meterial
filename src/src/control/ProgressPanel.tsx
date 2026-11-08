@@ -41,7 +41,7 @@ export function ProgressPanel({ progress, fallbackPreview, roster }: ProgressPan
           </p>
         ) : null}
         {incomplete.length > 0 ? (
-          <ul className="mt-2 grid max-h-[168px] gap-1 overflow-y-auto">
+          <ul className="mt-2 grid max-h-[168px] gap-1 overflow-y-auto" data-testid="incomplete-list">
             {incomplete.map((r) => (
               <li key={r.studentId} className="flex items-center gap-2 rounded-[6px] bg-white/70 px-2 py-1 text-[13px]">
                 <ConnectedDot connected={r.connected} />
