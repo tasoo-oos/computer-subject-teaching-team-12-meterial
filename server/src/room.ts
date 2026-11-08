@@ -921,7 +921,10 @@ export class Room {
     rec.draft = undefined; // 초안은 이 비트에서 소진(§4.2)
     if (notify) {
       const beatId = beat?.id ?? `${ref.segment}/${ref.beat}`;
-      for (const message of notices) rec.autoApplied.push({ beatId, message });
+      // 빈 안내 문구('' — 순차 처리 걸음 등)는 큐에 넣지 않는다(§14 #134). 화면에도 세지 않는다.
+      for (const message of notices) {
+        if (message) rec.autoApplied.push({ beatId, message });
+      }
     }
     if (actions.length === 0 && !overflow) return; // 적용한 것이 없으면 줄을 남기지 않는다
     this.log.append({

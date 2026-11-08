@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ActPayload, JoinPayload } from '@gagyebu/live';
 import { fakeSocket, makeRoom, memLog, type Captured } from './testutil/helpers.ts';
-import { noConfirmLesson, stuckLesson, testActivities, testLesson } from './testutil/fake.ts';
+import { noConfirmLesson, quietLesson, stuckLesson, testActivities, testLesson } from './testutil/fake.ts';
 import type { FakeAction, FakeState } from './testutil/fake.ts';
 import type { StudentRecord } from './room.ts';
 
@@ -174,6 +174,22 @@ describe('next: 50회 가드 → stalled (§4.2)', () => {
     expect(taken).toMatchObject({ ok: false, reason: 'nickname-taken' });
     const pending = room.rosterEntries().find((r) => r.pendingMerge);
     expect(pending).toMatchObject({ nickname: 'a', stalled: false, pendingMerge: true });
+  });
+
+  it('빈 안내 문구(\'\')는 autoApplied 큐에 쌓이지 않는다(§14 #134)', async () => {
+    const captured: Captured[] = [];
+    const room = makeRoom({ lesson: quietLesson, activities: testActivities, random: () => 0 });
+    const rec = await join(room, 'a', captured); // count 0
+    for (let i = 0; i < 4; i++) await room.next(true); // setup(1) 도착
+    await room.next(true); // setup 마감 — fallback notice가 ''인 걸음
+    expect((rec.states['game'] as FakeState).count).toBeGreaterThanOrEqual(1); // 진전은 했다
+    expect(rec.autoApplied).toHaveLength(0); // 빈 안내는 큐에 안 쌓인다
+    // state/snapshot에도 실리지 않는다
+    const delivered = captured.reduce(
+      (acc: number, c: Captured) => acc + (((c.payload as { autoApplied?: unknown[] }).autoApplied ?? []).length),
+      0,
+    );
+    expect(delivered).toBe(0);
   });
 });
 
