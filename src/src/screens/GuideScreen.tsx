@@ -6,31 +6,37 @@ import { FlowHeader } from '../components/FlowHeader.tsx';
 import { PassbookCover } from '../components/PassbookCover.tsx';
 import { DEV_PREV } from '../dev/route.ts';
 
-export function GuideScreen({ state, dispatch, ui }: ScreenProps) {
+export function GuideScreen({ state, dispatch, mode, beat, ui }: ScreenProps) {
   const [index, setIndex] = useState(ui?.guideIndex ?? 0);
-  const card = GUIDE_CARDS[index]!;
-  const last = index === GUIDE_CARDS.length - 1;
+  // live·solo: 그 비트의 카드 한 장만, 조작 요소 없음(§8-2). dev: 기존 카드 진행(기존 동작 그대로)
+  const live = mode !== 'dev';
+  const liveIndex = live ? guideIndexOf(beat.id) : null;
+  const i = live ? (liveIndex ?? 0) : index;
+  const card = GUIDE_CARDS[i]!;
+  const last = i === GUIDE_CARDS.length - 1;
   const isSplit = card.id === 'split-accounts';
   return (
     <div className="paper-texture min-h-dvh">
       <FlowHeader current="guide" nickname={state.profile.nickname} />
       <main className="mx-auto flex min-h-[calc(100dvh-96px)] max-w-[1100px] flex-col justify-center px-5 py-6 sm:px-8 sm:py-8">
-        <nav aria-label="안내 카드" className="flex flex-wrap items-center gap-2">
-          {GUIDE_CARDS.map((c, i) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => setIndex(i)}
-              aria-current={i === index ? 'step' : undefined}
-              className={`flex min-h-11 items-center gap-2 rounded-full px-3 text-[14px] ${
-                i === index ? 'bg-ink font-semibold text-white' : i < index ? 'text-ink' : 'text-ink-3'
-              }`}
-            >
-              <span className="num">{i + 1}</span>
-              <span className={i === index ? '' : 'hidden lg:inline'}>{c.title}</span>
-            </button>
-          ))}
-        </nav>
+        {!live ? (
+          <nav aria-label="안내 카드" className="flex flex-wrap items-center gap-2">
+            {GUIDE_CARDS.map((c, ci) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setIndex(ci)}
+                aria-current={ci === i ? 'step' : undefined}
+                className={`flex min-h-11 items-center gap-2 rounded-full px-3 text-[14px] ${
+                  ci === i ? 'bg-ink font-semibold text-white' : ci < i ? 'text-ink' : 'text-ink-3'
+                }`}
+              >
+                <span className="num">{ci + 1}</span>
+                <span className={ci === i ? '' : 'hidden lg:inline'}>{c.title}</span>
+              </button>
+            ))}
+          </nav>
+        ) : null}
 
         <article
           key={card.id}
@@ -40,7 +46,7 @@ export function GuideScreen({ state, dispatch, ui }: ScreenProps) {
           <div className={isSplit ? '' : 'grid gap-8 md:grid-cols-[1fr_1.1fr]'}>
             <header>
               <p className="num text-[15px] font-semibold text-ink-2">
-                {index + 1} / {GUIDE_CARDS.length}
+                {i + 1} / {GUIDE_CARDS.length}
               </p>
               <h1 id="guide-title" className="display mt-1 text-[42px] sm:text-[56px] lg:text-[64px]">
                 {card.title}
@@ -78,23 +84,33 @@ export function GuideScreen({ state, dispatch, ui }: ScreenProps) {
           ) : null}
         </article>
 
-        <div className="mt-6 flex items-center justify-between gap-3">
-          <button type="button" onClick={() => (index === 0 ? dispatch(DEV_PREV) : setIndex(index - 1))} className="btn btn-quiet">
-            <ChevronLeft size={18} aria-hidden />
-            이전
-          </button>
-          <button
-            type="button"
-            onClick={() => (last ? dispatch({ type: 'goto', phase: 'budget' }) : setIndex(index + 1))}
-            className="btn btn-primary px-6"
-          >
-            {last ? '가계부 짜러 가기' : '다음 카드'}
-            {last ? null : <ChevronRight size={18} aria-hidden />}
-          </button>
-        </div>
+        {live ? null : (
+          <div className="mt-6 flex items-center justify-between gap-3">
+            <button type="button" onClick={() => (i === 0 ? dispatch(DEV_PREV) : setIndex(i - 1))} className="btn btn-quiet">
+              <ChevronLeft size={18} aria-hidden />
+              이전
+            </button>
+            <button
+              type="button"
+              onClick={() => (last ? dispatch({ type: 'goto', phase: 'budget' }) : setIndex(i + 1))}
+              className="btn btn-primary px-6"
+            >
+              {last ? '가계부 짜러 가기' : '다음 카드'}
+              {last ? null : <ChevronRight size={18} aria-hidden />}
+            </button>
+          </div>
+        )}
       </main>
     </div>
   );
+}
+
+/** 비트 id 'guide-N' → 카드 인덱스. 모르는 id면 null */
+function guideIndexOf(beatId: string): number | null {
+  const m = /^guide-(\d+)$/.exec(beatId);
+  if (!m) return null;
+  const i = Number(m[1]) - 1;
+  return i >= 0 && i < GUIDE_CARDS.length ? i : null;
 }
 
 /** 계좌 6종을 통장 표지로 한눈에. 이후 화면에서도 같은 색을 쓴다 */

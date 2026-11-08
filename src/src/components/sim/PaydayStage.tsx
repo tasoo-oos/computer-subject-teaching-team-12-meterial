@@ -1,9 +1,22 @@
 import { TRANSFER_ORDER, ACCOUNTS, formatMan, type GameState } from '@gagyebu/core';
 import { useSequence } from '../../lib/motion.ts';
+import { useActBusy } from '../../lib/actBusy.tsx';
 import { Money } from '../Money.tsx';
 
 /** 월급날: 통장에 거래가 한 줄씩 인쇄된다 */
-export function PaydayStage({ state, onNext, step }: { state: GameState; onNext: () => void; step: string }) {
+export function PaydayStage({
+  state,
+  onNext,
+  step,
+  nextLabel,
+}: {
+  state: GameState;
+  onNext: () => void;
+  step: string;
+  /** 버튼 문구(라이브의 "확인"·12월의 "결과 보기"). 없으면 기존 문구 */
+  nextLabel?: string;
+}) {
+  const busy = useActBusy();
   const p = state.payday;
   const lines: { label: string; sub?: string; amount: number; tone?: 'in' | 'out' }[] = p
     ? [
@@ -68,11 +81,11 @@ export function PaydayStage({ state, onNext, step }: { state: GameState; onNext:
           </tfoot>
         </table>
       </section>
-      {step === 'payday' && state.month === 1 ? <TutorialNote onNext={onNext} /> : null}
+      {step === 'payday' && state.month === 1 ? <TutorialNote onNext={onNext} nextLabel={nextLabel} /> : null}
       {state.month !== 1 ? (
         <div className="flex justify-end">
-          <button type="button" onClick={onNext} className="btn btn-primary px-6">
-            이번 달 시작하기
+          <button type="button" onClick={onNext} disabled={busy} className="btn btn-primary px-6">
+            {nextLabel ?? '이번 달 시작하기'}
           </button>
         </div>
       ) : null}
@@ -80,7 +93,8 @@ export function PaydayStage({ state, onNext, step }: { state: GameState; onNext:
   );
 }
 
-function TutorialNote({ onNext }: { onNext: () => void }) {
+function TutorialNote({ onNext, nextLabel }: { onNext: () => void; nextLabel?: string }) {
+  const busy = useActBusy();
   return (
     <section className="rounded-panel bg-ink p-4 text-white sm:p-5" aria-labelledby="tutorial-title">
       <h3 id="tutorial-title" className="display text-[21px]">
@@ -91,8 +105,8 @@ function TutorialNote({ onNext }: { onNext: () => void }) {
         예상하지 못한 일이 생깁니다.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <button type="button" onClick={onNext} className="btn bg-white px-5 text-ink hover:bg-mark">
-          2월로 넘어가기
+        <button type="button" onClick={onNext} disabled={busy} className="btn bg-white px-5 text-ink hover:bg-mark">
+          {nextLabel ?? '2월로 넘어가기'}
         </button>
         <p className="text-[12px] text-white/70">금리와 수익률은 수업을 위한 가정값입니다.</p>
       </div>

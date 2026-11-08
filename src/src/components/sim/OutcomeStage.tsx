@@ -11,6 +11,7 @@ import {
 } from '@gagyebu/core';
 import { Money } from '../Money.tsx';
 import { Spine } from '../Spine.tsx';
+import { useActBusy } from '../../lib/actBusy.tsx';
 
 function deltaRow(d: Delta, i: number) {
   switch (d.kind) {
@@ -62,6 +63,7 @@ function deltaRow(d: Delta, i: number) {
 
 /** 선택 결과: 피드백, 잔고 변화, 이어지는 장면, 교훈 */
 export function OutcomeStage({ state, onContinue }: { state: GameState; onContinue: () => void }) {
+  const busy = useActBusy();
   const o: Outcome | null = state.lastOutcome;
   if (!o) return null;
   const monthBudget = budgetSummary(state.budget, state.profile.salary);
@@ -123,7 +125,7 @@ export function OutcomeStage({ state, onContinue }: { state: GameState; onContin
       </div>
 
       <div className="flex justify-end">
-        <button type="button" onClick={onContinue} className="btn btn-primary px-6">
+        <button type="button" onClick={onContinue} disabled={busy} className="btn btn-primary px-6">
           {o.next ? '다음 장면 보기' : o.budgetReason ? '가계부 조정하기' : '계속하기'}
         </button>
       </div>

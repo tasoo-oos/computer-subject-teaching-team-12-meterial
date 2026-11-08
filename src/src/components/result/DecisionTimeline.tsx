@@ -22,7 +22,14 @@ export function DecisionTimeline({ decisions, state }: { decisions: DecisionReco
                   return (
                     <li key={`${d.sceneId}-${d.choiceId}-${i}`} className="relative py-1.5">
                       <span aria-hidden className="absolute top-3 -left-[1.32rem] size-2 rounded-full bg-ink" />
-                      <p className="text-[14px] font-semibold leading-snug">{d.choiceLabel}</p>
+                      <p className="flex flex-wrap items-center gap-1.5 text-[14px] font-semibold leading-snug">
+                        {d.choiceLabel}
+                        {d.auto ? (
+                          <span className="rounded-[4px] border border-rule bg-paper px-1.5 py-px text-[11px] font-semibold text-ink-2">
+                            자동 선택
+                          </span>
+                        ) : null}
+                      </p>
                       <p className="text-[12px] text-ink-3">
                         사건 {d.eventCode}
                         {paid > 0 ? ` · ${d.payment!.parts.map((p) => `${sourceLabel(p.source)} ${formatWon(p.amount)}`).join(' + ')}` : ''}

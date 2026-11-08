@@ -19,7 +19,7 @@ import { DecisionTimeline } from '../components/result/DecisionTimeline.tsx';
 import { NetWorthChart } from '../components/result/NetWorthChart.tsx';
 import { PresentationView } from './ResultPresentation.tsx';
 
-export function ResultScreen({ state, dispatch, ui }: ScreenProps) {
+export function ResultScreen({ state, dispatch, mode, ui }: ScreenProps) {
   if (ui?.presentation) return <PresentationView state={state} onExit={() => dispatch({ type: 'continue' })} />;
   const s = state.settlement;
   if (!s) return null;
@@ -78,15 +78,24 @@ export function ResultScreen({ state, dispatch, ui }: ScreenProps) {
               </p>
             )}
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button type="button" onClick={() => dispatch({ type: 'continue' })} className="btn btn-primary">
-                <Presentation size={17} aria-hidden />
-                발표용 크게 보기
-              </button>
-              <button type="button" onClick={() => dispatch({ type: 'reset' })} className="btn btn-quiet">
-                처음부터 다시
-              </button>
-            </div>
+            {/* 라이브에서는 단계 이동 버튼이 없다(§8-2). 발표용 크게 보기는 dev 전용, 처음부터 다시는 solo 전용(reset). */}
+            {mode === 'dev' ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button type="button" onClick={() => dispatch({ type: 'continue' })} className="btn btn-primary">
+                  <Presentation size={17} aria-hidden />
+                  발표용 크게 보기
+                </button>
+                <button type="button" onClick={() => dispatch({ type: 'reset' })} className="btn btn-quiet">
+                  처음부터 다시
+                </button>
+              </div>
+            ) : mode === 'solo' ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button type="button" onClick={() => dispatch({ type: 'reset' })} className="btn btn-quiet">
+                  처음부터 다시
+                </button>
+              </div>
+            ) : null}
           </section>
 
           <div className="grid gap-3">

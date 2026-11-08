@@ -1,10 +1,25 @@
 import { useState } from 'react';
+import { CheckCircle2 } from 'lucide-react';
 import { BASE_SALARY, SALARY_SPREAD, formatMan, formatWon } from '@gagyebu/core';
 import type { ScreenProps } from '@gagyebu/draft-kit';
 import { FlowHeader } from '../components/FlowHeader.tsx';
 import { useCountUp } from '../lib/motion.ts';
 
-export function StartScreen({ state, dispatch, ui }: ScreenProps) {
+export function StartScreen({ state, dispatch, mode, beat, ui }: ScreenProps) {
+  // dev: 스냅숏 힌트(ui.startStage)로 이름/공개 중 하나를 그린다(기존 동작 그대로).
+  // live·solo: 비트 id로 그린다 — 'join'은 입장 완료 안내, 'salary'는 내 월급 연출(버튼 없음).
+  if (mode !== 'dev') {
+    return (
+      <div className="paper-texture min-h-dvh">
+        <FlowHeader current="start" nickname={state.profile.nickname} />
+        {beat.id === 'join' ? (
+          <JoinedNotice nickname={state.profile.nickname} />
+        ) : (
+          <RevealStage state={state} />
+        )}
+      </div>
+    );
+  }
   const stage = ui?.startStage ?? 'name';
   return (
     <div className="paper-texture min-h-dvh">
@@ -15,6 +30,26 @@ export function StartScreen({ state, dispatch, ui }: ScreenProps) {
         <RevealStage state={state} onNext={() => dispatch({ type: 'continue' })} />
       )}
     </div>
+  );
+}
+
+/** 입장 비트(live): 학생은 이미 입장했다 — 닉네임과 함께 짧게 안내한다. 조작 요소 없음 */
+function JoinedNotice({ nickname }: { nickname: string }) {
+  return (
+    <main className="grid min-h-[calc(100dvh-56px)] place-items-center px-5 py-10">
+      <div className="sheet-in w-full max-w-[30rem] rounded-panel bg-sheet p-6 text-center shadow-[0_0_0_1px_var(--color-rule),0_20px_40px_-30px_rgba(24,38,74,.5)] sm:p-8">
+        <div className="mx-auto grid size-12 place-items-center rounded-full bg-in-soft text-in">
+          <CheckCircle2 size={22} aria-hidden />
+        </div>
+        <h1 className="display mt-3 text-[33px]">입장 완료</h1>
+        <p className="mt-2 text-[17px] font-semibold">
+          {nickname ? `${nickname}님, 곧 시작해요` : '곧 시작해요'}
+        </p>
+        <p className="mt-3 text-[15px] leading-relaxed text-ink-2">
+          선생님이 화면을 넘기면 이 화면은 자동으로 바뀝니다. 기다리는 동안 자리를 정돈해 주세요.
+        </p>
+      </div>
+    </main>
   );
 }
 
@@ -61,7 +96,7 @@ function NameStage({ salary, onSubmit }: { salary: number; onSubmit: (name: stri
   );
 }
 
-function RevealStage({ state, onNext }: { state: ScreenProps['state']; onNext: () => void }) {
+function RevealStage({ state, onNext }: { state: ScreenProps['state']; onNext?: () => void }) {
   const { nickname, salary, baseSalary } = state.profile;
   const shown = useCountUp(salary, 1400, 250);
   const lo = baseSalary * (1 - SALARY_SPREAD);
@@ -98,9 +133,11 @@ function RevealStage({ state, onNext }: { state: ScreenProps['state']; onNext: (
             </div>
           </div>
         </div>
-        <button type="button" onClick={onNext} className="btn btn-primary mt-8 h-12 px-6 text-[17px]">
-          내 소비습관 알아보기
-        </button>
+        {onNext ? (
+          <button type="button" onClick={onNext} className="btn btn-primary mt-8 h-12 px-6 text-[17px]">
+            내 소비습관 알아보기
+          </button>
+        ) : null}
       </div>
       <Payslip nickname={nickname} amount={salary} />
     </main>
