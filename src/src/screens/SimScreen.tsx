@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import {
   ACCOUNT_ORDER,
   ACCOUNTS,
   emergencyMonths,
+  formatMan,
   formatWon,
   getScene,
   monthKind,
@@ -42,6 +43,9 @@ export function SimScreen({ state, dispatch, draft, mode, ui }: ScreenProps) {
   const [openChoice, setOpenChoice] = useState<string | null>(ui?.openChoiceId ?? null);
   const [reason, setReason] = useState<string | null>(null);
   const [sellOpen, setSellOpen] = useState(false);
+  // 좁은 화면(태블릿 세로·휴대폰)에서 오른쪽 기둥을 펼친 상태. lg(노트북·태블릿 가로)에서는
+  // 바가 사라지고 기둥이 항상 펼쳐진다 — 상태가 남아도 화면에 영향이 없다.
+  const [pillarOpen, setPillarOpen] = useState(false);
   const step = live ? state.step : devStep;
 
   // 월급날 2단 진행(§14 #122): beginMonth 전엔 state.payday가 null이다. 라이브·solo는
@@ -187,21 +191,45 @@ export function SimScreen({ state, dispatch, draft, mode, ui }: ScreenProps) {
         </div>
 
         <aside className="grid gap-3 lg:sticky lg:top-3">
-          <AccountsPanel state={state} highlight={highlightAccounts(opened)} />
-          <StatusPanel state={state} onSellSneakers={sellSneakers} />
-          {sellOpen ? <SellSneakerPanel state={state} busy={busy} onConfirm={confirmSell} /> : null}
-          <div className="rounded-panel bg-sheet px-3.5 py-3 shadow-[0_0_0_1px_var(--color-rule)]">
-            <BudgetGlance state={state} />
-            <p className="mt-2 border-t border-rule-soft pt-2 text-[11px] leading-snug text-ink-3">
-              금리·수익률은 수업을 위한 가정값입니다. 실제 상품 금리가 아닙니다.
-            </p>
+          {/* 좁은 화면(태블릿 세로·휴대폰): 기둥을 접는 판 요약 바. 장면·선택·지불 패널이
+              먼저 보이게 기둥(내 통장·남아 있는 효과·가계부 요약)을 한 줄로 접는다(§10.11).
+              lg(노트북·태블릿 가로)에서는 바가 없고 기둥이 항상 펼쳐진다 — 오늘 레이아웃 그대로. */}
+          <button
+            type="button"
+            onClick={() => setPillarOpen((v) => !v)}
+            aria-expanded={pillarOpen}
+            aria-controls="sim-pillar"
+            className="flex min-h-12 w-full items-center gap-x-2 gap-y-0.5 rounded-panel bg-sheet px-3.5 py-2 text-left shadow-[0_0_0_1px_var(--color-rule)] lg:hidden"
+          >
+            <span className="text-[13px] font-bold">
+              순자산 <span className="num">{formatMan(netWorth(state))}</span>
+            </span>
+            <span className="text-[12px] leading-tight text-ink-2">
+              · 생활비 통장 <span className="num font-semibold">{formatMan(state.accounts.living.balance)}</span>
+            </span>
+            <ChevronDown
+              size={16}
+              aria-hidden
+              className={`ml-auto flex-none text-ink-3 transition-transform ${pillarOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+          <div id="sim-pillar" className={`${pillarOpen ? 'grid' : 'hidden'} gap-3 lg:grid`}>
+            <AccountsPanel state={state} highlight={highlightAccounts(opened)} />
+            <StatusPanel state={state} onSellSneakers={sellSneakers} />
+            {sellOpen ? <SellSneakerPanel state={state} busy={busy} onConfirm={confirmSell} /> : null}
+            <div className="rounded-panel bg-sheet px-3.5 py-3 shadow-[0_0_0_1px_var(--color-rule)]">
+              <BudgetGlance state={state} />
+              <p className="mt-2 border-t border-rule-soft pt-2 text-[11px] leading-snug text-ink-3">
+                금리·수익률은 수업을 위한 가정값입니다. 실제 상품 금리가 아닙니다.
+              </p>
+            </div>
+            {mode === 'dev' && step !== 'adjust' && state.month === 12 ? (
+              <button type="button" onClick={() => dispatch({ type: 'endMonth' })} className="btn btn-primary w-full">
+                1년 결산 보기
+                <ChevronRight size={16} aria-hidden />
+              </button>
+            ) : null}
           </div>
-          {mode === 'dev' && step !== 'adjust' && state.month === 12 ? (
-            <button type="button" onClick={() => dispatch({ type: 'endMonth' })} className="btn btn-primary w-full">
-              1년 결산 보기
-              <ChevronRight size={16} aria-hidden />
-            </button>
-          ) : null}
         </aside>
       </main>
     </div>
