@@ -459,6 +459,7 @@ export class Room {
       late: rec.late,
       device: rec.device,
       scene: this.locateOf(rec),
+      stalled: rec.stalled,
       pendingMerge: false,
     }));
     for (const [pendingId, p] of this.pendingMerges) {
@@ -470,6 +471,7 @@ export class Room {
         late: false,
         device: p.device,
         scene: null,
+        stalled: false,
         pendingMerge: true,
       });
     }

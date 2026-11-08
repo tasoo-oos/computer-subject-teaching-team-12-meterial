@@ -150,6 +150,31 @@ describe('next: 50회 가드 → stalled (§4.2)', () => {
     // 커서는 전진했다
     expect(HM(room)).toEqual({ segment: 1, beat: 3 });
   });
+
+  it('stalled은 roster에 실리고(§14 #131), 이후 비트에서 done이 되면 다시 풀린다', async () => {
+    // random을 고정해 init bonus를 0으로 — setup 비트에서 확정적으로 미완료가 된다
+    const room = makeRoom({ lesson: stuckLesson, activities: testActivities, random: () => 0 });
+    const rec = await join(room, 'a'); // count 0
+    for (let i = 0; i < 4; i++) await room.next(true); // setup(1) 도착
+    expect(room.rosterEntries()[0]).toMatchObject({ nickname: 'a', stalled: false, done: false });
+    await room.next(true); // setup 마감 — stuck fallback → overflow
+    expect(rec.stalled).toBe(true);
+    expect(room.rosterEntries()[0]).toMatchObject({ nickname: 'a', stalled: true, done: false });
+    // 다음 work 비트(mid)에서 학생이 직접 행동해 done이 되면 stalled가 풀린다(§4.2)
+    await act(room, rec, { type: 'add', n: 5 });
+    expect(rec.stalled).toBe(false);
+    expect(room.rosterEntries()[0]).toMatchObject({ nickname: 'a', stalled: false, done: true });
+  });
+
+  it('pendingMerge 대기 항목의 stalled는 항상 false', async () => {
+    const room = makeRoom({ lesson: testLesson, activities: testActivities });
+    await join(room, 'a');
+    // 같은 닉네임 재입장 → 대기 요청(§5.8)
+    const taken = await room.joinStudent(fakeSocket(), { nickname: 'a' });
+    expect(taken).toMatchObject({ ok: false, reason: 'nickname-taken' });
+    const pending = room.rosterEntries().find((r) => r.pendingMerge);
+    expect(pending).toMatchObject({ nickname: 'a', stalled: false, pendingMerge: true });
+  });
 });
 
 describe('cursor/highMark/highRevealed 갱신', () => {
