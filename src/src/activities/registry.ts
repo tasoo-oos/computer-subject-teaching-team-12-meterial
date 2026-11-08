@@ -29,6 +29,8 @@ export interface StageProps<S, Stats> {
   spotlightName: string | null;
   /** lesson.settings.showProgressOnStage일 때만 null이 아님 */
   progress: ProgressInfo | null;
+  /** 수업 코드(숫자 4자리) — 입장 화면의 QR·주소용. 선택적(§14 #121: StageContent가 싣는다) */
+  code?: string;
 }
 
 export interface ControlPanelProps<S, Stats> {

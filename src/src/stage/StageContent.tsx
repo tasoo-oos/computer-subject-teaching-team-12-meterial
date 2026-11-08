@@ -43,6 +43,7 @@ export function StageContent({ classState, lesson, beats, stats, spotlight, spot
 
   const Stage = ACTIVITY_VIEWS[segment.activity]?.Stage;
   if (Stage) {
+    // code: 입장 화면의 QR·큰 주소에 쓴다(§14 #121 — StageProps의 선택 필드)
     return (
       <Stage
         beat={beat}
@@ -51,6 +52,7 @@ export function StageContent({ classState, lesson, beats, stats, spotlight, spot
         spotlight={spotlight}
         spotlightName={spotlightName}
         progress={progress}
+        code={classState.code}
       />
     );
   }

@@ -255,10 +255,19 @@ describe('fallback (§9.3 + 월 비트 규칙 1~5)', () => {
     expect(fallback(s2, at('budget'), cfg, undefined).action.type).toBe('confirmBudget');
   });
 
-  it('월급날: beginMonth', () => {
+  it('월급날: beginMonth — 절차적 걸음이라 안내가 없다 (§14 #123)', () => {
     const r = fallback(atFebPayday(), at('m2'), cfg, undefined);
     expect(r.action).toEqual({ type: 'beginMonth' });
-    expect(r.notice).toContain('2월');
+    expect(r.notice).toBe('');
+  });
+
+  it('확인 장면(선택지 하나): 대안이 없으니 안내가 없다 (§14 #123)', () => {
+    // 1월 튜토리얼 welcome 장면 — 선택지가 'ok' 하나
+    const jan = step(simStudent(), { type: 'beginMonth' });
+    expect(jan.step).toBe('scene');
+    const r = fallback(jan, at('m1'), cfg, undefined);
+    expect((r.action as Extract<Action, { type: 'choose' }>).choiceId).toBe('ok');
+    expect(r.notice).toBe('');
   });
 
   it('장면: 기본 선택지를 고른다 — fixedPay는 payment 없이 (§9.3 규칙 3)', () => {
@@ -293,11 +302,11 @@ describe('fallback (§9.3 + 월 비트 규칙 1~5)', () => {
     }
   });
 
-  it('결과: continue', () => {
+  it('결과: continue — 절차적 걸음이라 안내가 없다 (§14 #123)', () => {
     const outcome = apply(atFebScene(), { type: 'choose', choiceId: 'used' });
     const r = fallback(outcome, at('m2'), cfg, undefined);
     expect(r.action).toEqual({ type: 'continue' });
-    expect(r.notice).toContain('자동으로 넘어');
+    expect(r.notice).toBe('');
   });
 
   it('조정: balanceBudget(초안 ?? state.budget) 한 걸음으로 조정 단계가 저절로 끝난다', () => {
@@ -325,11 +334,11 @@ describe('fallback (§9.3 + 월 비트 규칙 1~5)', () => {
     expect(done(after, at('m6'), cfg)).toBe(true);
   });
 
-  it('재현 규칙: month < N이면 endMonth를 반복한다 (규칙 1)', () => {
+  it('재현 규칙: month < N이면 endMonth를 반복한다 (규칙 1) — 재현 걸음도 안내 없음', () => {
     const s = apply(atFebScene(), { type: 'choose', choiceId: 'splurge' }, { type: 'continue' }); // 2월 리포트
     const r = fallback(s, at('m5'), cfg, undefined);
     expect(r.action).toEqual({ type: 'endMonth' });
-    expect(r.notice).toContain('2월');
+    expect(r.notice).toBe('');
     const s2 = step(s, r.action);
     expect(s2.month).toBe(3);
     expect(done(s2, at('m5'), cfg)).toBe(false);

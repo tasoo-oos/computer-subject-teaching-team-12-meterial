@@ -3,18 +3,23 @@ import { useSequence } from '../../lib/motion.ts';
 import { useActBusy } from '../../lib/actBusy.tsx';
 import { Money } from '../Money.tsx';
 
-/** 월급날: 통장에 거래가 한 줄씩 인쇄된다 */
+/** 월급날: 통장에 거래가 한 줄씩 인쇄된다.
+ *  onNext를 생략하면 읽기 전용(레이아웃 점검용). showNext는 1월이어도 진행 버튼을 보여 준다
+ *  (라이브·solo의 월급받기 → 내역 → "다음" 2단 진행에서 쓴다, §14 #122). */
 export function PaydayStage({
   state,
   onNext,
   step,
   nextLabel,
+  showNext,
 }: {
   state: GameState;
-  onNext: () => void;
+  onNext?: () => void;
   step: string;
   /** 버튼 문구(라이브의 "확인"·12월의 "결과 보기"). 없으면 기존 문구 */
   nextLabel?: string;
+  /** 1월이 아니어도 항상 진행 버튼을 보여 준다 (월급 내역 확인 단계) */
+  showNext?: boolean;
 }) {
   const busy = useActBusy();
   const p = state.payday;
@@ -81,8 +86,8 @@ export function PaydayStage({
           </tfoot>
         </table>
       </section>
-      {step === 'payday' && state.month === 1 ? <TutorialNote onNext={onNext} nextLabel={nextLabel} /> : null}
-      {state.month !== 1 ? (
+      {step === 'payday' && state.month === 1 && onNext ? <TutorialNote onNext={onNext} nextLabel={nextLabel} /> : null}
+      {(showNext || state.month !== 1) && onNext ? (
         <div className="flex justify-end">
           <button type="button" onClick={onNext} disabled={busy} className="btn btn-primary px-6">
             {nextLabel ?? '이번 달 시작하기'}

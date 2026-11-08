@@ -143,14 +143,19 @@ describe('60명 혼합 학급 시뮬레이션 (M4·M5)', () => {
     expect(() => h.nextBeat()).toThrow();
   });
 
-  it('완전 게으른 학생에게 자동 처리 통지가 쌓인다 (autoApplied)', () => {
+  it('완전 게으른 학생의 통지: 절차적 걸음은 빈 문구, 실제 결정만 안내가 남는다 (§14 #123)', () => {
     const { h } = run42();
     const lazy = h.students.filter((r) => r.behavior.kind === 'lazy');
     expect(lazy).toHaveLength(12);
     for (const rec of lazy) {
-      expect(rec.notices.length).toBeGreaterThanOrEqual(14); // 설문+가계부+12개월 — 매 걸음마다 통지
-      for (const n of rec.notices) {
-        expect(n.message.length).toBeGreaterThan(0);
+      // 매 걸음마다 통지 큐에는 쌓이되(서버와 같은 모양), 빈 문구는 S8이 화면·서버에서 걸러낸다
+      expect(rec.notices.length).toBeGreaterThanOrEqual(14); // 설문+가계부+12개월
+      const nonEmpty = rec.notices.filter((n) => n.message.length > 0);
+      const empty = rec.notices.filter((n) => n.message.length === 0);
+      // 실제 결정(설문 기본값·가계부 확정·대안이 있는 장면 선택)의 안내만 남는다
+      expect(nonEmpty.length).toBeGreaterThanOrEqual(3);
+      expect(empty.length).toBeGreaterThan(0); // auto beginMonth·continue·재현 endMonth·확인 장면
+      for (const n of nonEmpty) {
         expect(WORK_BEAT_IDS.has(n.beatId)).toBe(true);
       }
     }

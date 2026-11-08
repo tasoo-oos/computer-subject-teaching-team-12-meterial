@@ -21,6 +21,7 @@ import type { FallbackResult } from '@gagyebu/live';
 import { beats } from './beats.ts';
 import type { GagyebuConfig } from './config.ts';
 import type { GagyebuDraft } from './draft.ts';
+import { sceneLabel } from './stats.ts';
 
 /** 비트 인덱스 → 비트 id. 없는 인덱스면 null */
 function beatId(cfg: GagyebuConfig, beat: number): string | null {
@@ -134,7 +135,8 @@ function adjustFallback(s: GameState, draft: unknown | undefined): FallbackResul
   return { action: { type: 'setBudget', budget, auto: true }, notice: budgetNotice(changes) };
 }
 
-/** 장면의 기본 선택지를 고르는 choose 행동 (§9.3 규칙 3 — 선택지 kind가 아니라 pay/deposit 존재 기준) */
+/** 장면의 기본 선택지를 고르는 choose 행동 (§9.3 규칙 3 — 선택지 kind가 아니라 pay/deposit 존재 기준).
+ *  선택지가 하나뿐인 확인 장면(welcome·aftermath·vanished)은 안내 없이 넘어간다(§14 #123 — 절차적 걸음). */
 function chooseFallback(s: GameState, scene: Scene): FallbackResult<Action> {
   const choice = fallbackChoice(scene);
   const action: Extract<Action, { type: 'choose' }> = { type: 'choose', choiceId: choice.id, auto: true };
@@ -146,35 +148,33 @@ function chooseFallback(s: GameState, scene: Scene): FallbackResult<Action> {
   if (choice.deposit) action.depositTo = autoDepositTarget(choice.deposit);
   return {
     action,
-    notice: `시간 안에 고르지 못해 '${choice.label}'이(가) 자동으로 선택됐어요`,
+    notice:
+      scene.choices.length > 1
+        ? `시간 안에 고르지 못해 '${choice.label}'이(가) 자동으로 선택됐어요`
+        : '', // 대안이 없는 확인 장면 — 알림 없음
   };
 }
 
-/** 월 비트(m1..m11, m12)의 기본값 한 걸음 (§9.3 월 비트 fallback 규칙 1~5) */
+/** 월 비트(m1..m11, m12)의 기본값 한 걸음 (§9.3 월 비트 fallback 규칙 1~5).
+ *  순수 절차적 걸음(auto beginMonth·continue·재현 endMonth)의 notice는 '' — 학생 안내가 없다(§14 #123). */
 function monthFallback(s: GameState, target: number, draft: unknown | undefined): FallbackResult<Action> {
   if (s.phase !== 'sim') return genericFallback(s, draft);
   if (s.step === 'report') {
     if (s.month < target) {
       // 재현 규칙(§9.3 규칙 1): stalled 학생이 뒤처진 달을 따라잡는다 — 여러 번 나올 수 있다
-      return { action: { type: 'endMonth' }, notice: `따라잡기 위해 ${s.month}월을 자동으로 마쳤어요` };
+      return { action: { type: 'endMonth' }, notice: '' };
     }
-    return { action: { type: 'continue' }, notice: '월말 리포트를 확인해 주세요' }; // done 상태 — 호출되지 않는다(방어)
+    return { action: { type: 'continue' }, notice: '' }; // done 상태 — 호출되지 않는다(방어)
   }
   if (s.step === 'payday') {
-    return {
-      action: { type: 'beginMonth' },
-      notice:
-        s.month === 12
-          ? '시간 안에 시작하지 않아 12월 결산이 자동으로 진행됐어요'
-          : `시간 안에 시작하지 않아 ${s.month}월이 자동으로 시작됐어요`,
-    };
+    return { action: { type: 'beginMonth' }, notice: '' };
   }
   if (s.step === 'scene' && s.current) {
     const { scene } = getScene(s.current);
     return chooseFallback(s, scene);
   }
   if (s.step === 'outcome') {
-    return { action: { type: 'continue' }, notice: '시간 안에 넘기지 않아 결과 화면이 자동으로 넘어갔어요' };
+    return { action: { type: 'continue' }, notice: '' };
   }
   return adjustFallback(s, draft); // step === 'adjust'
 }
@@ -214,9 +214,9 @@ function genericFallback(s: GameState, draft: unknown | undefined): FallbackResu
         const { scene } = getScene(s.current);
         return chooseFallback(s, scene);
       }
-      if (s.step === 'outcome') return { action: { type: 'continue' }, notice: '결과 화면이 자동으로 넘어갔어요' };
-      if (s.step === 'payday') return { action: { type: 'beginMonth' }, notice: '이번 달이 자동으로 시작됐어요' };
-      return { action: { type: 'endMonth' }, notice: '이번 달이 자동으로 마무리됐어요' };
+      if (s.step === 'outcome') return { action: { type: 'continue' }, notice: '' };
+      if (s.step === 'payday') return { action: { type: 'beginMonth' }, notice: '' };
+      return { action: { type: 'endMonth' }, notice: '' };
     case 'result':
       return { action: { type: 'continue' }, notice: '이미 1년을 마쳤어요' }; // 도달 불가 — done이 항상 true
   }
@@ -302,7 +302,12 @@ export function locate(s: GameState): string | null {
       if (s.current) {
         try {
           const { event, scene } = getScene(s.current);
-          return `${m} · ${scene.title ?? scene.speaker ?? event.title}`;
+          // 시작 장면은 이벤트 제목이 더 알려 주지만, 이어진 장면이 이벤트 제목으로
+          // 떨어지면 정체를 알 수 없다 — 장면 스스로의 이름(§14 #125)으로 폴백한다
+          const isEntry =
+            event.entry === scene.id || (event.entryVariants ?? []).some((v) => v.scene === scene.id);
+          const name = scene.title ?? scene.speaker ?? (isEntry ? event.title : sceneLabel(scene));
+          return `${m} · ${name}`;
         } catch {
           return `${m} · 장면`;
         }

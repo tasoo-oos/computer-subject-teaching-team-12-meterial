@@ -24,11 +24,13 @@ import { Indicators } from '../components/sim/Indicators.tsx';
 import { MonthStrip } from '../components/sim/MonthStrip.tsx';
 import { OutcomeStage } from '../components/sim/OutcomeStage.tsx';
 import { PayPanel, DepositPanel, type ChoiceConfirm } from '../components/sim/PayPanel.tsx';
+import { PaydayIntro } from '../components/sim/PaydayIntro.tsx';
 import { PaydayStage } from '../components/sim/PaydayStage.tsx';
 import { ReportStage } from '../components/sim/ReportStage.tsx';
 import { SceneCard } from '../components/sim/SceneCard.tsx';
 import { StatusPanel } from '../components/sim/StatusPanel.tsx';
 import { useActBusy } from '../lib/actBusy.tsx';
+import { useSimFlow } from '../lib/simFlow.tsx';
 import { scenePrompt } from '../lib/prompts.ts';
 
 export function SimScreen({ state, dispatch, draft, mode, ui }: ScreenProps) {
@@ -41,6 +43,16 @@ export function SimScreen({ state, dispatch, draft, mode, ui }: ScreenProps) {
   const [reason, setReason] = useState<string | null>(null);
   const [sellOpen, setSellOpen] = useState(false);
   const step = live ? state.step : devStep;
+
+  // 월급날 2단 진행(§14 #122): beginMonth 전엔 state.payday가 null이다. 라이브·solo는
+  // 소개 카드 → "월급 받기"(beginMonth) → 실제 월급날 내역 + "다음". dev는 payday가 채워진
+  // 스냅숏을 그대로 쓰므로 기존 동작 그대로.
+  const flow = useSimFlow();
+  const paydayGateOpen = flow !== null && flow.paydayGate === state.month && state.payday !== null;
+  const receivePayday = () => {
+    flow?.setPaydayGate(state.month);
+    dispatch({ type: 'beginMonth' });
+  };
   const next = () => {
     if (step === 'payday') dispatch({ type: 'beginMonth' });
     else if (step === 'outcome') dispatch({ type: 'continue' });
@@ -122,14 +134,27 @@ export function SimScreen({ state, dispatch, draft, mode, ui }: ScreenProps) {
 
       <main className="mx-auto grid max-w-[1320px] items-start gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0">
-          {step === 'adjust' ? (
+          {paydayGateOpen ? (
+            <PaydayStage
+              state={state}
+              step={state.step}
+              showNext
+              nextLabel="다음"
+              onNext={() => flow?.setPaydayGate(null)}
+            />
+          ) : step === 'adjust' ? (
             <AdjustStage
               state={live ? state : withReason(state, reason)}
               onNext={(budget) => dispatch({ type: 'setBudget', budget })}
               onDraft={draft}
             />
           ) : step === 'payday' ? (
-            <PaydayStage state={state} step={step} onNext={next} nextLabel={paydayLabel} />
+            state.payday ? (
+              <PaydayStage state={state} step={step} onNext={next} nextLabel={paydayLabel} />
+            ) : (
+              // 라이브·solo: 아직 월급을 받지 않은 월급날 — 소개 카드부터 (§14 #122)
+              <PaydayIntro state={state} onNext={receivePayday} nextLabel={state.month === 12 ? '결과 보기' : '월급 받기'} />
+            )
           ) : step === 'outcome' ? (
             <OutcomeStage state={state} onContinue={next} />
           ) : step === 'report' ? (

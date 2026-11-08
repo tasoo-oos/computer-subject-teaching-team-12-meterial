@@ -5,10 +5,13 @@ interface Props {
   /** 발표용이면 글자를 크게 */
   large?: boolean;
   height?: number;
+  /** 전면(TV)용: 마지막 값 라벨을 점 위가 아니라 점 왼쪽에 둬서 겹치지 않게 한다(§14 #125).
+   *  dev 스냅숏은 이 값을 쓰지 않아 기존 모양 그대로다. */
+  endLabelBeside?: boolean;
 }
 
 /** 12개월 순자산 선 그래프. 라이브러리 없이 SVG로 직접 그린다 */
-export function NetWorthChart({ state, large = false, height }: Props) {
+export function NetWorthChart({ state, large = false, height, endLabelBeside = false }: Props) {
   const pts = state.history.length
     ? state.history.map((h) => ({ month: h.month, value: h.netWorth }))
     : [{ month: state.month, value: 0 }];
@@ -67,7 +70,7 @@ export function NetWorthChart({ state, large = false, height }: Props) {
         ))}
         <text
           x={x(pts.length - 1) - (large ? 18 : 10)}
-          y={Math.max(pad.t + (large ? 26 : 14), y(last.value) - (large ? 24 : 14))}
+          y={endLabelBeside ? y(last.value) + 9 : Math.max(pad.t + (large ? 26 : 14), y(last.value) - (large ? 24 : 14))}
           textAnchor="end"
           fontSize={large ? 26 : 19}
           fontWeight="700"
