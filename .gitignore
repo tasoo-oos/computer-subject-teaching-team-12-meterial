@@ -7,4 +7,4 @@ design-skills/
 single/
 .single-build/
 .env
-data/
+/data/
