@@ -796,14 +796,16 @@ export type LiveDraft = DraftPayload<GagyebuDraft>;
 
 ### 6.6 개발 환경
 
-- 게임 서버: `pnpm server` → `http://localhost:8091` (PORT).
-- Vite 개발 서버: `pnpm dev` → `http://localhost:5173`. `src/vite.config.ts`에 프록시를 추가한다:
+- 게임 서버: 운영 `pnpm server` → `http://localhost:8091` (PORT). 개발은 `pnpm server:dev` → `http://localhost:8092`(`.env` 옆의 `.env.dev`에 `PORT=8092`, `NODE_ENV=development` — `--env-file-if-exists`로 `.env` 위에 덮어쓴다).
+- Vite 개발 서버: `pnpm dev` → `http://localhost:5173`. `src/vite.config.ts`의 프록시(구현됨)는 `GAME_PORT`(기본 8092)로 넘긴다:
 
 ```ts
+const gamePort = process.env.GAME_PORT ?? '8092';
+
 server: {
   proxy: {
-    '/socket.io': { target: 'http://localhost:8091', ws: true },
-    '/api': 'http://localhost:8091',
+    '/socket.io': { target: `http://localhost:${gamePort}`, ws: true },
+    '/api': `http://localhost:${gamePort}`,
   },
 }
 ```
