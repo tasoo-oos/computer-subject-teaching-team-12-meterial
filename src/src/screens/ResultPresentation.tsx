@@ -2,8 +2,9 @@ import { X } from 'lucide-react';
 import { ENDINGS, formatMan, satisfactionBand, totalDebt, type GameState } from '@gagyebu/core';
 import { NetWorthChart } from '../components/result/NetWorthChart.tsx';
 
-/** 교실 프로젝터용 크게 보기. 멀리서도 읽히는 것만 남긴다 */
-export function PresentationView({ state, onExit }: { state: GameState; onExit: () => void }) {
+/** 교실 프로젝터용 크게 보기. 멀리서도 읽히는 것만 남긴다.
+ *  onExit을 생략하면 닫기 버튼이 없다 — 전면(TV) 발표 비트에서 그대로 재사용한다(§14 #121). */
+export function PresentationView({ state, onExit }: { state: GameState; onExit?: () => void }) {
   const s = state.settlement;
   if (!s) return null;
   const ending = ENDINGS[s.ending];
@@ -20,10 +21,12 @@ export function PresentationView({ state, onExit }: { state: GameState; onExit: 
         <p className="text-[clamp(16px,1.5vw,22px)] text-ink-2">
           {state.profile.nickname}님의 첫 월급 1년 · <span className="num">12월 결산</span>
         </p>
-        <button type="button" onClick={onExit} className="btn btn-quiet px-3 text-[15px]">
-          <X size={18} aria-hidden />
-          <span className="hidden sm:inline">크게 보기 닫기</span>
-        </button>
+        {onExit ? (
+          <button type="button" onClick={onExit} className="btn btn-quiet px-3 text-[15px]">
+            <X size={18} aria-hidden />
+            <span className="hidden sm:inline">크게 보기 닫기</span>
+          </button>
+        ) : null}
       </header>
 
       <div className="mt-[3vh] grid flex-1 items-center gap-[4vw] lg:grid-cols-[1.25fr_1fr]">

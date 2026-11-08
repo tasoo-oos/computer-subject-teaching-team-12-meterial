@@ -986,7 +986,7 @@ export interface GagyebuConfig {
 - **초안**: `budget`·`adjust`에서만 쓴다(§9.5). `GagyebuDraft`가 있으면 그 안에서, 없으면 `state.budget`에서 `balanceBudget`로 합계를 맞춘다. 편집을 한 번도 안 한 학생의 `state.budget`은 추천 가계부다.
 - **notice 문구**는 활동이 만든다: 선택지 fallback은 `"시간 안에 고르지 못해 '<선택지 라벨>'이(가) 자동으로 선택됐어요"`, 가계부는 balanceBudget의 `changes`로 `"제출하지 않아 남는 돈 3만 원이 생활비 여유분으로 들어갔어요"` / `"제출하지 않아 여유 부족분 3만 원을 여가에서 줄였어요"` 형태.
 
-**fallback notice 문구 전체 목록 (S4 구현 확정 — 서버는 전달만 하고 학생 화면은 그대로 보여 준다)**:
+**fallback notice 문구 전체 목록 (S4 구현 → S5 2단계 개정, §14 #123 — 순수 절차적 걸음의 notice는 빈 문구 `''`다. 서버·클라이언트는 빈 문구를 무시한다(S8))**:
 
 | 걸음 | notice |
 | --- | --- |
@@ -994,11 +994,11 @@ export interface GagyebuConfig {
 | 가계부 setBudget — 남는 돈 | `제출하지 않아 남는 돈 <formatMan(남는금액)>이(가) 생활비 여유분으로 들어갔어요` |
 | 가계부 setBudget — 부족분 | `제출하지 않아 여유 부족분 <formatMan(부족금액)>을(를) <생활비 여유분 \| 절감 항목 라벨(예: 여가·문화)>에서 줄였어요` |
 | 가계부 확정 | `제출하지 않아 지금 가계부가 자동으로 확정됐어요` |
-| beginMonth (1~11월) | `시간 안에 시작하지 않아 <N>월이 자동으로 시작됐어요` |
-| beginMonth (12월 결산) | `시간 안에 시작하지 않아 12월 결산이 자동으로 진행됐어요` |
-| choose (장면 선택) | `시간 안에 고르지 못해 '<선택지 라벨>'이(가) 자동으로 선택됐어요` |
-| continue (결과 넘기기) | `시간 안에 넘기지 않아 결과 화면이 자동으로 넘어갔어요` |
-| endMonth (뒤처진 달 재현) | `따라잡기 위해 <N>월을 자동으로 마쳤어요` |
+| beginMonth (1~12월) | `''` — 절차적 걸음 |
+| choose (대안이 있는 장면 선택) | `시간 안에 고르지 못해 '<선택지 라벨>'이(가) 자동으로 선택됐어요` |
+| choose (선택지 하나뿐인 확인 장면: welcome·aftermath·vanished) | `''` — 대안이 없다 |
+| continue (결과 넘기기) | `''` — 절차적 걸음 |
+| endMonth (뒤처진 달 재현) | `''` — 절차적 걸음 |
 
 가계부 비트의 fallback은 합계가 이미 맞는 학생(편집을 한 번도 안 한 학생의 추천 가계부 등)은 `setBudget`을 건너뛰고 `confirmBudget` 한 걸음으로 끝낸다(진전 보장, §14 #89).
 
@@ -1559,3 +1559,12 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 118. **autoApplied 안내 표시는 StudentPage 소유.** 자동 처리 안내는 `src/src/live/StudentPage.tsx`(S3 소유)가 상단 고정 `role="status"` 띠로 이미 보여 주며 커서 비트가 바뀌면 비워진다. "닫기" 버튼을 붙이려면 S5 소유 밖 파일을 고쳐야 하므로 그대로 두었다. S5의 Audience는 act 거부 안내(109번)만 별도의 하단 일시 표시로 추가했다. 자동 선택 구분은 결과 화면 선택 기록에 중립 태그("자동 선택", 테두리+종이색 배경 — 색 판단 없음)로 표시한다.
 119. **결과 화면의 단계 이동 버튼은 모드별로.** 라이브: "발표용 크게 보기"·"처음부터 다시" 모두 없음(§8-2). solo: "처음부터 다시"(reset, §10.10)만. dev: 둘 다(기존 그대로). 발표용 크게 보기(PresentationView)는 dev 전용 `ui.presentation`으로 유지한다.
 120. **/solo 커서 규칙.** `SoloPage`는 `useReducer(step, …)`로 상태를 굴리고 커서는 `gagyebuLogic.beats(lesson 설정)` 위를 로컬로 움직인다. show 비트는 오른쪽 아래 "다음" 버튼(누르면 `transition()` 行動 — 안내 마지막 → 가계부의 `goto` 포함 — 을 적용해 한 칸 전진). work 비트는 "지나쳤을 때" 자동 전진한다: 설문(result ≠ null), 가계부(phase sim), m1~m11(`state.month > N` — 리포트에서 "다음 달로"를 눌렀을 때), m12는 자동 전진 없음(결과 화면이 종점, "처음부터 다시"로 재시작). `join` 비트는 SoloPage의 닉네임 양식이 대신하므로 건너뛰고 `salary` 비트부터 시작하며, 월급은 `rollSalary(Math.random)`. 같은 클릭 안의 연속 행동(setBudget → confirmBudget)을 위해 상태 미러 ref를 두어 항상 최신 상태에 대해 `step`을 검증한다.
+
+### S5 활동 화면 2단계 확정 (2026-11-08, Stage·ControlPanel·월급날 UX)
+
+> 번호 121~ — S8은 130번부터 센다.
+
+121. **Stage 구현 결정.** 입장 화면(JoinWall)의 QR·큰 주소에 수업 코드가 필요해 `StageProps`에 선택적 `code?: string`을 추가했다(하위 호환)하고 `StageContent`가 `classState.code`를 실어 준다(S6 파일 1줄 — 조정이 필요하면 알려 줄 것). 발표자 닉네임은 spotlight 상태의 `profile.nickname`에 이미 있으므로 `PresentationView` 재사용으로 표시한다(S8의 `spotlightName`이 도입되면 예비로 쓰면 된다). `PresentationView`는 `min-h-dvh`·vw 단위를 쓴다 — /stage 전체화면(1920×1080)에서는 정확하지만 통제의 TV 축소 미리보기(StageThumb)에서는 창 크기 기준으로 계산돼 어긋난다(미리보기 참고). stats가 null(비트 불일치·미계산)이면 "집계를 준비하는 중" 중립 안내로 대체하고 절대 깨지지 않는다. `DistributionBars`의 라벨·인수를 26→28px로 올렸다(전면 본문 ≥28px 요건 — 아직 다른 사용처가 없어 안전). 조용한 달(1·4·10월)은 "돈이 쌓이는 달" + 순자산 점 분포(DotBand, 익명·정렬 없음)로 그리고, 4·10월의 예약 장면(check4·revolving)은 공개 후 있을 때만 분포로 함께 보여 준다.
+122. **월급날 2단 진행(라이브·solo).** `beginMonth`를 보내기 전에는 `state.payday`가 null이라 월급날 내역을 그릴 수 없다(1단계에서 "+0원" 빈 표가 나오던 버그). 이제 소개 카드("N월 월급날이에요" + 무슨 일이 일어나는지 + "월급 받기" 버튼, 12월은 "결과 보기") → `beginMonth` → 실제 월급날 내역(`PaydayStage` 인쇄 연출) + "다음" 버튼(첫 장면·리포트로 넘어감) 순서다. 게이트 상태(`SimFlowContext`의 `paydayGate`)는 Audience가 소유한다 — 조용한 달은 `beginMonth` 직후 done이 되므로, 게이트가 열려 있는 동안 Audience가 대기 화면으로 바꾸지 않는다(비트가 바뀌면 게이트는 닫힌다). dev는 payday가 채워진 스냅숏을 그대로 쓰므로 기존 동작 그대로(shots 동일).
+123. **절차적 fallback 통지는 빈 문구 `''`.** auto beginMonth·auto continue(결과 넘기기)·재현 endMonth·선택지가 하나뿐인 확인 장면(welcome·aftermath·vanished)의 notice는 `''`를 반환한다. 실제 결정(대안이 있는 장면 선택·가계부 합계 맞추기·설문 기본값)만 안내 문구를 남긴다. 빈 문구를 서버·클라이언트에서 걸러 내는 것은 S8 소유(현재는 큐에 쌓인다). §9.3 통지 표 갱신, 활동 테스트 notice 기대치 갱신.
+124. **ControlPanel(비트별 심화 정보).** 월 비트는 roster의 `locate` 문구 접두사(`${N}월 · `)로 지금 있는 단계별 인원을 센다(월급날·장면·결과 확인·가계부 조정·월말 리포트) + `stats.inChained`(이어진 장면 인원). 가계부 비트는 확정/미확정(자동 처리 예정) 인원과 평균 저축률, 12월은 지금까지 나온 엔딩 인원. join·설문·안내·발표 비트는 일반 현황(S6 완료 인원·명단)으로 충분해 null을 반환한다(패널이 비어도 BeatPanel의 발표자 노트는 그대로 보인다).
