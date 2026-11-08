@@ -268,12 +268,20 @@ stateDiagram-v2
 | `start { nickname, salary }` | `phase === 'start'`, `salary > 0`, 닉네임 1~10자 | `profile` 채움(월급은 행동 값 그대로), `phase: 'survey'` |
 | `submitSurvey { answers }` | `phase === 'survey'`, 7문항 모두 유효한 선택지 id | 답변 저장, `classifySpending`+`recommendBudget`으로 `survey.result`·`budget` 채움, `phase: 'guide'`. 설문 결과 화면은 `phase`와 무관하게 `survey.result`로 그린다 |
 | `goto { phase }` | `phase === 'guide'`에서만, 목표는 `'budget'` | `phase: 'budget'`. 뒤로 가기 없음 |
-| `setBudget { budget }` | `phase === 'budget'`(작성) 또는 `step === 'adjust'`(조정), 모든 항목 ≥ 0 | `budget` 교체. 조정 단계면 `budgetEdits` +1 |
+| `setBudget { budget }` | `phase === 'budget'`(작성) 또는 `step === 'adjust'`(조정), 모든 항목 ≥ 0 | `budget` 교체. 조정 단계면 `budgetEdits` +1. **조정 단계에서 합계가 월급과 같으면(`isBudgetValid`) `step: 'report'`로 넘어간다** — 조정 완료는 별도의 `continue`가 아니다 |
 | `confirmBudget` | `phase === 'budget'` + `isBudgetValid(budget, salary)` | `initialBudget` 고정, `phase: 'sim'`, `month: 1`, `step: 'payday'` |
 | `beginMonth` | `phase === 'sim'`, `step === 'payday'` | 월급날 처리(아래 순서)로 `payday` 채움. 예약 장면(`scheduled`, `when` 판정)과 배치 이벤트를 `queue`에 넣고 `current` 지정. 장면이 있으면 `step: 'scene'`, 없으면 `step: 'report'`. **12월이면**: 월급날 처리 + 적금 만기(`savingsMaturity`) + 12월 결산(`settlement`: 최종 잔고·순자산·엔딩·도전과제·가계부 전후 비교) 후 `phase: 'result'` |
 | `choose { choiceId, … }` | `step === 'scene'`, `choiceId`가 `current` 장면에 있음, `requires` 충족, `pay`면 `validatePayment` 통과, `deposit`면 `depositTo ∈ targets`, `adjustable`이면 금액이 범위 안 | 선택 효과 적용(계좌·만족도·신용·부채·상태·가계부·플래그), `lastOutcome` 생성, `decisions`에 기록(`auto` 복사). `next`가 있으면 같은 달 장면은 `queue`에, 예약은 `scheduled`에 |
 | `continue` | `step === 'outcome'` | `lastOutcome.next`가 있으면 그 장면으로(`step: 'scene'`), `budgetReason`이 있으면 `step: 'adjust'`, 둘 다 없으면 `step: 'report'` |
-| `statusAction { … }` | `phase === 'sim'`, 상태가 있고 행동이 그 상태에 정의됨, `depositTo` 필요하면 유효 | 상태 행동 적용(운동화 팔기: 시세 입금, 상태 제거), `decisions`에 기록 |
+| `statusAction { … }` | `phase === 'sim'`, 상태가 있고 행동이 그 상태에 정의됨, `depositTo` 필요하면 유효 | 상태 행동 적용(운동화 팔기: 시세 입금, 상태 제거), `decisions`에 기록(아래 규칙) |
+
+**`statusAction`의 `DecisionRecord` (2026-11-09 추가).** 상태 행동도 선택 기록에 남는다. 필드 규칙:
+
+- `month`: 현재 달. `eventId`·`eventCode`: 그달 현재 장면(`current`)이 있으면 그 이벤트, 없으면 빈 문자열. `sceneId`: 현재 장면이 있으면 그 id, 없으면 `status:<statusId>`(예: `status:sneakers`).
+- `choiceId`: 행동 id(예: `sellSneakers`), `choiceLabel`: 행동 라벨(예: "지금 시세로 팔기"), `kind`: `'free'`(선택지가 아니라 상태 행동임을 나타내는 규칙).
+- `payment`: 입금이 수반되면 `{ parts: [{ source: depositTo, amount: 받은 금액 }] }`, 아니면 생략. `tags`: 행동의 태그(운동화 판매 → `['resellProfit']`). `auto`: 행동의 `auto` 값 그대로.
+
+**계좌 잔고의 음수 금지 (2026-11-09 추가).** `money` 효과로 계좌 잔고가 0 아래로 내려가지 않는다(바닥 0). 손실이 잔고보다 크면 잔고는 0이 되고 나머지는 사라진다(부채로 전환하지 않는다 — 부채는 카드·리볼빥 규칙으로만 생긴다). 예: `tipStock`(부록 A)은 카드로 50만 원을 내고(부채) `invest` +50만 원 후 반 토막 -25만 원 → `invest` 잔고 25만 원. 0원 계좌에서도 음수 계좌가 생기지 않는다.
 | `endMonth` | `step === 'report'`, `month < 12` | `history`에 `MonthRecord` 추가, `month` +1, `step: 'payday'`, `payday`·`current`·`queue`·`lastOutcome` 초기화 |
 | `reset` | 어느 phase에서든(`/solo` 전용. 수업 모드 서버는 이 행동을 보내지 않는다) | 새 초기 상태(`phase: 'start'`) |
 
@@ -458,7 +466,7 @@ await navigator.clipboard.writeText(text);
 | `family-month` / `gift` | `luxury` | 명품 선물과 호텔 뷔페로 특별하게 (100만 원) | `fixedPay` | 카드 6개월, 수수료 포함(매달 약 17.4만 원). 효과: 만족도 +6, `next: message`. 기존 `big`(30만 원)은 그대로 |
 | `rent-hike` / `notice` | `ignore` | 문자를 무시하고 답하지 않는다 | `budget` | 효과: `rent` +7만 원(집주인이 7만 원 인상 통보), 만족도 -3, `openBudget`(가계부 조정) |
 | `rent-hike` / `counter` | `hangUp` | 기분 나쁘다며 연락을 끊는다 | `budget` | 효과: `rent` +5만 원(협상 무효, 원래대로), 만족도 -3, `openBudget` |
-| `market-crash` / `dropNoInvest` | `tipStock` | 단톡방 추천 종목을 카드로 산다 (50만 원) | `fixedPay` | 카드 3개월. 효과: `invest` -25만 원(반 토막, 돈은 사라짐), 만족도 -2 |
+| `market-crash` / `dropNoInvest` | `tipStock` | 단톡방 추천 종목을 카드로 산다 (50만 원) | `fixedPay` | 카드 3개월(구매대금은 카드 부채로 나감). 효과: `invest` +50만 원(구매) → -25만 원(반 토막) → 잔고 25만 원(계좌는 음수가 되지 않음, §4.2), 만족도 -2 |
 
 ### A.2 기존 선택지를 기본값으로 지정 (14개 장면)
 
