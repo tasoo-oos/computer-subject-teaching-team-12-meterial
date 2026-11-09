@@ -234,6 +234,29 @@ describe('부채 (할부·카드값·리볼빙)', () => {
     expect(s.debts[0]!.monthsLeft).toBe(11);
   });
 
+  it('pay로 카드로 낸 몫의 부채 이름은 "카드 일시불/N개월 할부 — 선택지"다 (1개월)', () => {
+    let s = toFeb(start()); // 2월 장면 (laptop-spill)
+    s = step(s, { type: 'choose', choiceId: 'repair', payment: { parts: [], card: { amount: 600_000, months: 1 } } });
+    expect(s.debts).toHaveLength(1);
+    expect(s.debts[0]!.label).toBe('카드 일시불 — 서비스센터에서 수리한다');
+    const delta = s.lastOutcome!.deltas.find((d) => d.kind === 'debt');
+    expect(delta).toMatchObject({ kind: 'debt', amount: 600_000, label: '카드 일시불 — 서비스센터에서 수리한다' });
+  });
+
+  it('pay로 카드로 낸 몫의 부채 이름은 "카드 일시불/N개월 할부 — 선택지"다 (3개월 할부)', () => {
+    let s = toFeb(start()); // 2월 장면 (laptop-spill)
+    s = step(s, {
+      type: 'choose',
+      choiceId: 'repair',
+      payment: { parts: [{ source: 'emergency', amount: 300_000 }], card: { amount: 300_000, months: 3 } },
+    });
+    expect(s.debts).toHaveLength(1);
+    expect(s.debts[0]!.label).toBe('카드 3개월 할부 — 서비스센터에서 수리한다');
+    expect(s.debts[0]!.kind).toBe('installment');
+    const delta = s.lastOutcome!.deltas.find((d) => d.kind === 'debt');
+    expect(delta).toMatchObject({ kind: 'debt', amount: 300_000, label: '카드 3개월 할부 — 서비스센터에서 수리한다' });
+  });
+
   it('카드 일시불은 다음 달에 전액 결제되고 할부로 치지 않는다', () => {
     let s = toFeb(start()); // 2월 장면
     s = step(s, { type: 'choose', choiceId: 'used' });

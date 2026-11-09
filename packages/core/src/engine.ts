@@ -668,6 +668,11 @@ function withdrawFrom(s: GameState, source: AccountId, amount: Won): Delta {
   return { kind: 'account', account: source, amount: -Math.min(before, amount) };
 }
 
+/** pay 선택지에서 카드로 낸 몫의 부채 이름 — 선택지 문구만 쓰면 결과 화면에서 즉시 청구로 읽힌다 (§4.5) */
+function cardDebtLabel(months: CardMonths, choiceLabel: string): string {
+  return months === 1 ? `카드 일시불 — ${choiceLabel}` : `카드 ${months}개월 할부 — ${choiceLabel}`;
+}
+
 function addCardDebt(
   s: GameState,
   eventId: EventId,
@@ -818,7 +823,15 @@ function choose(s: GameState, action: Extract<Action, { type: 'choose' }>): Game
     }
     if (plan.card) {
       deltas.push(
-        addCardDebt(s, event.id, choice.id, plan.card.amount, plan.card.months, pay.interestFree ?? false, choice.label),
+        addCardDebt(
+          s,
+          event.id,
+          choice.id,
+          plan.card.amount,
+          plan.card.months,
+          pay.interestFree ?? false,
+          cardDebtLabel(plan.card.months, choice.label),
+        ),
       );
     }
     if (pay.to) {
