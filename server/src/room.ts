@@ -113,6 +113,8 @@ export interface RoomOptions {
   hooks?: RoomHooks;
   /** 로그 재생으로 복원된 Room인지(appendOpen 등 초기 로그 생략) */
   replayed?: boolean;
+  /** 수업을 처음 연 시각(로그 open 줄의 ts). 없으면 now(). 복원 시 자동 선택 순서에 쓴다(§14) */
+  openedAt?: number;
 }
 
 interface ActivitySegInfo {
@@ -176,7 +178,7 @@ export class Room {
   constructor(opts: RoomOptions) {
     this.code = opts.code;
     this.lesson = opts.lesson;
-    this.openedAt = opts.now?.() ?? Date.now();
+    this.openedAt = opts.openedAt ?? opts.now?.() ?? Date.now();
     this.activities = opts.activities;
     this.log = opts.log;
     this.io = opts.io;
@@ -1521,6 +1523,7 @@ export function restoreRoom(lines: LogLine[], opts: RestoreOpts): Room | null {
     maxStudents: opts.maxStudents,
     statsIntervalMs: opts.statsIntervalMs,
     hooks: opts.hooks,
+    openedAt: open.ts, // 복원 시각이 아니라 처음 연 시각 — 자동 선택은 "가장 최근에 연 수업"을 본다(§14)
   });
   for (const line of lines.slice(1)) {
     room.applyLogLine(line);
