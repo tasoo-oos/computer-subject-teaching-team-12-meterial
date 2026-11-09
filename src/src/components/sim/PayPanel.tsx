@@ -180,7 +180,7 @@ export function PayPanel({ state, choice, onClose, onConfirm, confirmLabel }: Pa
                         type="button"
                         onClick={() => toggleSource(o.source)}
                         aria-pressed={on}
-                        className="flex w-full items-center gap-3 rounded-[6px] text-left"
+                        className="flex min-h-11 w-full items-center gap-3 rounded-[6px] text-left"
                       >
                         <span
                           aria-hidden
