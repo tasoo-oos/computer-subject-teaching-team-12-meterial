@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChevronLeft, RotateCcw } from 'lucide-react';
-import { isBudgetValid, formatMan, type Budget } from '@gagyebu/core';
+import { isBudgetValid, budgetSummary, formatMan, type Budget } from '@gagyebu/core';
 import type { ScreenProps } from '@gagyebu/draft-kit';
 import { BudgetEditor } from '../components/BudgetEditor.tsx';
 import { BudgetTotals } from '../components/BudgetTotals.tsx';
@@ -16,6 +16,7 @@ export function BudgetScreen({ state, dispatch, draft, mode }: ScreenProps) {
   const salary = state.profile.salary;
   const recommended = state.survey.result?.recommended ?? null;
   const valid = isBudgetValid(budget, salary);
+  const summary = budgetSummary(budget, salary);
 
   // 편집 중인 안을 초안으로 실어 보낸다(라이브: 2초 묶음 + 제출 직전 flush, §5.4. dev·solo는 no-op)
   const change = (b: Budget) => {
@@ -33,7 +34,7 @@ export function BudgetScreen({ state, dispatch, draft, mode }: ScreenProps) {
   return (
     <div className="paper-texture min-h-dvh">
       <FlowHeader current="budget" nickname={state.profile.nickname} />
-      <main className="mx-auto max-w-[1200px] px-5 py-6 sm:px-8">
+      <main className="mx-auto max-w-[1200px] px-5 py-6 pb-[76px] sm:px-8 lg:pb-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="display text-[42px]">한 달 가계부 짜기</h1>
@@ -60,7 +61,7 @@ export function BudgetScreen({ state, dispatch, draft, mode }: ScreenProps) {
                 추천값으로 되돌리기
               </button>
             </BudgetTotals>
-            <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="mt-4 hidden items-center justify-between gap-3 lg:flex">
               {live ? (
                 <p className="text-[13px] text-ink-3">확정하면 1년 시뮬레이션이 시작돼요.</p>
               ) : (
@@ -82,6 +83,26 @@ export function BudgetScreen({ state, dispatch, draft, mode }: ScreenProps) {
           </aside>
         </div>
       </main>
+      {/* 좁은 화면(태블릿 세로·휴대폰): 합계·확정 버튼을 화면 아래에 붙인다. 편집기가 길어도
+          남은 금액과 "1년 시작"이 항상 보인다. lg(노트북·태블릿 가로)에서는 오른쪽 요약이
+          sticky라 이 바가 없다 — 오늘 레이아웃 그대로. */}
+      <div className="fixed inset-x-0 bottom-0 z-20 flex items-center justify-between gap-3 border-t border-rule bg-sheet/95 px-4 py-2.5 backdrop-blur-sm lg:hidden">
+        <p className="min-w-0 text-[13px] font-semibold text-ink-2" aria-live="polite">
+          {summary.remaining === 0 ? (
+            <span className="text-in">합계가 맞았어요</span>
+          ) : (
+            <>
+              {summary.remaining < 0 ? '초과' : '남은 금액'}
+              <span className={`num ml-1.5 text-[17px] font-bold ${valid ? 'text-in' : 'text-seal'}`}>
+                {formatMan(Math.abs(summary.remaining))}
+              </span>
+            </>
+          )}
+        </p>
+        <button type="button" disabled={!valid || busy} onClick={confirm} className="btn btn-primary flex-none px-5">
+          이 가계부로 1년 시작
+        </button>
+      </div>
     </div>
   );
 }

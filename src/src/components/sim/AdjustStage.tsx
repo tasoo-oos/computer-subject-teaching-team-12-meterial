@@ -46,12 +46,16 @@ export function AdjustStage({
         </p>
       </section>
 
-      <InlineTotals budget={budget} salary={state.profile.salary}>
-        <span className="text-[12px] text-ink-2">맞추고 나면 다음 달부터 적용됩니다.</span>
-        <button type="button" disabled={!valid || busy} onClick={() => onNext(budget)} className="btn btn-primary px-5">
-          조정 완료
-        </button>
-      </InlineTotals>
+      {/* 좁은 화면(태블릿 세로·휴대폰)에서는 합계 요약이 화면 위에 붙어 편집하는 동안에도
+          남은 금액·조정 완료 버튼이 보인다. lg(노트북·태블릿 가로)에서는 오늘 그대로. */}
+      <div className="sticky top-0 z-10 lg:static lg:z-auto">
+        <InlineTotals budget={budget} salary={state.profile.salary}>
+          <span className="text-[12px] text-ink-2">맞추고 나면 다음 달부터 적용됩니다.</span>
+          <button type="button" disabled={!valid || busy} onClick={() => onNext(budget)} className="btn btn-primary px-5">
+            조정 완료
+          </button>
+        </InlineTotals>
+      </div>
 
       <div className="rounded-panel bg-sheet p-4 shadow-[0_0_0_1px_var(--color-rule)] sm:p-5">
         <BudgetEditor budget={budget} onChange={change} marks={marks} layout="split" />

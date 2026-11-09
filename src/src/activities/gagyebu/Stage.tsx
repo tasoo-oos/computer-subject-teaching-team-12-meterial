@@ -624,16 +624,8 @@ function PresentStage({ spotlight, spotlightName }: { spotlight: GameState | nul
     name === spotlight.profile.nickname
       ? spotlight
       : { ...spotlight, profile: { ...spotlight.profile, nickname: name } };
-  // 발표자 이름을 크게 — 발표 때만 닉네임이 TV에 나온다(계획 §0). PresentationView의
-  // 작은 머리말 위에 얹는다(min-h-dvh 화면이라 위에 더하면 1080px를 넘친다, §14 #125).
-  return (
-    <div className="relative size-full overflow-hidden">
-      <div className="absolute left-[70px] top-[36px] z-10 rounded-panel bg-sheet/95 px-8 py-4 shadow-[0_0_0_1px_var(--color-rule),0_16px_40px_-24px_rgba(24,38,74,.6)]">
-        <p className="display text-[52px] leading-none text-ink">
-          발표 <span className="text-seal">· {name}</span>
-        </p>
-      </div>
-      <PresentationView state={state} tv />
-    </div>
-  );
+  // 발표자 이름을 크게 — 발표 때만 닉네임이 TV에 나온다(계획 §0). "발표 · {닉네임}" 머리표는
+  // PresentationView의 머리말 자리에 흐름으로 들어간다(tv=true). 절대 배치 머리표는 작은
+  // 머리말과 겹쳤다 — 오버레이를 없애고 머리말을 머리표로 바꿔 해결(S7).
+  return <PresentationView state={state} tv />;
 }
