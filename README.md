@@ -60,13 +60,23 @@ pnpm dev:public    # http://<LAN IP>:8091 (같은 네트워크 기기·프록시
 pnpm test          # vitest: core, live, activity-gagyebu, server
 pnpm shots         # 27개 스냅숏 × 화면 크기 스크린숏 → shots/ (자체 Vite를 띠고 /dev에서 찍는다)
 
-# 봇 60명 리허설: 서버를 띄우고 통제 페이지에서 수업을 연 뒤
+# 봇 60명 리허설 (환경은 이미 떠 있다고 가정)
 pnpm bots -- --code 4821 --n 60 --lazy 0.1 --auto-next --control-password <통제 비밀번호>
+
+# LAN 공개 봇 리허설 — 게임 서버(8092)와 Vite(8091)가 없으면 직접 띄우고, 끝나면 정리한다
+pnpm bots:public --code 4821 --n 60 --lazy 0.1 --auto-next --control-password <통제 비밀번호>
+
+# 수업을 아직 안 열었으면 --open-class: 이 스크립트가 수업을 열고 발급 코드로 봇을 돌린다
+pnpm bots:public --open-class --n 60 --lazy 0.1 --auto-next --control-password <통제 비밀번호>
 ```
 
 - `--lazy 0.1`: 10% 봇은 아무 행동도 안 해서 기본값(자동) 처리를 검증합니다.
 - `--auto-next`: 교사 "다음"도 스크립트가 대신 누릅니다(통제 비밀번호 필요).
-- 개발 포트(8092)에서는 `pnpm bots -- --url http://localhost:8092 --code …`로 지정합니다.
+- `pnpm bots`는 `localhost:8091`로 붙습니다. `pnpm bots:public`은 이 컴퓨터의 LAN IPv4(`10.10.2.23`)로 `http://<LAN IP>:8091`에 붙습니다 — 다른 기기에서 접속하는 것과 같은 주소로 리허설합니다.
+- `bots:public`은 **환경을 직접 열 수 있습니다**: 게임 서버(`GAME_PORT`, 기본 8092)와 LAN 공개 Vite(`PORT`, 기본 8091)가 없으면 띄우고, 이미 떠 있으면 그대로 씁니다. 이 스크립트가 띄운 프로세스만 끝날 때(Ctrl-C 포함) 정리합니다. 전제는 `.env`(`STAGE_PASSWORD`·`CONTROL_PASSWORD`·`COOKIE_SECRET`)와 `.env.dev`(`PORT=8092`, `NODE_ENV=development`)입니다.
+- 8091에 Vite가 아닌 다른 서버(운영 게임 서버 등)가 떠 있으면 봇을 붙이지 않고 멈춥니다. 포트가 다르면 `PORT=<포트> GAME_PORT=<포트> pnpm bots:public …`처럼 지정합니다.
+- `--open-class`는 통제 비밀번호로 로그인해 수업을 열고, 발급된 코드와 학생·TV 주소(`http://<LAN IP>:8091/`)를 로그에 남깁니다. 이미 연 수업에 붙이려면 `--code`를 쓰세요.
+- 서버에 붙지 못하면(주소 오류·서버 꺼짐) 원인을 한 번만 알려 주고 종료 코드 1로 끝납니다(봇마다 실패 줄을 쏟지 않습니다). `--code`가 열려 있지 않으면 `수업 …가 열려 있지 않습니다`로 알려 줍니다.
 
 ### 배포 (기존 리버스 프록시 그대로)
 

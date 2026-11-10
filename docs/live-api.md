@@ -1322,6 +1322,22 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 - 행동 간 250ms 간격을 두고 `too-fast`(소켓당 초당 4회, §5.4)는 잠시 뒤 재시도한다. `--auto-next`는 work 비트에서 비lazy 봇이 할 일을 마칠 때까지(최대 6s) 기다렸다가 `next { force: true }`를 보낸다.
 - 서버 재시작 등으로 연결이 끊기면 발급받은 토큰으로 재접속 hello를 보내 기존 학생으로 이어서 행동한다(§8.3). 끊기는 순간 소켓.io 버퍼에 쌓인 행동은 버린다(재접속 hello보다 먼저 나가 `not-allowed`로 죽는 것을 막는다).
 - 매 비트마다 한 줄 진행 로그, 마지막에 요약(완주/자동 처리/실패 인원). 모든 비lazy 봇이 `present` 비트에 도달하면 종료 코드 0.
+- 최초 연결 실패(서버 없음·주소 오류)는 소켓 재시도 3회·`connect_error`, hello ack 10초 대기로 끊고 실패 요약 뒤 종료 코드 1로 끝난다(무한 대기하지 않는다). 실행 전에 `GET /socket.io/?EIO=4&transport=polling`로 서버를 확인해, 60명이 각자 재시도하며 실패 줄을 쏟는 대신 원인(게임 서버 꺼짐·주소 오류)을 한 번에 알려 준다.
+- 실패는 봇마다 한 줄씩 찍지 않고 이유별로 묶어 `✗ 60명 — 연결 실패 …`처럼 요약한다.
+
+### 11.1b `scripts/bots-public.mjs`
+
+```bash
+pnpm bots:public --code 4821 --n 60 --lazy 0.1 --auto-next --control-password <pw>
+```
+
+- 환경을 직접 연다: `GET /socket.io/?EIO=4&transport=polling`로 게임 서버(`GAME_PORT`)를, `GET /@vite/client`로 Vite(`PORT`)를 확인하고 없으면 띄운다. 게임 서버는 `pnpm server:dev`와 같은 명령(`node --env-file=.env --env-file-if-exists=.env.dev server/src/main.ts`)이고, Vite는 `scripts/dev-public.config.ts`다.
+- 이미 떠 있는 프로세스는 재사용하고 건드리지 않는다. 자기가 띄운 것만 종료 시(SIGINT·SIGTERM 포함) SIGTERM → 3초 뒤 SIGKILL로 정리한다.
+- `PORT`에 Vite가 아닌 서버가 떠 있으면(운영 게임 서버 등) 봇을 붙이지 않고 실패한다 — 운영에 봇이 붙는 사고를 막는다.
+- `--open-class`: 통제 비밀번호로 `POST /api/login` → 통제 소켓 `openClass`로 수업을 열고, 발급된 코드를 `--code` 대신 봇에 넘긴다(로그에 코드·학생 주소를 남긴다). 수업을 아직 열지 않은 리허설을 한 명령으로 돌리기 위한 것이다. `--code`를 함께 주면 `--open-class`가 이긴다.
+- `--url`을 직접 주면 환경을 열지 않고 `scripts/bots.mjs`로 그대로 넘긴다.
+- 게임 서버가 뜨지 않으면(예: `.env` 없음) 그 프로세스 출력 마지막 줄과 함께 `.env`/`.env.dev` 확인을 안내하고 종료 코드 1.
+- `BOTS_PUBLIC_VERBOSE=1`이면 자식 프로세스 출력을 `[server]`·`[vite]` 접두어로 실시간 중계한다(기본은 실패 시 마지막 줄만).
 
 ### 11.2 `scripts/shots.mjs` 변경
 
@@ -1338,6 +1354,7 @@ node scripts/bots.mjs --url http://localhost:8091 --code 4821 --n 60 --lazy 0.1 
 | `pnpm server` | `node --env-file=.env server/src/main.ts` |
 | `pnpm test` | `pnpm -r test` (vitest: core, live, activity-gagyebu, server) |
 | `pnpm bots` | `node scripts/bots.mjs --url http://localhost:8091` (코드는 필수 인자로 전달) |
+| `pnpm bots:public` | `node scripts/bots-public.mjs`. LAN 공개 리허설: 게임 서버(`GAME_PORT`, 기본 8092)와 LAN 공개 Vite(`PORT`, 기본 8091)가 없으면 띄우고, 이 컴퓨터의 내부가 아닌 첫 IPv4로 `http://<LAN IP>:<PORT>`에 봇을 붙인다. 자기가 띄운 프로세스만 종료 시(Ctrl-C 포함) 정리한다. 인자는 `pnpm bots:public --code 4821 …`처럼 `--` 없이 넘긴다 |
 
 ---
 

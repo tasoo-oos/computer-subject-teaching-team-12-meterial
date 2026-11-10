@@ -248,12 +248,26 @@ async function pump(bot) {
   }
 }
 
+// 같은 이유가 봇 수만큼 쏟아지지 않게, 실패는 모아 두었다가 summarizeFailures()에서 요약한다.
 function fail(bot, why) {
   if (!failures.has(bot.nickname)) {
     failures.set(bot.nickname, why);
     summary.failed++;
-    log(`✗ ${bot.nickname} 실패: ${why}`);
   }
+}
+
+/** 실패를 이유별로 묶어 출력한다(같은 이유는 봇 이름을 나열하지 않고 수만). */
+function summarizeFailures() {
+  if (failures.size === 0) return;
+  const counts = new Map(); // 이유 → 봇 수
+  for (const why of failures.values()) counts.set(why, (counts.get(why) ?? 0) + 1);
+  log(`실패 ${failures.size}명:`);
+  for (const [why, n] of counts) log(`  ✗ ${n}명 — ${why}`);
+}
+
+/** ack를 ms 안에 받지 못하면 null을 돌려준다. */
+function withAckTimeout(promise, ms) {
+  return Promise.race([promise, new Promise((res) => setTimeout(() => res(null), ms))]);
 }
 
 async function spawnBot(i) {
@@ -261,7 +275,13 @@ async function spawnBot(i) {
   const bot = {
     nickname,
     lazy: rng() < args.lazy,
-    socket: io(args.url, { transports: ['websocket'], reconnection: true }),
+    // 최초 연결이 안 되면(서버 없음·주소 틀림) 영원히 기다리지 않고 10초 뒤 포기한다
+    socket: io(args.url, {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: 3,
+      timeout: 10_000,
+    }),
     classState: null,
     lesson: null,
     state: null,
@@ -299,6 +319,11 @@ async function spawnBot(i) {
     // 전이(endMonth)로 바뀐 상태는 class보다 늦게 온다 — 상태가 갱신되면 다시 행동한다
     void pump(bot);
   });
+  // 최초 연결 실패(hello 전)는 재시도 끝에 포기한다 — 요약·종료 코드 1. 한 줄씩 찍지 않고 모아 둔다.
+  bot.socket.on('connect_error', (err) => {
+    if (bot.token) return;
+    fail(bot, `연결 실패 ${args.url} (${err.message})`);
+  });
   // 서버가 죽는 동안 소켓.io가 버퍼에 쌓은 act는 재접속 직후(hello보다 먼저) 세상에
   // 나가 'not-allowed'로 죽는다 — 끊기는 순간 버퍼를 비운다(못 나간 ack는 재접속
   // 처리가 pump를 다시 깨운다).
@@ -330,9 +355,24 @@ async function spawnBot(i) {
     bot.busy = false;
     void pump(bot);
   });
-  const hello = await new Promise((res) => bot.socket.emit('hello', { code: args.code, device: 'laptop' }, res));
+  // 연결 실패·서버 없음이면 ack가 영영 오지 않는다 — connect_error가 이미 실패로
+  // 기록했으므로 10초 뒤 포기한다(입장 성공 뒤의 ack 대기는 그대로 둔다).
+  const hello = await withAckTimeout(
+    new Promise((res) => bot.socket.emit('hello', { code: args.code, device: 'laptop' }, res)),
+    10_000,
+  );
+  if (!hello) {
+    if (!failures.has(bot.nickname)) fail(bot, `hello ack 없음 ${args.url} — 서버가 응답하지 않습니다`);
+    return;
+  }
   if (!hello.ok) {
-    fail(bot, `hello: ${hello.reason}`);
+    // not-found는 코드가 열려 있지 않다는 뜻이다 — 봇마다 같은 말을 반복하지 않게 이유를 풀어 쓴다
+    fail(
+      bot,
+      hello.reason === 'not-found'
+        ? `수업 ${args.code}가 열려 있지 않습니다(통제 페이지에서 수업을 열거나 bots:public --open-class)`
+        : `hello: ${hello.reason}`,
+    );
     return;
   }
   const join = await new Promise((res) => bot.socket.emit('join', { nickname }, res));
@@ -456,16 +496,48 @@ function startAutoNext(cookie) {
 
 // ── main ────────────────────────────────────────────────────────────────────
 
+/**
+ * 봇을 띄우기 전에 서버가 실제로 응답하는지 확인한다. 60명이 각자 재시도하며
+ * 실패 줄을 쏟아 내는 대신, 원인(게임 서버 꺼짐·주소 오류)을 한 번에 알려 준다.
+ * 통과하지 못하면 true를 돌려주고 main은 종료 코드 1로 끝난다.
+ */
+async function preflightFails() {
+  const target = `${args.url}/socket.io/?EIO=4&transport=polling`;
+  let res;
+  try {
+    res = await fetch(target, { signal: AbortSignal.timeout(5000) });
+  } catch (err) {
+    const code = err?.cause?.code ?? err?.name ?? 'unknown';
+    log(`서버에 연결할 수 없습니다: ${args.url} (${code})`);
+    log('주소·포트를 확인하세요. LAN 공개 개발 환경이면 게임 서버(pnpm server:dev)가 떠 있어야 합니다.');
+    return true;
+  }
+  if (res.status >= 500) {
+    log(`서버 응답 ${res.status} — ${args.url}는 살아 있지만 뒤의 게임 서버가 없습니다.`);
+    log('게임 서버를 먼저 띄우세요: pnpm server:dev (.env.dev에 PORT=8092). Vite는 /socket.io·/api를 GAME_PORT로 넘깁니다.');
+    return true;
+  }
+  if (!res.ok) {
+    log(`서버 응답 ${res.status} — ${args.url}에 Socket.IO가 없습니다. 주소·포트를 확인하세요.`);
+    return true;
+  }
+  return false;
+}
+
 async function main() {
   await loadLessonHelpers();
   log(`서버 ${args.url} · 수업 ${args.code} · 봇 ${args.n}명 (lazy ${(args.lazy * 100).toFixed(0)}%, seed ${args.seed})`);
+  if (await preflightFails()) process.exit(1);
 
   await Promise.all(Array.from({ length: args.n }, (_, i) => spawnBot(i)));
 
   // lesson 계산: 첫 snapshot의 lesson(봇 전원이 같은 레슨을 받는다)
   const withLesson = bots.find((b) => b.lesson);
   if (!withLesson) {
+    // 연결 실패는 connect_error가 이미 기록했다 — 요약을 남기고 종료 코드 1
     log('레슨 정보를 받지 못했습니다(모든 봇 입장 실패).');
+    log(`요약: 완주 0/${bots.filter((b) => !b.lazy).length} · 실패 ${summary.failed}명`);
+    summarizeFailures();
     for (const b of bots) b.socket.disconnect();
     process.exit(1);
   }
@@ -511,7 +583,7 @@ async function main() {
   log(
     `요약: 완주 ${summary.finished}/${active} · 자동 처리 통지 ${summary.autoApplied}건 · 실패 ${summary.failed}명`,
   );
-  for (const [nickname, why] of failures) log(`  실패: ${nickname} — ${why}`);
+  summarizeFailures();
   for (const b of bots) b.socket.disconnect();
   const ok = summary.finished === active && summary.failed === 0;
   process.exit(ok ? 0 : 1);

@@ -12,6 +12,7 @@
     "server:dev": "node --env-file=.env --env-file-if-exists=.env.dev server/src/main.ts",
     "dev:public": "cd src && pnpm exec vite --config ../scripts/dev-public.config.ts",
     "bots": "node scripts/bots.mjs --url http://localhost:8091",
+    "bots:public": "node scripts/bots-public.mjs",
     "shots": "node scripts/shots.mjs",
     "single": "node scripts/build-single.mjs"
   },
