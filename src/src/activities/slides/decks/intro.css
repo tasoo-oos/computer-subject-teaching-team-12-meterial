@@ -1,0 +1,47 @@
+/* 생성 파일: 마이크로티칭_PPT/웹/pptx2site.py 가 PPT에서 뽑았다. 손으로 고치지 말고 PPT를 고친 뒤 다시 뽑는다. */
+@font-face { font-family: 'ONE Mobile Title'; src: url('./intro-assets/one-mobile-title.ttf') format('truetype'); font-display: block; }
+@font-face { font-family: 'Pretendard 12'; src: url('./intro-assets/pretendard-regular.woff2') format('woff2'); font-display: block; }
+/* 1920×1080 논리 캔버스. 그림자 · 테두리 · 줄 간격 규칙은 웹/shell.html 과 같다(LibreOffice 렌더와 대조 검증) */
+.pptx { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg, #F5FDD7); color: #1E1E1E;
+  --shadow: 0 2.41px 4.2px rgba(0, 0, 0, .35); --shadow-f: drop-shadow(0 2.41px 2.1px rgba(0, 0, 0, .35)); }
+.pptx * { box-sizing: border-box; }
+.pptx div, .pptx i { position: absolute; }
+.pptx i { display: block; }
+.pptx .T { font-family: 'ONE Mobile Title', sans-serif; font-weight: 400; }
+.pptx .B { font-family: 'Pretendard 12', sans-serif; font-weight: 400; }
+.pptx .box { background: var(--fill, transparent); border-radius: var(--r, 0); }
+.pptx .box.ln::before { content: ''; position: absolute; inset: calc(var(--lw) / -2); border: var(--lw) solid var(--lc); border-radius: calc(var(--r, 0px) + var(--lw) / 2); }
+.pptx .box.oval, .pptx .box.oval::before { border-radius: 50%; }
+.pptx .box.sh:not(.ln), .pptx .box.sh.ln::before { box-shadow: var(--shadow); }
+.pptx .callout svg, .pptx .poly svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.pptx .callout.sh svg { filter: var(--shadow-f); }
+.pptx .pic { background: center / 100% 100% no-repeat; }
+.pptx .tx { display: flex; flex-direction: column; padding: var(--pad); word-break: keep-all; overflow-wrap: break-word; }
+.pptx .tx p { margin: 0; white-space: pre-wrap; position: relative; line-height: calc(1.2 * var(--ls, 1)); top: calc((0.6 * var(--ls, 1) - var(--k)) * 1em); left: -.5px; }
+.pptx .tx p.T { --k: .50; }
+.pptx .tx p.B { --k: .5555; }
+.pptx .tx.nw p { white-space: pre; }
+.pptx .tx span { font-size: inherit; }
+/* 클릭 등장: 비트(step) 번호까지 나타난다. 나타날 때 0.4초 동안 차오른다 */
+.pptx [data-step] { visibility: hidden; opacity: 0; transition: opacity .4s cubic-bezier(.4, 0, .1, 1), visibility 0s linear .4s; }
+.pptx[data-cur="1"] [data-step="1"],.pptx[data-cur="2"] [data-step="1"],.pptx[data-cur="2"] [data-step="2"],.pptx[data-cur="3"] [data-step="1"],.pptx[data-cur="3"] [data-step="2"],.pptx[data-cur="3"] [data-step="3"],.pptx[data-cur="4"] [data-step="1"],.pptx[data-cur="4"] [data-step="2"],.pptx[data-cur="4"] [data-step="3"],.pptx[data-cur="4"] [data-step="4"],.pptx[data-cur="5"] [data-step="1"],.pptx[data-cur="5"] [data-step="2"],.pptx[data-cur="5"] [data-step="3"],.pptx[data-cur="5"] [data-step="4"],.pptx[data-cur="5"] [data-step="5"],.pptx[data-cur="6"] [data-step="1"],.pptx[data-cur="6"] [data-step="2"],.pptx[data-cur="6"] [data-step="3"],.pptx[data-cur="6"] [data-step="4"],.pptx[data-cur="6"] [data-step="5"],.pptx[data-cur="6"] [data-step="6"] { visibility: visible; opacity: 1; transition: opacity .4s cubic-bezier(.4, 0, .1, 1); }
+@media (prefers-reduced-motion: reduce) { .pptx [data-step] { transition: none; } }
+.pptx .i-area { background-image: url('./intro-assets/area.svg'); }
+.pptx .i-bank { background-image: url('./intro-assets/bank.svg'); }
+.pptx .i-board { background-image: url('./intro-assets/board.svg'); }
+.pptx .i-briefcase { background-image: url('./intro-assets/briefcase.svg'); }
+.pptx .i-calendar { background-image: url('./intro-assets/calendar.svg'); }
+.pptx .i-cart { background-image: url('./intro-assets/cart.svg'); }
+.pptx .i-clipboard { background-image: url('./intro-assets/clipboard.svg'); }
+.pptx .i-coins { background-image: url('./intro-assets/coins.svg'); }
+.pptx .i-coins_small { background-image: url('./intro-assets/coins_small.svg'); }
+.pptx .i-gold { background-image: url('./intro-assets/gold.svg'); }
+.pptx .i-laptop { background-image: url('./intro-assets/laptop.svg'); }
+.pptx .i-lock { background-image: url('./intro-assets/lock.svg'); }
+.pptx .i-magnifier { background-image: url('./intro-assets/magnifier.svg'); }
+.pptx .i-notebook { background-image: url('./intro-assets/notebook.svg'); }
+.pptx .i-pie_chart { background-image: url('./intro-assets/pie_chart.png'); }
+.pptx .i-piggy { background-image: url('./intro-assets/piggy.svg'); }
+.pptx .i-safe { background-image: url('./intro-assets/safe.svg'); }
+.pptx .i-trophy { background-image: url('./intro-assets/trophy.svg'); }
+.pptx .i-wallet { background-image: url('./intro-assets/wallet.svg'); }
