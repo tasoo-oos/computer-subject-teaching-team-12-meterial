@@ -83,7 +83,7 @@ function Tape({ style }: { style: CSSProperties }) {
 // ── 장면: 채널별 실물 ─────────────────────────────────────
 function NewsClip({ scene }: { scene: Scene }) {
   return (
-    <div className="relative w-[780px]" style={{ transform: 'rotate(-1.2deg)' }}>
+    <div className="relative w-[720px]" style={{ transform: 'rotate(-1.2deg)' }}>
       <Tape style={{ left: -28, top: -12, transform: 'rotate(-30deg)' }} />
       <Tape style={{ right: -28, top: -12, transform: 'rotate(28deg)' }} />
       <article
@@ -111,7 +111,7 @@ function NewsClip({ scene }: { scene: Scene }) {
 function Phone({ scene, sms }: { scene: Scene; sms?: boolean }) {
   const who = scene.speaker ?? (sms ? '문자' : '메신저');
   return (
-    <div className="w-[740px] rounded-[44px] bg-white px-9 pt-6 pb-10" style={{ boxShadow: `inset 0 0 0 4px var(--color-ink), ${SOFT_SHADOW}`, transform: 'rotate(1deg)' }}>
+    <div className="w-[700px] rounded-[44px] bg-white px-9 pt-6 pb-10" style={{ boxShadow: `inset 0 0 0 4px var(--color-ink), ${SOFT_SHADOW}`, transform: 'rotate(1deg)' }}>
       <div className="mx-auto mb-5 h-[12px] w-[120px] rounded-full bg-ink" />
       <div className="flex items-center gap-4 border-b border-rule pb-4">
         <span className="grid size-[60px] place-items-center rounded-full bg-in-soft text-[28px] font-bold text-in">{who.replace(/[^가-힣A-Za-z○]/g, '').slice(-1) || '?'}</span>
@@ -128,7 +128,7 @@ function Phone({ scene, sms }: { scene: Scene; sms?: boolean }) {
 /** 상황 설명 = 통장 괘선 줄 노트 */
 function LinedNote({ scene, event }: { scene: Scene; event: GameEvent }) {
   return (
-    <div className="relative w-[760px]" style={{ transform: 'rotate(-0.8deg)' }}>
+    <div className="relative w-[700px]" style={{ transform: 'rotate(-0.8deg)' }}>
       <Tape style={{ left: '50%', top: -16, marginLeft: -66, transform: 'rotate(-3deg)' }} />
       <article
         className="bg-sheet px-12 pt-9 pb-10"
@@ -145,7 +145,7 @@ function LinedNote({ scene, event }: { scene: Scene; event: GameEvent }) {
 
 function AppAlert({ scene }: { scene: Scene }) {
   return (
-    <div className="w-[760px] rounded-[28px] bg-white px-9 py-7" style={{ boxShadow: `${RING}, ${SOFT_SHADOW}`, transform: 'rotate(0.8deg)' }}>
+    <div className="w-[700px] rounded-[28px] bg-white px-9 py-7" style={{ boxShadow: `${RING}, ${SOFT_SHADOW}`, transform: 'rotate(0.8deg)' }}>
       <div className="flex items-center gap-4">
         <span className="size-[56px] rounded-[14px] bg-in-soft" style={{ boxShadow: RING }} />
         <span className="text-[28px] font-bold">{scene.speaker ?? '앱 알림'}</span>
@@ -191,6 +191,18 @@ function Stamp({ i, flow, size = 48 }: { i: number; flow: Flow; size?: number })
   );
 }
 
+/** 방식: 학생 폰 선택지와 같은 아이콘 · 같은 문구 */
+function KindTag({ kind }: { kind: ChoiceKind }) {
+  const meta = KIND_META[kind];
+  const Icon = meta.icon;
+  return (
+    <span data-oneline className="flex w-[220px] shrink-0 items-center justify-end gap-2 text-[24px] leading-snug text-ink-2">
+      <Icon size={22} aria-hidden className="shrink-0" />
+      {meta.label}
+    </span>
+  );
+}
+
 /** 선택지 = 통장 거래 줄: 도장 · 선택(아래에 금액 · 조건) · 방식 */
 function ChoiceLedger({ choices }: { choices: Choice[] }) {
   const tight = choices.length >= 5;
@@ -198,7 +210,7 @@ function ChoiceLedger({ choices }: { choices: Choice[] }) {
     <div>
       <div className="flex items-end justify-between border-b-2 border-ink pb-3 text-[22px] font-semibold text-ink-3">
         <span>학생들이 폰에서 고르고 있어요</span>
-        <span className="w-[200px] text-right">방식</span>
+        <span className="w-[220px] text-right">방식</span>
       </div>
       <ul>
         {choices.map((c, i) => {
@@ -207,10 +219,10 @@ function ChoiceLedger({ choices }: { choices: Choice[] }) {
             <li key={c.id} className={`ledger-row flex items-center gap-6 ${tight ? 'py-4' : 'py-5'}`}>
               <Stamp i={i} flow={f} size={tight ? 44 : 48} />
               <div className="min-w-0 flex-1">
-                <p className={`${tight ? 'text-[28px]' : 'text-[30px]'} font-semibold leading-snug`}>{c.label}</p>
-                {c.detail ? <p className="num mt-1 text-[24px] leading-snug text-ink-2">{c.detail}</p> : null}
+                <p data-oneline className={`${tight ? 'text-[28px]' : 'text-[30px]'} font-semibold leading-snug`}>{c.label}</p>
+                {c.detail ? <p data-oneline className="num mt-1 text-[24px] leading-snug text-ink-2">{c.detail}</p> : null}
               </div>
-              <span className="w-[200px] shrink-0 text-right text-[24px] leading-snug text-ink-2">{KIND_META[c.kind].label}</span>
+              <KindTag kind={c.kind} />
             </li>
           );
         })}
@@ -225,12 +237,12 @@ export function A4_EventPre({ month, event }: { month: number; event: GameEvent 
   return (
     <EventFrame kicker={<Kicker month={month} event={event} />} title={event.title}>
       <Optical>
-        <div className="flex items-center justify-between gap-16">
+        <div className="flex items-center justify-between gap-14">
           <div className="flex min-w-0 flex-col items-start">
             <SceneView scene={scene} event={event} />
             <RevealRow scene={scene} />
           </div>
-          <div className="w-[840px] shrink-0">
+          <div className="w-[920px] shrink-0">
             <ChoiceLedger choices={scene.choices} />
           </div>
         </div>
@@ -242,24 +254,26 @@ export function A4_EventPre({ month, event }: { month: number; event: GameEvent 
 // ── 공개 후 ───────────────────────────────────────────────
 interface Row { key: string; label: string; count: number; flow: Flow; letter?: number }
 
-/** 이름 · 막대 · 숫자 한 줄(태수님 막대처럼 바탕 홈, 채움은 선택지 종류 색) */
-function Bars({ rows, width = 300, labelW = 320, big }: { rows: Row[]; width?: number; labelW?: number; big?: boolean }) {
+/** 막대 줄: 위에 이름(한 줄) · 오른쪽 끝 숫자, 아래에 막대(태수님 원래 배치). 채움은 선택지 종류 색 */
+function Bars({ rows, big }: { rows: Row[]; big?: boolean }) {
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
-    <ul className="flex flex-col" style={{ gap: big ? 20 : 12 }}>
+    <ul className="flex flex-col" style={{ gap: big ? 20 : 14 }}>
       {rows.map((r) => (
-        <li key={r.key} className="flex items-center gap-5">
-          {r.letter !== undefined ? <Stamp i={r.letter} flow={r.flow} size={40} /> : null}
-          <span className={`${big ? 'text-[28px]' : 'text-[24px]'} shrink-0 font-semibold leading-snug`} style={{ width: labelW }}>
-            {r.label}
-          </span>
-          <span className="relative shrink-0 rounded-[4px] bg-sheet" style={{ width, height: big ? 28 : 20, boxShadow: '0 0 0 1px var(--color-rule-soft)' }}>
-            {r.count > 0 ? <span className="absolute inset-y-0 left-0 rounded-[4px]" style={{ width: `${(r.count / max) * 100}%`, background: FLOW[r.flow].color }} /> : null}
-          </span>
-          <span className={`num ${big ? 'text-[34px]' : 'text-[28px]'} w-[72px] shrink-0 font-bold ${r.count ? 'text-ink' : 'text-ink-3'}`}>
-            {r.count}
-            <span className="text-[20px] font-semibold text-ink-3">명</span>
-          </span>
+        <li key={r.key} className="flex items-start gap-4">
+          {r.letter !== undefined ? <Stamp i={r.letter} flow={r.flow} size={big ? 40 : 32} /> : null}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline justify-between gap-4">
+              <span data-oneline className={`${big ? 'text-[28px]' : 'text-[24px]'} font-semibold leading-snug`}>{r.label}</span>
+              <span className={`num ${big ? 'text-[32px]' : 'text-[26px]'} shrink-0 font-bold leading-none ${r.count ? 'text-ink' : 'text-ink-3'}`}>
+                {r.count}
+                <span className="text-[20px] font-semibold text-ink-3">명</span>
+              </span>
+            </div>
+            <span className="relative mt-2 block rounded-[4px] bg-sheet" style={{ height: big ? 16 : 12, boxShadow: '0 0 0 1px var(--color-rule-soft)' }}>
+              {r.count > 0 ? <span className="absolute inset-y-0 left-0 rounded-[4px]" style={{ width: `${(r.count / max) * 100}%`, background: FLOW[r.flow].color }} /> : null}
+            </span>
+          </div>
         </li>
       ))}
     </ul>
@@ -294,8 +308,8 @@ function TallyBlock({ event: here, t }: { event: GameEvent; t: SceneTally }) {
   const talk = scene && scene.channel !== 'narration' ? scene.text.split(/(?<=[.!?~])\s+/).slice(0, 2).join(' ') : null;
   return (
     <section>
-      <p className="text-[28px] font-bold leading-snug">{scene?.speaker ?? t.title}</p>
-      <p className="mt-1 text-[24px] font-semibold text-ink-3">{fromText}</p>
+      <p data-oneline className="text-[28px] font-bold leading-snug">{scene?.speaker ?? t.title}</p>
+      <p data-oneline className="mt-1 text-[24px] font-semibold text-ink-3">{fromText}</p>
       {talk ? (
         <p className="mt-3 mr-12 rounded-bubble bg-sheet px-6 py-3 text-[24px] leading-[1.45]" style={{ boxShadow: RING }}>
           <Num text={talk} />
@@ -303,7 +317,7 @@ function TallyBlock({ event: here, t }: { event: GameEvent; t: SceneTally }) {
       ) : null}
       {t.choices.length > 1 ? (
         <div className="mt-4">
-          <Bars labelW={400} width={200} rows={t.choices.map((c) => ({ key: c.choiceId, label: c.label, count: c.count, flow: flowOf(all.find((x) => x.id === c.choiceId)?.kind) }))} />
+          <Bars rows={t.choices.map((c) => ({ key: c.choiceId, label: c.label, count: c.count, flow: flowOf(all.find((x) => x.id === c.choiceId)?.kind) }))} />
         </div>
       ) : null}
     </section>
@@ -343,11 +357,11 @@ export function A4_EventPost({ month, event, stats }: { month: number; event: Ga
     <EventFrame kicker={kicker} title={event.title}>
       <Optical>
         <div className="flex justify-between gap-16">
-          <div className="flex w-[820px] shrink-0 flex-col gap-10">
+          <div className={`flex ${tallies.length ? 'w-[820px]' : 'w-[1100px]'} shrink-0 flex-col gap-10`}>
             <div>
               <p className="text-[24px] font-semibold text-ink-3">처음 고른 것</p>
               <div className="mt-5">
-                <Bars big rows={rows} width={tallies.length ? 260 : 360} labelW={360} />
+                <Bars big rows={rows} />
               </div>
             </div>
             <FlowLegend items={legendOf(flows)} />

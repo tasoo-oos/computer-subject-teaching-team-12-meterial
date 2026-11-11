@@ -38,7 +38,7 @@ const lines = (ls: string[]) => ls.map((l) => (
 function LedgerRow({ label, value, sub }: { label: string; value?: string; sub?: boolean }) {
   return (
     <li className="flex min-h-[72px] items-center justify-between gap-12 border-b border-rule-soft py-3">
-      <span className={`text-[32px] leading-snug ${sub ? 'text-ink-2' : 'font-semibold text-ink'}`}>{label}</span>
+      <span data-oneline className={`text-[32px] leading-snug ${sub ? 'text-ink-2' : 'font-semibold text-ink'}`}>{label}</span>
       {value ? <span className="num shrink-0 text-[32px] font-semibold text-ink-2">{value}</span> : null}
     </li>
   );
@@ -50,7 +50,7 @@ function BarRows({ rows, unit, max }: { rows: { label: string; value: number; te
     <ul className="w-[1400px] border-t border-rule-soft">
       {rows.map((r) => (
         <li key={r.label} className="flex min-h-[72px] items-center border-b border-rule-soft py-3">
-          <span className="line-clamp-2 w-[560px] shrink-0 pr-8 text-[32px] leading-snug font-semibold text-ink">{r.label}</span>
+          <span data-oneline className="w-[560px] shrink-0 pr-8 text-[32px] leading-snug font-semibold text-ink">{r.label}</span>
           <span className="flex flex-1 items-center gap-4">
             {r.value > 0 ? <span className="h-[28px] rounded-[4px]" style={{ width: `${max > 0 ? (r.value / max) * 680 : 0}px`, background: r.color ?? 'var(--color-ink)' }} /> : null}
             <span className={`num text-[32px] font-bold ${r.value > 0 ? 'text-ink' : 'text-ink-3'}`}>

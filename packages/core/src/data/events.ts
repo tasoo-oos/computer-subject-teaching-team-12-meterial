@@ -686,7 +686,7 @@ const scratchLottery: GameEvent = {
         {
           id: 'stop',
           kind: 'deposit',
-          label: '여기서 멈추고 당첨금 5천 원을 통장에 넣는다',
+          label: '여기서 멈추고 5천 원을 통장에 넣는다',
           deposit: { amount: 5_000, targets: ['living', 'emergency', 'goal'] },
           feedback: '5만 원이 5천 원이 됐습니다. 그래도 여기서 멈췄습니다.',
         },
@@ -922,7 +922,7 @@ const coinRoom: GameEvent = {
         {
           id: 'warn',
           kind: 'free',
-          label: '링크를 누르지 않고, 동기에게 사기일 수 있다고 알려 준다',
+          label: '링크는 누르지 않고 동기에게 사기 같다고 알린다',
           effects: [{ kind: 'satisfaction', delta: 2 }],
           tags: ['fraudAvoided'],
           feedback: '동기가 검색해 보더니 고맙다며 커피를 샀습니다.',
