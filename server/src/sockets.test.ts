@@ -168,6 +168,20 @@ describe('역할 소켓 (§5.2)', () => {
     expect(await emitAck(student, 'openClass', {})).toEqual({ ok: false, reason: 'unauthorized' });
   });
 
+  it('전면 소켓은 연결하자마자 snapshot에 이어 지금 비트의 stats를 받는다 (§14 #167)', async () => {
+    const opened = await server.openClass(testLesson.id);
+    if (!opened.ok) throw new Error('openClass 실패');
+    const stageCookie = await loginStage(url);
+    const stage = connect(url, { query: { role: 'stage' }, extraHeaders: { Cookie: stageCookie } });
+    sockets.push(stage);
+    const snapP = onceEvent<{ class: { cursor: { segment: number; beat: number } } }>(stage, 'snapshot');
+    const statsP = onceEvent<{ beat: unknown; stats: unknown }>(stage, 'stats');
+    const snap = await snapP;
+    const stats = await statsP;
+    expect(stats.beat).toEqual({ segment: snap.class.cursor.segment, beat: snap.class.cursor.beat });
+    expect(stats.stats).toBeDefined();
+  });
+
   it('발표자 노트는 통제에만: 학생·전면 스냅숏의 lesson에 notes가 없다 (§5.2)', async () => {
     const opened = await server.openClass(testLesson.id);
     if (!opened.ok) throw new Error('openClass 실패');

@@ -45,8 +45,15 @@ export interface MonthEntryTally {
   choices: { choiceId: string; label: string; count: number }[];
 }
 
+/** 발표 비트 순위표의 한 줄. rank는 기준 값이 같으면 같은 등수(1, 2, 2, 4 …) */
+export interface LeaderEntry {
+  rank: number;
+  nickname: string;
+  value: number;
+}
+
 export type GagyebuStats =
-  | { kind: 'none' } // survey, survey-result, guide-*, present, 슬라이드 — 집계 없음
+  | { kind: 'none' } // survey, survey-result, guide-*, 슬라이드 — 집계 없음
   | { kind: 'join'; joined: number; connected: number; nicknames: string[] }
   | { kind: 'salary'; salary: Won } // 모든 학생이 같은 월급
   | {
@@ -74,6 +81,13 @@ export type GagyebuStats =
       achievements: { achievementId: string; label: string; rate: number }[]; // ACHIEVEMENT_ORDER 순서
       netWorths: number[];
       autoCount: number;
+    }
+  | {
+      kind: 'present'; // 발표 — 1년을 마친 학생의 순위 세 가지 (각 상위 5명). 닉네임은 발표 때만 TV에 나온다
+      finished: number; // 결산까지 마친 학생 수
+      achievements: LeaderEntry[]; // 도전과제 수 (동점은 순자산 → 닉네임 순)
+      netWorth: LeaderEntry[]; // 순자산 (동점은 만족도 → 닉네임 순)
+      satisfaction: LeaderEntry[]; // 만족도 (동점은 순자산 → 닉네임 순)
     };
 
 // ---------------------------------------------------------------------------
@@ -278,6 +292,40 @@ function settlementStats(states: GameState[]): GagyebuStats {
   };
 }
 
+/** 발표 순위표 상위 몇 명 */
+export const LEADERBOARD_SIZE = 5;
+
+/** 기준 값(내림차순) → 동점 기준(내림차순) → 닉네임 순으로 줄 세워 상위 LEADERBOARD_SIZE명.
+ *  등수는 기준 값만으로 매긴다(같은 값이면 같은 등수) */
+function leaderboard(
+  rows: { nickname: string; value: number; tie: number }[],
+): LeaderEntry[] {
+  const sorted = [...rows].sort((a, b) => b.value - a.value || b.tie - a.tie || a.nickname.localeCompare(b.nickname, 'ko'));
+  return sorted.slice(0, LEADERBOARD_SIZE).map((r) => ({
+    rank: sorted.findIndex((x) => x.value === r.value) + 1,
+    nickname: r.nickname,
+    value: r.value,
+  }));
+}
+
+/** 발표 비트 집계: 1년을 마친(settlement가 있는) 학생만 순위에 든다 */
+function presentStats(states: GameState[]): GagyebuStats {
+  const done = states.filter((s) => s.settlement !== null);
+  const rows = done.map((s) => ({
+    nickname: s.profile.nickname,
+    achievements: s.unlocked.length,
+    netWorth: netWorth(s),
+    satisfaction: s.satisfaction,
+  }));
+  return {
+    kind: 'present',
+    finished: done.length,
+    achievements: leaderboard(rows.map((r) => ({ nickname: r.nickname, value: r.achievements, tie: r.netWorth }))),
+    netWorth: leaderboard(rows.map((r) => ({ nickname: r.nickname, value: r.netWorth, tie: r.satisfaction }))),
+    satisfaction: leaderboard(rows.map((r) => ({ nickname: r.nickname, value: r.satisfaction, tie: r.netWorth }))),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // stats (§9.4)
 
@@ -322,5 +370,6 @@ export function stats(states: GameState[], beat: number, cfg: GagyebuConfig): Ga
   const month = /^m(\d+)$/.exec(id);
   if (month && Number(month[1]) <= 11) return monthStats(states, Number(month[1]));
   if (month && Number(month[1]) === 12) return settlementStats(states);
-  return { kind: 'none' }; // survey(개인 성향 정보는 분포로 나오지 않는다, §9.4)·survey-result·guide-*·present
+  if (id === 'present') return presentStats(states);
+  return { kind: 'none' }; // survey(개인 성향 정보는 분포로 나오지 않는다, §9.4)·survey-result·guide-*
 }

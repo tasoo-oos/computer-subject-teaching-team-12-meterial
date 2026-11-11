@@ -22,7 +22,7 @@ import {
   type Scene,
 } from '@gagyebu/core';
 import type { ProgressInfo } from '@gagyebu/live';
-import type { GagyebuStats, SceneTally } from '@gagyebu/activity-gagyebu';
+import type { GagyebuStats, LeaderEntry, SceneTally } from '@gagyebu/activity-gagyebu';
 import { PassbookCover } from '../../components/PassbookCover.tsx';
 import { KIND_META } from '../../components/sim/kinds.ts';
 import { PresentationView } from '../../screens/ResultPresentation.tsx';
@@ -60,7 +60,7 @@ export function Stage(props: StageProps<GameState | null, GagyebuStats>) {
     if (month === 1 || month === 4 || month === 10) return <QuietMonthStage month={month} revealed={revealed} stats={stats} />;
     return <EventMonthStage month={month} revealed={revealed} stats={stats} />;
   }
-  if (id === 'present') return <PresentStage spotlight={spotlight} spotlightName={spotlightName} />;
+  if (id === 'present') return <PresentStage spotlight={spotlight} spotlightName={spotlightName} stats={stats} />;
   return <StageMessage title={beat.label} sub="이 단계의 전면 화면은 준비 중이에요" />;
 }
 
@@ -586,15 +586,17 @@ function SettlementStage({ revealed, stats }: { revealed: boolean; stats: Gagyeb
 
 /** 발표 비트: 지정한 학생의 결과 크게. 닉네임은 발표 때만 TV에 나온다(계획 §0).
  *  닉네임은 서버가 주는 spotlightName(§14 #132 — rename 반영)을 우선하고, 없으면 상태의 profile.nickname. */
-function PresentStage({ spotlight, spotlightName }: { spotlight: GameState | null; spotlightName: string | null }) {
-  if (!spotlight) {
-    return (
-      <StageMessage
-        title="발표"
-        sub="통제 페이지에서 발표자를 지정하면 그 학생의 결과가 이 화면에 커집니다"
-      />
-    );
-  }
+function PresentStage({
+  spotlight,
+  spotlightName,
+  stats,
+}: {
+  spotlight: GameState | null;
+  spotlightName: string | null;
+  stats: GagyebuStats | null;
+}) {
+  // 발표자를 고르기 전에는 1년을 마친 학생의 순위표(도전과제·순자산·만족도 각 상위 5명)를 보여 준다
+  if (!spotlight) return <Leaderboards stats={stats?.kind === 'present' ? stats : null} />;
   if (!spotlight.settlement) {
     return <StageMessage title="발표" sub="발표자의 결과를 준비하는 중이에요" />;
   }
@@ -607,4 +609,54 @@ function PresentStage({ spotlight, spotlightName }: { spotlight: GameState | nul
   // PresentationView의 머리말 자리에 흐름으로 들어간다(tv=true). 절대 배치 머리표는 작은
   // 머리말과 겹쳤다 — 오버레이를 없애고 머리말을 머리표로 바꿔 해결(S7).
   return <PresentationView state={state} tv />;
+}
+
+type PresentStats = Extract<GagyebuStats, { kind: 'present' }>;
+
+/** 발표 비트의 순위표 세 개. 발표 때라 닉네임이 나온다(계획 §0). 1년을 마친 학생만 든다 */
+function Leaderboards({ stats }: { stats: PresentStats | null }) {
+  const boards: { title: string; entries: LeaderEntry[]; format: (v: number) => string }[] = stats
+    ? [
+        { title: '도전과제', entries: stats.achievements, format: (v) => `${v}개` },
+        { title: '순자산', entries: stats.netWorth, format: (v) => formatMan(v) },
+        { title: '만족도', entries: stats.satisfaction, format: (v) => `${v}점` },
+      ]
+    : [];
+  return (
+    <StageShell kicker="발표" title="1년 결산 순위">
+      {!stats ? (
+        <StatsPending what="순위" />
+      ) : stats.finished === 0 ? (
+        <p className="text-[30px] text-ink-2">아직 1년을 마친 학생이 없어요.</p>
+      ) : (
+        <div className="flex h-full flex-col">
+          <div className="grid grid-cols-3 items-start gap-[40px]">
+            {boards.map((b) => (
+              <section key={b.title} className="rounded-panel bg-sheet px-[32px] py-[26px] shadow-[0_0_0_1.5px_var(--color-rule)]">
+                <h2 className="border-b-[3px] border-ink pb-3 text-[38px] font-bold">{b.title}</h2>
+                <ol className="mt-2">
+                  {b.entries.map((e) => (
+                    <li key={e.nickname} className="flex items-center gap-5 border-b border-rule-soft py-[18px] last:border-0">
+                      <span
+                        className={`num grid size-[58px] flex-none place-items-center rounded-full text-[30px] font-bold ${
+                          e.rank === 1 ? 'bg-ink text-white' : 'bg-paper text-ink shadow-[inset_0_0_0_2px_var(--color-rule)]'
+                        }`}
+                      >
+                        {e.rank}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[36px] font-semibold">{e.nickname}</span>
+                      <span className="num flex-none text-[34px] font-bold">{b.format(e.value)}</span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            ))}
+          </div>
+          <p className="mt-[22px] text-[26px] text-ink-3">
+            1년을 마친 학생 {stats.finished}명 기준 · 통제 페이지에서 발표자를 지정하면 그 학생의 결과가 이 화면에 커집니다
+          </p>
+        </div>
+      )}
+    </StageShell>
+  );
 }

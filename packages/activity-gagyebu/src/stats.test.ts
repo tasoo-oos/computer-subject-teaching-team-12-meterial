@@ -46,13 +46,66 @@ describe('stats — 비트별 kind (§9.4)', () => {
     expect(st).toEqual({ kind: 'salary', salary: 2_650_000 });
   });
 
-  it('survey·survey-result·guide·present는 { kind: "none" } — 설문 답은 분포로 나오지 않는다', () => {
+  it('survey·survey-result·guide는 { kind: "none" } — 설문 답은 분포로 나오지 않는다', () => {
     const s = student('봇1');
-    for (const id of ['survey', 'survey-result', 'guide-1', 'guide-6', 'present']) {
+    for (const id of ['survey', 'survey-result', 'guide-1', 'guide-6']) {
       expect(statsOf([s], id)).toEqual({ kind: 'none' });
     }
     const submitted = step(s, { type: 'submitSurvey', answers: defaultAnswers({}) });
     expect(statsOf([submitted], 'survey')).toEqual({ kind: 'none' });
+  });
+
+  it('present: 1년을 마친 학생만, 도전과제·순자산·만족도 순위 각 상위 5명 (동점은 같은 등수)', () => {
+    let done = atFebPayday();
+    for (let m = 2; m <= 12; m++) {
+      done = runFallback(done, at(`m${m}`));
+      if (m < 12) done = step(done, { type: 'endMonth' });
+    }
+    expect(done.settlement).not.toBeNull();
+    // 결산을 마친 학생 7명을 손으로 만든다: [닉네임, 도전과제 수, 생활비 잔고(순자산 조절), 만족도]
+    const rows: [string, number, number, number][] = [
+      ['가', 3, 0, 50],
+      ['나', 5, 100_000, 90],
+      ['다', 5, 300_000, 40],
+      ['라', 1, 900_000, 90],
+      ['마', 2, 50_000, 70],
+      ['바', 4, 200_000, 60],
+      ['사', 0, 0, 10],
+    ];
+    const base = done.accounts.living.balance;
+    const states = rows.map(([nickname, ach, living, sat]) => {
+      const s = JSON.parse(JSON.stringify(done)) as GameState;
+      s.profile.nickname = nickname;
+      s.unlocked = ACHIEVEMENT_ORDER.slice(0, ach);
+      s.accounts.living.balance = base + living;
+      s.satisfaction = sat;
+      return s;
+    });
+    const unfinished = student('아직');
+    const st = statsOf([...states, unfinished], 'present');
+    if (st.kind !== 'present') throw new Error('kind present 아님');
+    expect(st.finished).toBe(7);
+    // 도전과제: 나·다 5개(동점 → 순자산이 큰 다가 먼저, 같은 1등), 바 4, 가 3, 마 2
+    expect(st.achievements.map((e) => [e.rank, e.nickname, e.value])).toEqual([
+      [1, '다', 5],
+      [1, '나', 5],
+      [3, '바', 4],
+      [4, '가', 3],
+      [5, '마', 2],
+    ]);
+    // 순자산: 라 > 다 > 바 > 나 > 마
+    expect(st.netWorth.map((e) => e.nickname)).toEqual(['라', '다', '바', '나', '마']);
+    expect(st.netWorth[0]!.value - st.netWorth[1]!.value).toBe(600_000);
+    // 만족도: 나·라 90(동점 → 순자산이 큰 라가 먼저, 같은 1등), 마 70, 바 60, 가 50
+    expect(st.satisfaction.map((e) => [e.rank, e.nickname, e.value])).toEqual([
+      [1, '라', 90],
+      [1, '나', 90],
+      [3, '마', 70],
+      [4, '바', 60],
+      [5, '가', 50],
+    ]);
+    // 아무도 끝내지 않았으면 빈 순위표
+    expect(statsOf([unfinished], 'present')).toEqual({ kind: 'present', finished: 0, achievements: [], netWorth: [], satisfaction: [] });
   });
 
   it('budget: 확정한 학생의 initialBudget 분포 + 미확정 autoCount (§14)', () => {

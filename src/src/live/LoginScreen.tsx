@@ -15,7 +15,9 @@ export interface LoginGate {
   retry: () => void;
 }
 
-/** GET /api/me로 역할 확인 (200 { role } | 실패) */
+/** GET /api/me로 역할 확인 (200 { role, roles } | 실패). 게이트는 이 페이지의 역할 쿠키가 유효한지(roles)로 판정한다 —
+ *  통제로 로그인한 브라우저에서 /stage를 열면 role은 'control'이라 role만 보면 전면 로그인이 끝나지 않는다(§14 #167).
+ *  무효한(오래된) 쿠키는 서버가 이 응답에서 지운다. me의 값은 '이 페이지 역할로 로그인했으면 그 역할, 아니면 null' */
 export function useLoginGate(role: Role): LoginGate {
   const [checking, setChecking] = useState(true);
   const [me, setMe] = useState<Role | null>(null);
@@ -28,9 +30,10 @@ export function useLoginGate(role: Role): LoginGate {
     fetch('/api/me', { credentials: 'same-origin' })
       .then(async (res) => {
         if (!res.ok) throw new Error(String(res.status));
-        const body = (await res.json()) as { role: Role | null };
+        const body = (await res.json()) as { role: Role | null; roles?: Role[] };
+        const roles = body.roles ?? (body.role ? [body.role] : []);
         if (!cancelled) {
-          setMe(body.role);
+          setMe(roles.includes(role) ? role : null);
           setOffline(false);
         }
       })
@@ -46,7 +49,7 @@ export function useLoginGate(role: Role): LoginGate {
     return () => {
       cancelled = true;
     };
-  }, [nonce]);
+  }, [nonce, role]);
 
   const retry = useCallback(() => setNonce((n) => n + 1), []);
   return { checking, role: me, offline, retry };
@@ -85,7 +88,12 @@ export function LoginScreen({ role, offline, onSuccess }: { role: Role; offline?
         return;
       }
       if (res.status === 429) setError('시도가 많아 일시적으로 막혔어요. 잠시(1분) 후 다시 시도해 주세요.');
-      else if (res.status === 401) setError('비밀번호가 맞지 않아요. 다시 확인해 주세요.');
+      else if (res.status === 401)
+        setError(
+          role === 'stage'
+            ? '비밀번호가 맞지 않아요. 전면(TV) 비밀번호를 넣어 주세요 — 통제(교사) 비밀번호와 다릅니다.'
+            : '비밀번호가 맞지 않아요. 다시 확인해 주세요.',
+        );
       else setError(`로그인에 실패했어요 (${res.status}). 잠시 후 다시 시도해 주세요.`);
     } catch {
       setError('서버에 연결할 수 없어요. 네트워크를 확인하고 잠시 후 다시 시도해 주세요.');

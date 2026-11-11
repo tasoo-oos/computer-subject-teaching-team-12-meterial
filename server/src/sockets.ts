@@ -171,6 +171,9 @@ function selectRoom(ctx: ServerContext, socket: LiveSocket, code: ClassCode): vo
   socket.join(`class:${code}`);
   socket.join(`class:${code}:${socket.data.role}`);
   socket.emit('snapshot', snapshotFor(socket, room));
+  // 지금 비트의 stats도 바로 보낸다(§14 #167). stats는 무언가 바뀔 때만 방송되므로, 조용한 순간에
+  // 접속·새로고침한 TV는 다음 변화까지 "집계를 준비하는 중"에 머물렀다(예: 발표 비트의 순위표).
+  socket.emit('stats', room.statsPayload());
 }
 
 function leaveRoleRooms(socket: LiveSocket): void {

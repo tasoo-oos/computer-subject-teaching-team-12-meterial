@@ -148,17 +148,28 @@ async function handleLogout(req: IncomingMessage, res: ServerResponse, ctx: Http
   res.end('{}');
 }
 
-// GET /api/me (§6.1): 200 { role: 'stage' | 'control' | null }. control 쿠키가 우선한다.
+// GET /api/me (§6.1): 200 { role, roles }. role은 예전 계약 그대로(control 쿠키가 우선),
+// roles는 유효한 역할 쿠키 전부 — 통제로 로그인한 브라우저가 /stage를 열 때 role만 보면
+// 'control'이라 전면 비밀번호를 넣어도 로그인 화면이 계속 떴다(§14 #167).
+// 있는데 검증에 실패한 쿠키(비밀번호·COOKIE_SECRET 변경, 만료, 다른 서버가 남긴 것)는
+// 이 응답에서 만료시켜 지운다 — 브라우저 쿠키는 포트를 가리지 않아 같은 호스트의 다른 서버와 섞인다.
 function handleMe(req: IncomingMessage, res: ServerResponse, ctx: HttpCtx, now: number): void {
-  let role: Role | null = null;
+  const roles: Role[] = [];
+  const clear: string[] = [];
   for (const candidate of ['control', 'stage'] as const) {
     const value = readCookieValue(req.headers, candidate);
-    if (verifyCookieValue(ctx.env.cookieSecret, value, candidate, rolePassword(ctx, candidate), now)) {
-      role = candidate;
-      break;
-    }
+    if (value === undefined) continue;
+    if (verifyCookieValue(ctx.env.cookieSecret, value, candidate, rolePassword(ctx, candidate), now)) roles.push(candidate);
+    else clear.push(logoutSetCookie(candidate));
   }
-  sendJson(res, 200, { role });
+  const json = JSON.stringify({ role: roles[0] ?? null, roles });
+  res.writeHead(200, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+    'content-length': Buffer.byteLength(json),
+    ...(clear.length > 0 ? { 'set-cookie': clear } : {}),
+  });
+  res.end(json);
 }
 
 // GET /api/export/<code>.csv (§8.5): 통제 쿠키 필수. 활동 계약으로 CSV를 조립한다.

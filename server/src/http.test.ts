@@ -90,6 +90,39 @@ describe('로그인·me·logout (§6.3)', () => {
     // 서버 재검증까지 무효화하는 방법은 비밀번호 변경(pwVer)뿐이다.
   });
 
+  it('/api/me는 유효한 역할 쿠키를 모두 roles로 알려 주고, 무효한 쿠키는 지운다 (§14 #167)', async () => {
+    const login = async (role: 'stage' | 'control', password: string) => {
+      const res = await fetch(`${url}/api/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ role, password }),
+      });
+      return res.headers.getSetCookie().find((c) => c.startsWith(`gg_${role}=`))!.split(';')[0]!;
+    };
+    const control = await login('control', 'control-pw');
+    const stage = await login('stage', 'stage-pw');
+    // 통제·전면 둘 다 로그인한 브라우저: role은 예전처럼 control, roles에는 둘 다
+    const both = (await (await fetch(`${url}/api/me`, { headers: { cookie: `${control}; ${stage}` } })).json()) as {
+      role: string | null;
+      roles: string[];
+    };
+    expect(both).toEqual({ role: 'control', roles: ['control', 'stage'] });
+
+    // 다른 서버(다른 COOKIE_SECRET)가 남긴 전면 쿠키: 무효 → roles에 없고 응답이 그 쿠키를 만료시킨다
+    const stale = 'gg_stage=v00000000.stage.9999999999999.deadbeef';
+    const res = await fetch(`${url}/api/me`, { headers: { cookie: `${control}; ${stale}` } });
+    expect(await res.json()).toEqual({ role: 'control', roles: ['control'] });
+    const cleared = res.headers.getSetCookie();
+    expect(cleared).toHaveLength(1);
+    expect(cleared[0]).toMatch(/^gg_stage=;/);
+    expect(cleared[0]).toContain('Max-Age=0');
+
+    // 쿠키가 없으면 지울 것도 없다
+    const none = await fetch(`${url}/api/me`);
+    expect(await none.json()).toEqual({ role: null, roles: [] });
+    expect(none.headers.getSetCookie()).toHaveLength(0);
+  });
+
   it('stage 비밀번호로 stage 쿠키를 받는다', async () => {
     const res = await fetch(`${url}/api/login`, {
       method: 'POST',
