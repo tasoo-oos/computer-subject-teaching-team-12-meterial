@@ -31,10 +31,15 @@ import { JoinWall } from '../../stage/JoinWall.tsx';
 import { StageMessage } from '../../stage/StageContent.tsx';
 import { StatTile } from '../../stage/StatTile.tsx';
 import type { StageProps } from '../registry.ts';
+import { LOOK, a2Screen } from './StageLooks.tsx';
 
 export function Stage(props: StageProps<GameState | null, GagyebuStats>) {
   const { beat, revealed, stats, spotlight, spotlightName, progress, code } = props;
   const id = beat.id;
+  if (LOOK !== 'old') {
+    const a2 = a2Screen(id, revealed, stats);
+    if (a2) return a2;
+  }
 
   if (id === 'join') {
     if (!code) return <StageMessage title="입장" sub="수업 코드를 확인하는 중이에요" />;
