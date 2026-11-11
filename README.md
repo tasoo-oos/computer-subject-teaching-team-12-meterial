@@ -68,6 +68,7 @@ scripts/lab.sh down                        # 이 스크립트가 띄운 것만 �
 ```
 
 - 이미 떠 있는 서버는 재사용하고, 이 스크립트가 띄운 프로세스만 정리합니다. 세션 이름은 `gagyebu-lab` 하나뿐입니다.
+- `test`는 수업을 연 뒤 **10초 기다렸다가** 봇을 띄웁니다(전면·통제 페이지를 열 시간). `--delay <초>`로 바꾸고, `--delay 0`이면 바로 시작합니다.
 - 통제 비밀번호는 `--control-password <pw>` → `CONTROL_PASSWORD` 환경변수 → `.env` 순서로 찾습니다.
 - 포트는 `--port`/`--game-port` 또는 `PORT`/`GAME_PORT`로 바꿉니다.
 

@@ -1347,6 +1347,7 @@ scripts/lab.sh up | status | logs [창] | open | bots | test | down | attach
 
 - `up`: tmux 세션 `gagyebu-lab`에 게임 서버(`GAME_PORT`, 기본 8092)와 LAN 공개 Vite(`PORT`, 기본 8091)를 띄운다. 이미 떠 있으면 재사용하고, 이 스크립트가 띄운 것만 `down`에서 종료한다.
 - `open`: `scripts/open-class.mjs`로 수업을 열고 코드를 출력한다. `test`: `up` + `open` + 봇(`--n 60 --lazy 0.1 --auto-next`)을 tmux 창에서 돌리고 요약까지 기다린다.
+- `test`는 수업을 연 뒤 기본 10초(`--delay <초>`, 0이면 없음) 기다렸다가 봇을 띄운다 — 전면·통제 페이지를 열 시간을 주기 위해서다.
 - 통제 비밀번호는 `--control-password <pw>` → `CONTROL_PASSWORD` 환경변수 → `.env` 순서. `--port`/`--game-port`로 포트를 바꾼다.
 - 봇 로그는 `/tmp/gagyebu-lab/bots.log`에도 남아 창이 닫힌 뒤에도 `logs bots`로 볼 수 있다.
 

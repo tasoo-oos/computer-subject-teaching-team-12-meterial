@@ -6,7 +6,8 @@
 #   scripts/lab.sh logs [server|vite|bots]
 #   scripts/lab.sh open               # 수업을 열고 코드를 출력
 #   scripts/lab.sh bots --n 60 ...    # 돌고 있는 환경에 봇을 tmux 창에서 실행
-#   scripts/lab.sh test --n 60        # up + open + 봇(auto-next)까지 한 번에, 끝나면 요약
+#   scripts/lab.sh test --n 60        # up + open + 10초 대기 + 봇(auto-next), 끝나면 요약
+#                                     #   --delay <초>로 대기 시간 변경(0이면 바로)
 #   scripts/lab.sh down               # 이 스크립트가 띄운 세션만 종료
 #   scripts/lab.sh attach             # 세션에 들어가기 (나올 때 Ctrl-b d)
 #
@@ -22,6 +23,8 @@ SESSION=${LAB_SESSION:-gagyebu-lab}
 RUNDIR=${TMPDIR:-/tmp}/gagyebu-lab
 PORT=${PORT:-8091}
 GAME_PORT=${GAME_PORT:-8092}
+# test가 봇을 띄우기 전에 기다리는 시간(초) — TV·통제 페이지를 열 시간을 준다.
+DELAY=${DELAY:-10}
 
 # ── 출력 ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +45,7 @@ while [[ $# -gt 0 ]]; do
     --port) PORT=$2; shift 2 ;;
     --game-port) GAME_PORT=$2; shift 2 ;;
     --control-password|--password) CONTROL_PASSWORD=$2; shift 2 ;;
+    --delay) DELAY=$2; shift 2 ;;
     *) ARGS+=("$1"); shift ;;
   esac
 done
@@ -77,6 +81,22 @@ wait_ready() { # wait_ready <check-fn> <window> <timeout-s> <label>
   done
   warn "${label}가 ${timeout}s 안에 준비되지 않았습니다."
   return 1
+}
+
+# 봇을 띄우기 전 대기. 터미널이면 한 줄에서 숫자만 바뀌고, 파이프면 줄마다 찍는다.
+countdown() {
+  local secs=$1 i
+  (( secs > 0 )) || return 0
+  for (( i = secs; i > 0; i-- )); do
+    if [[ -t 1 ]]; then
+      printf '\r%s[lab]%s 봇 시작까지 %2d초… ' "$c_cyan" "$c_reset" "$i"
+    else
+      printf '[lab] 봇 시작까지 %d초\n' "$i"
+    fi
+    sleep 1
+  done
+  [[ -t 1 ]] && printf '\r\033[K'
+  return 0
 }
 
 # 우선순위: --control-password 플래그 > CONTROL_PASSWORD 환경변수 > .env
@@ -251,6 +271,8 @@ cmd_test() {
   local pw
   pw=$(control_password)
   [[ -n $pw ]] || die "통제 비밀번호가 없습니다. --control-password <pw>, CONTROL_PASSWORD=<pw>, 또는 .env의 CONTROL_PASSWORD를 확인하세요."
+  log "${DELAY}초 뒤 봇을 띄웁니다 — 지금 전면 ${LAN_URL}/stage · 통제 ${LAN_URL}/control 을 여세요."
+  countdown "$DELAY"
   run_bots_window --url "$LAN_URL" --code "$code" --n 60 --lazy 0.1 --auto-next \
     --control-password "$pw" "${ARGS[@]}"
   local rc
