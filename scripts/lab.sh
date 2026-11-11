@@ -11,7 +11,8 @@
 #   scripts/lab.sh attach             # 세션에 들어가기 (나올 때 Ctrl-b d)
 #
 # 포트: PORT(기본 8091, Vite) / GAME_PORT(기본 8092, 게임 서버). 환경변수나
-#       --port/--game-port로 바꾼다.
+#       --port/--game-port로 바꾼다. 통제 비밀번호는 --control-password <pw>로 준다
+#       (없으면 CONTROL_PASSWORD 환경변수, 그다음 .env).
 # 이미 떠 있는 Vite·게임 서버는 재사용하고 건드리지 않는다(다른 tmux 세션 포함).
 # 이 스크립트가 만든 세션 이름은 gagyebu-lab 하나뿐이다.
 set -euo pipefail
@@ -34,12 +35,13 @@ die()  { warn "$*"; exit 1; }
 CMD=${1:-}
 [[ $# -gt 0 ]] && shift || true
 
-# --port/--game-port는 이 스크립트가 먹고, 나머지는 그대로 아래 명령에 넘긴다.
+# --port/--game-port/--control-password는 이 스크립트가 먹고, 나머지는 그대로 아래 명령에 넘긴다.
 ARGS=()
 while [[ $# -gt 0 ]]; do
   case $1 in
     --port) PORT=$2; shift 2 ;;
     --game-port) GAME_PORT=$2; shift 2 ;;
+    --control-password|--password) CONTROL_PASSWORD=$2; shift 2 ;;
     *) ARGS+=("$1"); shift ;;
   esac
 done
@@ -77,6 +79,7 @@ wait_ready() { # wait_ready <check-fn> <window> <timeout-s> <label>
   return 1
 }
 
+# 우선순위: --control-password 플래그 > CONTROL_PASSWORD 환경변수 > .env
 control_password() {
   if [[ -n ${CONTROL_PASSWORD:-} ]]; then printf '%s' "$CONTROL_PASSWORD"; return 0; fi
   grep -m1 '^CONTROL_PASSWORD=' "$ROOT/.env" 2>/dev/null | cut -d= -f2- || true
@@ -183,7 +186,7 @@ cmd_open() {
   is_game || die "게임 서버가 없습니다. 먼저: $0 up"
   local pw code
   pw=$(control_password)
-  [[ -n $pw ]] || die "통제 비밀번호가 없습니다. CONTROL_PASSWORD=<pw> 또는 .env의 CONTROL_PASSWORD를 확인하세요."
+  [[ -n $pw ]] || die "통제 비밀번호가 없습니다. --control-password <pw>, CONTROL_PASSWORD=<pw>, 또는 .env의 CONTROL_PASSWORD를 확인하세요."
   code=$(CONTROL_PASSWORD="$pw" node "$ROOT/scripts/open-class.mjs" --url "http://127.0.0.1:${PORT}" --password "$pw") \
     || die "수업을 열지 못했습니다."
   log "수업 열림: 코드 ${c_bold}${code}${c_reset} — ${LAN_URL}/"
@@ -247,7 +250,7 @@ cmd_test() {
   # 기본값을 먼저 깔고 사용자 인자를 뒤에 붙인다(뒤가 이긴다).
   local pw
   pw=$(control_password)
-  [[ -n $pw ]] || die "통제 비밀번호가 없습니다. CONTROL_PASSWORD=<pw> 또는 .env의 CONTROL_PASSWORD를 확인하세요."
+  [[ -n $pw ]] || die "통제 비밀번호가 없습니다. --control-password <pw>, CONTROL_PASSWORD=<pw>, 또는 .env의 CONTROL_PASSWORD를 확인하세요."
   run_bots_window --url "$LAN_URL" --code "$code" --n 60 --lazy 0.1 --auto-next \
     --control-password "$pw" "${ARGS[@]}"
   local rc

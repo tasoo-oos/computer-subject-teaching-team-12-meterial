@@ -1339,6 +1339,17 @@ pnpm bots:public --code 4821 --n 60 --lazy 0.1 --auto-next --control-password <p
 - 게임 서버가 뜨지 않으면(예: `.env` 없음) 그 프로세스 출력 마지막 줄과 함께 `.env`/`.env.dev` 확인을 안내하고 종료 코드 1.
 - `BOTS_PUBLIC_VERBOSE=1`이면 자식 프로세스 출력을 `[server]`·`[vite]` 접두어로 실시간 중계한다(기본은 실패 시 마지막 줄만).
 
+### 11.1c `scripts/lab.sh`
+
+```bash
+scripts/lab.sh up | status | logs [창] | open | bots | test | down | attach
+```
+
+- `up`: tmux 세션 `gagyebu-lab`에 게임 서버(`GAME_PORT`, 기본 8092)와 LAN 공개 Vite(`PORT`, 기본 8091)를 띄운다. 이미 떠 있으면 재사용하고, 이 스크립트가 띄운 것만 `down`에서 종료한다.
+- `open`: `scripts/open-class.mjs`로 수업을 열고 코드를 출력한다. `test`: `up` + `open` + 봇(`--n 60 --lazy 0.1 --auto-next`)을 tmux 창에서 돌리고 요약까지 기다린다.
+- 통제 비밀번호는 `--control-password <pw>` → `CONTROL_PASSWORD` 환경변수 → `.env` 순서. `--port`/`--game-port`로 포트를 바꾼다.
+- 봇 로그는 `/tmp/gagyebu-lab/bots.log`에도 남아 창이 닫힌 뒤에도 `logs bots`로 볼 수 있다.
+
 ### 11.2 `scripts/shots.mjs` 변경
 
 > **결정(구현 편차, §14 #79)**: 임시 게임 서버를 띄우지 않는다. 대신 Playwright이 `GET /api/me`를 가로채

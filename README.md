@@ -54,6 +54,23 @@ pnpm dev:public    # http://<LAN IP>:8091 (같은 네트워크 기기·프록시
 - Vite 두 설정(`src/vite.config.ts`, `scripts/dev-public.config.ts`) 모두 `GAME_PORT`(기본 8092)로 프록시합니다. 게임 서버를 다른 포트에 뒀으면 `GAME_PORT=<포트>`를 함께 지정합니다.
 - 개발 중 Vite는 모든 경로를 앱으로 돌려줍니다. 알려진 경로만 200을 주는 404 정책(`/contorl` 같은 오타 방지)은 배포 서버의 규칙입니다.
 
+### 실습 환경 (tmux)
+
+게임 서버와 LAN 공개 Vite를 tmux 세션 하나로 열고, 수업을 열어 봇 리허설까지 돌립니다.
+
+```bash
+scripts/lab.sh up                          # tmux 세션 gagyebu-lab: 게임 서버(8092) + Vite(8091)
+scripts/lab.sh status                      # 세션·포트·주소
+scripts/lab.sh open --control-password <pw>   # 수업을 열고 코드 출력
+scripts/lab.sh test --n 60 --control-password <pw>   # up + open + 봇(auto-next) + 요약
+scripts/lab.sh logs [server|vite|bots]     # 창 출력(봇은 끝난 뒤에도 파일 로그)
+scripts/lab.sh down                        # 이 스크립트가 띄운 것만 종료
+```
+
+- 이미 떠 있는 서버는 재사용하고, 이 스크립트가 띄운 프로세스만 정리합니다. 세션 이름은 `gagyebu-lab` 하나뿐입니다.
+- 통제 비밀번호는 `--control-password <pw>` → `CONTROL_PASSWORD` 환경변수 → `.env` 순서로 찾습니다.
+- 포트는 `--port`/`--game-port` 또는 `PORT`/`GAME_PORT`로 바꿉니다.
+
 ### 테스트
 
 ```bash
