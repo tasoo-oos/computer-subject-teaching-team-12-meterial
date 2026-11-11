@@ -27,7 +27,8 @@ export const gagyebuLogic: ActivityLogic<GagyebuConfig, GameState, Action, Gagye
   exportRows,
 };
 
-export type { GagyebuConfig } from './config.ts';
+export type { GagyebuConfig, GuideDeck } from './config.ts';
+export { deckBeatId, parseDeckBeat } from './beats.ts';
 export type { GagyebuDraft } from './draft.ts';
 export type { GagyebuStats, LeaderEntry, MonthEntryTally, SceneTally } from './stats.ts';
 export { exportColumns, exportRows, formatPaymentPlan } from './export.ts';

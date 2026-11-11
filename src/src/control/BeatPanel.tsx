@@ -2,7 +2,7 @@
 //  - 슬라이드 비트: SlidePreview(현재·다음 슬라이드 축소 모형 + 발표자 노트)
 //  - 활동 비트: 비트 발표자 노트(beat.notes — 통제만 받는 온전한 lesson, §5.2) +
 //    ACTIVITY_VIEWS[activity].ControlPanel (등록됐을 때만, stats.beat가 커서 비트와 같을 때만)
-import type { Beat, BeatRef, ClassState, Lesson, RosterEntry, StatsPayload } from '@gagyebu/live';
+import type { Beat, BeatRef, ClassState, DeckManifest, Lesson, RosterEntry, StatsPayload } from '@gagyebu/live';
 import { ACTIVITY_VIEWS } from '../activities/registry.ts';
 import { SlidePreview } from '../activities/slides/Preview.tsx';
 import { sameBeat } from '../stage/StageContent.tsx';
@@ -30,6 +30,14 @@ export function BeatPanel({ classState, lesson, beats, stats, roster }: BeatPane
 
   if (segment.kind === 'slides') {
     return <SlidePreview deck={segment.deck} beatId={beat.id} cursor={cursor} />;
+  }
+
+  // 12조: 활동 안에 넣은 발표 자료 장(비트 id `deck:<덱>:<장>`, 게임 설정 deck.manifest) — 슬라이드 미리보기 · 노트
+  const deckBeat = /^deck:([^:]+):(.+)$/.exec(beat.id);
+  const cfg = segment.config as { deck?: { manifest?: DeckManifest }; openingDeck?: DeckManifest } | undefined;
+  const deckCfg = [cfg?.openingDeck, cfg?.deck?.manifest].find((d) => d && deckBeat && d.id === deckBeat[1]);
+  if (deckBeat && deckCfg) {
+    return <SlidePreview deck={deckCfg} beatId={deckBeat[2]!} cursor={cursor} />;
   }
 
   // 활동 비트 — stats.beat가 커서 비트와 같을 때만 활동 통계를 넘긴다(§5.7)

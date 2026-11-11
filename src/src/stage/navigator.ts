@@ -9,8 +9,8 @@ export type Member = (typeof TEAM)[number];
 export const ROLE: Record<Member, string> = {
   최유빈: '도입 · 개념 1',
   이상민: '개념 2',
-  박태수: '게임 · 결과',
-  김홍준: '정리',
+  박태수: '게임',
+  김홍준: '결과 발표 · 정리',
 };
 
 export interface NavInfo {
@@ -24,21 +24,33 @@ function slideNo(beatId: string): number {
   return Number(/^s(\d+)$/.exec(slideOfBeat(beatId).slideId)?.[1] ?? 0);
 }
 
+/** 개념 장 번호 → 정거장 · 발표자. PPT 6판 번호(오프닝 3장 · 학습 목표 4장): 8 소비습관 · 9~10 최유빈 개념 · 11~14 이상민 · 15 가계부 순서 */
+function conceptNav(n: number): NavInfo {
+  if (n === 8) return { stop: 0, who: '최유빈' };
+  if (n <= 10) return { stop: 1, who: '최유빈' };
+  if (n <= 14) return { stop: 1, who: '이상민' };
+  return { stop: 2, who: '이상민' };
+}
+
 export function navOf(segmentId: string, beatId: string): NavInfo | null {
   if (segmentId === 'intro') return { stop: null, who: '최유빈' };
-  if (segmentId === 'concepts') {
-    const n = slideNo(beatId); // PPT 6판 번호(오프닝 3장 · 학습 목표 4장): 8 소비습관 · 9~10 최유빈 개념 · 11~14 이상민 · 15 가계부 순서
-    if (n === 8) return { stop: 0, who: '최유빈' };
-    if (n <= 10) return { stop: 1, who: '최유빈' };
-    if (n <= 14) return { stop: 1, who: '이상민' };
-    return { stop: 2, who: '이상민' };
-  }
+  if (segmentId === 'concepts') return conceptNav(slideNo(beatId));
   if (segmentId === 'game') {
-    if (['join', 'salary', 'survey', 'survey-result'].includes(beatId)) return { stop: 0, who: '최유빈' };
+    // 게임 안에 넣은 발표 자료 장(비트 id `deck:<덱>:<장>`): 입장 뒤 도입 1~5장 · 안내 자리 개념 8~15장
+    const deck = /^deck:[^:]+:(.+)$/.exec(beatId);
+    if (deck) {
+      const n = slideNo(deck[1]!);
+      return n <= 7 ? { stop: null, who: '최유빈' } : conceptNav(n);
+    }
+    if (beatId === 'join') return { stop: null, who: '최유빈' }; // 입장 QR(맨 앞) — 출발 전
+    // 원장 11-12: 월급 공개부터 안내 · 12월 결산까지 박태수(사이의 개념 장은 원래 발표자), 발표(순위표)부터 김홍준
+    if (['salary', 'survey', 'survey-result'].includes(beatId)) return { stop: 0, who: '박태수' };
+    // 안내 카드: 개념 장을 넣은 흐름에서는 15장(AI와 가계부) 뒤 꿀팁 카드 한 장만 남으므로 노선도가 뒤로 가지 않게 그 정거장에 둔다
+    if (beatId === 'guide-6') return { stop: 2, who: '박태수' };
     if (beatId.startsWith('guide-')) return { stop: 1, who: '박태수' };
     if (beatId === 'budget') return { stop: 2, who: '박태수' };
     if (/^m\d+$/.test(beatId)) return { stop: 3, who: '박태수' };
-    if (beatId === 'present') return { stop: 4, who: '박태수' };
+    if (beatId === 'present') return { stop: 4, who: '김홍준' };
     return null;
   }
   if (segmentId === 'wrap-up') return { stop: 4, who: '김홍준' };
