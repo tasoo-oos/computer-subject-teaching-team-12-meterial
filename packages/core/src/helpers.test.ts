@@ -22,8 +22,8 @@ import type {
   Won,
 } from './types.ts';
 
-// 합계 1,980,000원(여유분 0)인 기준 가계부
-function baseBudget(livingBuffer: Won, overrides: Partial<Budget['expenses']> = {}): Budget {
+// 합계 1,980,000원인 기준 가계부
+function baseBudget(overrides: Partial<Budget['expenses']> = {}): Budget {
   const b = emptyBudget();
   b.transfers = { emergency: 100_000, savings: 200_000, invest: 100_000, goal: 50_000, housing: 50_000 };
   b.expenses = {
@@ -39,43 +39,33 @@ function baseBudget(livingBuffer: Won, overrides: Partial<Budget['expenses']> = 
     family: 50_000,
     ...overrides,
   };
-  b.livingBuffer = livingBuffer;
   return b;
 }
 
 describe('balanceBudget', () => {
-  it('남는 돈은 생활비 여유분으로', () => {
-    const b = baseBudget(30_000); // 합계 2,010,000
+  it('남는 돈은 그대로 둔다 (생활비 통장에 남는다)', () => {
+    const b = baseBudget(); // 합계 1,980,000
     const { budget: out, changes } = balanceBudget(b, 2_050_000);
-    expect(out.livingBuffer).toBe(70_000);
-    expect(changes).toEqual([{ key: 'livingBuffer', before: 30_000, after: 70_000 }]);
+    expect(changes).toEqual([]);
+    expect(out).toEqual(b);
     expect(isBudgetValid(out, 2_050_000)).toBe(true);
   });
 
-  it('모자라면 여유분에서 먼저 뺀다 (변동비는 그대로)', () => {
-    const b = baseBudget(30_000);
-    const { budget: out, changes } = balanceBudget(b, 1_990_000); // 2만 원 모자람
-    expect(out.livingBuffer).toBe(10_000);
-    expect(changes).toEqual([{ key: 'livingBuffer', before: 30_000, after: 10_000 }]);
-    expect(out.expenses.leisure).toBe(150_000);
-    expect(isBudgetValid(out, 1_990_000)).toBe(true);
-  });
-
-  it('여유분이 0이 되어도 모자라면 변동비를 여가→의류·미용→생활용품→경조사→식비 순서로 줄인다', () => {
-    const b = baseBudget(0); // 합계 1,980,000
-    // 12만 원 모자람: 여가 15만 중 12만
+  it('월급을 넘으면 변동비를 여가→의류·미용→생활용품→경조사→식비 순서로 줄인다', () => {
+    const b = baseBudget(); // 합계 1,980,000
+    // 12만 원 초과: 여가 15만 중 12만
     let r = balanceBudget(b, 1_860_000);
     expect(r.budget.expenses.leisure).toBe(30_000);
     expect(r.changes).toEqual([{ key: 'leisure', before: 150_000, after: 30_000 }]);
     expect(isBudgetValid(r.budget, 1_860_000)).toBe(true);
 
-    // 25만 원 모자람: 여가 15만 전부 → 의류·미용 10만 전부
+    // 25만 원 초과: 여가 15만 전부 → 의류·미용 10만 전부
     r = balanceBudget(b, 1_730_000);
     expect(r.budget.expenses.leisure).toBe(0);
     expect(r.budget.expenses.beauty).toBe(0);
     expect(r.changes.map((c) => c.key)).toEqual(['leisure', 'beauty']);
 
-    // 40만 원 모자람: 여가→미용→생활용품 5만→경조사 5만→식비 5만
+    // 40만 원 초과: 여가→미용→생활용품 5만→경조사 5만→식비 5만
     r = balanceBudget(b, 1_580_000);
     expect(r.budget.expenses.leisure).toBe(0);
     expect(r.budget.expenses.beauty).toBe(0);
@@ -87,8 +77,8 @@ describe('balanceBudget', () => {
   });
 
   it('고정비와 자동이체는 줄이지 않는다', () => {
-    const b = baseBudget(50_000); // 합계 2,030,000
-    const { budget: out } = balanceBudget(b, 1_930_000); // 10만 원 모자람
+    const b = baseBudget(); // 합계 1,980,000
+    const { budget: out } = balanceBudget(b, 1_880_000); // 10만 원 초과
     expect(out.expenses.rent).toBe(550_000);
     expect(out.expenses.phone).toBe(50_000);
     expect(out.expenses.insurance).toBe(50_000);
@@ -98,8 +88,8 @@ describe('balanceBudget', () => {
   });
 
   it('이미 합계가 맞으면 아무 것도 바꾸지 않는다', () => {
-    const b = baseBudget(40_000); // 합계 2,020,000
-    const { budget: out, changes } = balanceBudget(b, 2_020_000);
+    const b = baseBudget();
+    const { budget: out, changes } = balanceBudget(b, 1_980_000);
     expect(changes).toEqual([]);
     expect(out).toEqual(b);
   });
@@ -122,8 +112,8 @@ describe('defaultAnswers', () => {
   });
 
   it('7문항 모두 채워 submitSurvey를 통과한다', () => {
-    let s = createInitialState('검증', 2_600_000);
-    s = step(s, { type: 'start', nickname: '검증', salary: 2_600_000 });
+    let s = createInitialState('검증');
+    s = step(s, { type: 'start', nickname: '검증' });
     s = step(s, { type: 'submitSurvey', answers: defaultAnswers({}) });
     expect(s.phase).toBe('guide');
     expect(s.survey.result).not.toBeNull();
@@ -132,7 +122,7 @@ describe('defaultAnswers', () => {
 
 describe('autoPaymentPlan', () => {
   const stateWith = (balances: Partial<Record<keyof GameState['accounts'], Won>>): GameState => {
-    const s = createInitialState('자동', 2_600_000);
+    const s = createInitialState('자동');
     for (const [k, v] of Object.entries(balances)) s.accounts[k as keyof GameState['accounts']].balance = v as Won;
     return s;
   };
@@ -211,7 +201,7 @@ describe('autoDepositTarget', () => {
 
 describe('validatePayment', () => {
   const stateWith = (balances: Partial<Record<keyof GameState['accounts'], Won>>): GameState => {
-    const s = createInitialState('검증', 2_600_000);
+    const s = createInitialState('검증');
     for (const [k, v] of Object.entries(balances)) s.accounts[k as keyof GameState['accounts']].balance = v as Won;
     return s;
   };
@@ -282,8 +272,8 @@ describe('validatePayment', () => {
 
 describe('monthChoices', () => {
   function start(): GameState {
-    let s = createInitialState('기록', 2_600_000);
-    s = step(s, { type: 'start', nickname: '기록', salary: 2_600_000 });
+    let s = createInitialState('기록');
+    s = step(s, { type: 'start', nickname: '기록' });
     s = step(s, { type: 'submitSurvey', answers: defaultAnswers({}) });
     s = step(s, { type: 'goto', phase: 'budget' });
     s = step(s, { type: 'confirmBudget' });

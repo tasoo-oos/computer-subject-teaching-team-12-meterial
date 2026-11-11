@@ -545,7 +545,7 @@ const rentHike: GameEvent = {
           detail: '월세 +5만 원',
           effects: [
             { kind: 'budget', expense: 'rent', delta: 50_000 },
-            { kind: 'openBudget', reason: '월세가 5만 원 올랐습니다. 다른 항목을 줄여 합계를 맞추세요.' },
+            { kind: 'openBudget', reason: '월세가 5만 원 올랐습니다. 가계부를 확인하고, 월급을 넘으면 다른 항목을 줄이세요.' },
           ],
           feedback: '월세가 올랐습니다. 매달 5만 원을 어디서 줄일지 정해야 합니다.',
         },
@@ -557,7 +557,7 @@ const rentHike: GameEvent = {
           effects: [
             { kind: 'budget', expense: 'rent', delta: 70_000 },
             { kind: 'satisfaction', delta: -3 },
-            { kind: 'openBudget', reason: '연락이 없자 집주인이 7만 원 인상을 통보했습니다. 다른 항목을 줄여 합계를 맞추세요.' },
+            { kind: 'openBudget', reason: '연락이 없자 집주인이 7만 원 인상을 통보했습니다. 가계부를 확인하고, 월급을 넘으면 다른 항목을 줄이세요.' },
           ],
           feedback: '답을 안 했더니 5만 원이 아니라 7만 원 올린 재계약서가 왔습니다.',
         },
@@ -598,7 +598,7 @@ const rentHike: GameEvent = {
           effects: [
             { kind: 'budget', expense: 'rent', delta: 50_000 },
             { kind: 'satisfaction', delta: -3 },
-            { kind: 'openBudget', reason: '협상이 깨져 원래대로 5만 원 올랐습니다. 다른 항목을 줄여 합계를 맞추세요.' },
+            { kind: 'openBudget', reason: '협상이 깨져 원래대로 5만 원 올랐습니다. 가계부를 확인하고, 월급을 넘으면 다른 항목을 줄이세요.' },
           ],
           feedback: '연락을 끊었더니 5만 원 인상이 그대로 확정됐습니다.',
         },
@@ -823,7 +823,7 @@ const priceRise: GameEvent = {
           detail: '식비 +8%, 다른 항목을 줄여 맞춤',
           effects: [
             { kind: 'budgetPct', expense: 'food', pct: 0.08 },
-            { kind: 'openBudget', reason: '식비 예산이 8% 늘었습니다. 다른 항목을 줄여 합계를 맞추세요.' },
+            { kind: 'openBudget', reason: '식비 예산이 8% 늘었습니다. 가계부를 확인하고, 월급을 넘으면 다른 항목을 줄이세요.' },
           ],
           feedback: '오른 물가를 가계부에 반영했습니다.',
         },
@@ -846,7 +846,7 @@ const priceRise: GameEvent = {
             delayMonths: 1,
             when: { kind: 'flag', key: 'livingShort', equals: true },
           },
-          feedback: '예산은 그대로인데 실제 지출만 늘어납니다. 생활비 여유분이 버텨 줄까요?',
+          feedback: '예산은 그대로인데 실제 식비만 늘어납니다. 생활비 통장이 버텨 줄까요?',
         },
       ],
     },

@@ -2,7 +2,6 @@
 // 계약: fallback은 한 번 호출될 때마다 상태를 반드시 진전시킨다(같은 행동 반복 금지, §14 #6).
 // 함수 자체는 어떤 상태에서도 예외를 던지지 않는다(도달 불가능한 상태에 대한 방어 경로는 §14 참조).
 import {
-  BASE_SALARY,
   EXPENSES,
   autoDepositTarget,
   autoPaymentPlan,
@@ -14,7 +13,6 @@ import {
   formatMan,
   getScene,
   isBudgetValid,
-  rollSalary,
 } from '@gagyebu/core';
 import type { Action, Budget, ExpenseId, GameState, PaySpec, Scene } from '@gagyebu/core';
 import type { FallbackResult } from '@gagyebu/live';
@@ -106,7 +104,8 @@ export function done(s: GameState, beat: number, cfg: GagyebuConfig): boolean {
 function draftBudget(draft: unknown | undefined): Budget | null {
   if (draft && typeof draft === 'object' && (draft as GagyebuDraft).kind === 'budget') {
     const b = (draft as GagyebuDraft).budget;
-    if (b && typeof b === 'object' && b.transfers && b.expenses && typeof b.livingBuffer === 'number') return b;
+    // 알려진 필드만 꺼낸다(예전 초안의 livingBuffer 같은 필드는 버린다)
+    if (b && typeof b === 'object' && b.transfers && b.expenses) return { transfers: b.transfers, expenses: b.expenses };
   }
   return null;
 }
@@ -114,16 +113,10 @@ function draftBudget(draft: unknown | undefined): Budget | null {
 /** balanceBudget 결과로 만드는 안내 문구 (§9.3 예시 문형) */
 function budgetNotice(changes: { key: string; before: number; after: number }[]): string {
   const total = changes.reduce((acc, c) => acc + (c.after - c.before), 0);
-  if (total > 0) {
-    return `제출하지 않아 남는 돈 ${formatMan(total)}이(가) 생활비 여유분으로 들어갔어요`;
-  }
   if (total < 0) {
     const first = changes[0];
-    const where =
-      first && first.key !== 'livingBuffer'
-        ? (EXPENSES[first.key as ExpenseId]?.label ?? '여가·문화')
-        : '생활비 여유분';
-    return `제출하지 않아 여유 부족분 ${formatMan(-total)}을(를) ${where}에서 줄였어요`;
+    const where = first ? (EXPENSES[first.key as ExpenseId]?.label ?? '여가·문화') : '여가·문화';
+    return `제출하지 않아 월급을 넘은 ${formatMan(-total)}을(를) ${where}에서 줄였어요`;
   }
   return '제출하지 않아 가계부 합계를 자동으로 맞췄어요';
 }
@@ -196,7 +189,7 @@ function genericFallback(s: GameState, draft: unknown | undefined): FallbackResu
   switch (s.phase) {
     case 'start':
       return {
-        action: { type: 'start', nickname: s.profile.nickname || '학생', salary: s.profile.salary || BASE_SALARY },
+        action: { type: 'start', nickname: s.profile.nickname || '학생' },
         notice: '시작 처리가 자동으로 진행됐어요',
       };
     case 'survey':
@@ -322,13 +315,13 @@ export function locate(s: GameState): string | null {
 // ---------------------------------------------------------------------------
 // init (§4.2) — index.ts가 쓴다
 
-/** 학생 입장 때의 기저 상태 + 즉시 적용할 행동. 난수는 월급뿐, 결과는 행동에 박힌다(§4.2) */
+/** 학생 입장 때의 기저 상태 + 즉시 적용할 행동. 월급은 모두 같아 난수를 쓰지 않는다(§4.2) */
 export function initState(
   ctx: { nickname: string; random: () => number },
   _cfg: GagyebuConfig,
 ): { state: GameState; actions: Action[] } {
   return {
-    state: createInitialState(ctx.nickname, 0),
-    actions: [{ type: 'start', nickname: ctx.nickname, salary: rollSalary(ctx.random) }],
+    state: createInitialState(ctx.nickname),
+    actions: [{ type: 'start', nickname: ctx.nickname }],
   };
 }

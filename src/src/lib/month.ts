@@ -1,7 +1,7 @@
 import { ACCOUNT_ORDER, TRANSFER_ORDER, type AccountId, type GameState, type Won } from '@gagyebu/core';
 
 /**
- * 이번 달 계좌별 변화: 월급날 처리(자동이체, 생활비 입출금, 이자·수익) + 이번 달 선택의 계좌 변화.
+ * 이번 달 계좌별 변화: 월급날 처리(자동이체, 생활비 입금, 이자·수익) + 월말 지출(마감 뒤) + 이번 달 선택의 계좌 변화.
  * 화면 표시용 합성이며 새 금액을 계산하지 않는다.
  */
 export function monthDeltas(state: GameState): Record<AccountId, Won> {
@@ -9,7 +9,8 @@ export function monthDeltas(state: GameState): Record<AccountId, Won> {
   const p = state.payday;
   if (p) {
     for (const id of TRANSFER_ORDER) out[id] += p.transfers[id];
-    out.living += p.livingIn - p.spending - p.debtPayments;
+    // 월급 − 자동이체가 들어오고, 월말 마감 뒤에는 지출·상환이 나간다
+    out.living += p.livingIn - (p.closed ? p.spending + p.debtPayments : 0);
     for (const id of ACCOUNT_ORDER) out[id] += p.earnings[id] ?? 0;
   }
   for (const d of state.decisions) {

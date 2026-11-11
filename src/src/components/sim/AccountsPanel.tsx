@@ -1,4 +1,4 @@
-import { ACCOUNT_ORDER, ACCOUNTS, formatMan, type AccountId, type GameState, type Won } from '@gagyebu/core';
+import { ACCOUNT_ORDER, ACCOUNTS, budgetSummary, formatMan, type AccountId, type GameState } from '@gagyebu/core';
 import { Spine } from '../Spine.tsx';
 import { Money } from '../Money.tsx';
 import { monthDeltas } from '../../lib/month.ts';
@@ -52,18 +52,15 @@ export function AccountsPanel({ state, highlight }: { state: GameState; highligh
   );
 }
 
-/** 가계부 요약 한 줄: 생활비 예산과 여유분 */
+/** 가계부 요약 한 줄: 지출 예산과 남는 돈 */
 export function BudgetGlance({ state }: { state: GameState }) {
-  const budget = state.budget;
-  const living = Object.values(budget.expenses).reduce((a, b) => a + b, 0);
-  const income: Won = state.profile.salary;
+  const s = budgetSummary(state.budget, state.profile.salary);
   return (
     <p className="text-[12px] leading-relaxed text-ink-2">
-      생활비 예산 <span className="num font-semibold text-ink">{formatMan(living)}</span> + 여유분{' '}
-      <span className="num font-semibold text-ink">{formatMan(budget.livingBuffer)}</span>
+      지출 예산 <span className="num font-semibold text-ink">{formatMan(s.expenseTotal)}</span> + 남는 돈{' '}
+      <span className="num font-semibold text-ink">{formatMan(Math.max(0, s.remaining))}</span>
       <br />
-      월급 <span className="num">{formatMan(income)}</span> 중 자동이체{' '}
-      <span className="num">{formatMan(income - living - budget.livingBuffer)}</span>
+      월급 <span className="num">{formatMan(s.salary)}</span> 중 자동이체 <span className="num">{formatMan(s.transferTotal)}</span>
     </p>
   );
 }

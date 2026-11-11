@@ -48,7 +48,7 @@ export interface MonthEntryTally {
 export type GagyebuStats =
   | { kind: 'none' } // survey, survey-result, guide-*, present, 슬라이드 — 집계 없음
   | { kind: 'join'; joined: number; connected: number; nicknames: string[] }
-  | { kind: 'salary'; baseSalary: Won; salaries: Won[] } // 기준 ±10% 띠 위 점들
+  | { kind: 'salary'; salary: Won } // 모든 학생이 같은 월급
   | {
       kind: 'budget';
       savingsRates: number[]; // 학생별 저축률 (평균은 Stage에서)
@@ -303,8 +303,7 @@ export function stats(states: GameState[], beat: number, cfg: GagyebuConfig): Ga
   if (id === 'salary') {
     return {
       kind: 'salary',
-      baseSalary: states[0]?.profile.baseSalary ?? BASE_SALARY,
-      salaries: states.filter((s) => s.profile.salary > 0).map((s) => s.profile.salary),
+      salary: BASE_SALARY,
     };
   }
   if (id === 'budget') {

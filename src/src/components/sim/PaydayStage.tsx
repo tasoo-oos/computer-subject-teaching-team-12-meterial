@@ -1,4 +1,4 @@
-import { TRANSFER_ORDER, ACCOUNTS, formatMan, type GameState } from '@gagyebu/core';
+import { TRANSFER_ORDER, ACCOUNTS, formatMan, monthEndDue, type GameState } from '@gagyebu/core';
 import { useSequence } from '../../lib/motion.ts';
 import { useActBusy } from '../../lib/actBusy.tsx';
 import { Money } from '../Money.tsx';
@@ -27,21 +27,23 @@ export function PaydayStage({
     ? [
         { label: '월급 입금', sub: '회사 → 생활비 통장', amount: p.salary, tone: 'in' },
         ...TRANSFER_ORDER.map((id) => ({ label: `자동이체 → ${ACCOUNTS[id].label}`, amount: p.transfers[id], tone: 'out' as const })),
-        { label: '생활비 입금', sub: '지출 예산 + 여유분', amount: p.livingIn, tone: 'in' },
-        {
-          label: '생활비 지출',
-          sub: p.debtPayments > 0 ? `예산 집행 + 할부·카드값 ${formatMan(p.debtPayments)}` : '예산만큼 카드·현금으로 나감',
-          amount: -(p.spending + p.debtPayments),
-          tone: 'out',
-        },
         ...Object.entries(p.earnings).map(([id, v]) => ({
           label: `${ACCOUNTS[id as keyof typeof ACCOUNTS].label} 이자·수익`,
           sub: id === 'invest' ? `이번 달 수익률 ${(p.investReturnPct * 100).toFixed(0)}%` : '학습용 가정 금리',
           amount: v ?? 0,
           tone: 'in' as const,
         })),
+        // 이벤트가 없는 달·결산 달은 월급날에 바로 월말 마감까지 끝난다 — 실제로 나간 돈을 함께 보여 준다
+        ...(p.closed
+          ? [
+              { label: '생활비 지출', sub: '이번 달 지출 예산', amount: -p.spending, tone: 'out' as const },
+              ...(p.debtPayments > 0 ? [{ label: '할부·카드값', sub: '월말 결제', amount: -p.debtPayments, tone: 'out' as const }] : []),
+            ]
+          : []),
       ]
     : [];
+  // 아직 마감 전이면 월말에 나갈 돈을 예고한다
+  const due = monthEndDue(state);
   const [shown] = useSequence(lines.length, 380, 200);
   return (
     <div className="grid gap-4">
@@ -83,6 +85,20 @@ export function PaydayStage({
                 <Money value={state.accounts.living.balance} className="text-[16px] font-bold" />
               </td>
             </tr>
+            {due.total > 0 ? (
+              <tr className="border-t border-rule-soft">
+                <td className="py-2 pl-5 text-[13px] text-ink-2">
+                  월말에 나갈 돈
+                  <span className="ml-2 text-[12px] text-ink-3">
+                    지출 예산 {formatMan(due.spending)}
+                    {due.debtPayments > 0 ? ` + 할부·카드값 ${formatMan(due.debtPayments)}` : ''}
+                  </span>
+                </td>
+                <td className="py-2 pr-5 text-right">
+                  <Money value={-due.total} signed className="text-[14px] font-semibold text-ink-2" />
+                </td>
+              </tr>
+            ) : null}
           </tfoot>
         </table>
       </section>
@@ -106,8 +122,8 @@ function TutorialNote({ onNext, nextLabel }: { onNext: () => void; nextLabel?: s
         1월은 연습입니다
       </h3>
       <p className="mt-1 text-[14px] leading-relaxed text-white/85">
-        월급이 들어오면 자동이체가 먼저 돈을 나눠 두고, 생활비 통장에 남은 돈으로 한 달을 삽니다. 이 순서만 기억하면 됩니다. 2월부터는
-        예상하지 못한 일이 생깁니다.
+        월급이 들어오면 자동이체가 먼저 돈을 나눠 두고, 생활비 통장에 남은 돈으로 한 달을 삽니다. 이번 달 지출은 월말에 생활비 통장에서
+        나갑니다. 이 순서만 기억하면 됩니다. 2월부터는 예상하지 못한 일이 생깁니다.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <button type="button" onClick={onNext} disabled={busy} className="btn bg-white px-5 text-ink hover:bg-mark">

@@ -1,11 +1,7 @@
 import type { MonthNo, Won } from '../types.ts';
 
-/** 기준 평균소득 (세후). 근거 통계 확정 전 임시값 */
-export const BASE_SALARY: Won = 2_600_000;
-/** 월급 랜덤 범위 ±10% */
-export const SALARY_SPREAD = 0.1;
-/** 1만 원 단위 반올림 */
-export const SALARY_ROUND: Won = 10_000;
+/** 월급 (세후). 모든 학생이 같은 월급으로 시작한다 */
+export const BASE_SALARY: Won = 2_650_000;
 
 export const START_SATISFACTION = 60;
 export const START_CREDIT = 850;

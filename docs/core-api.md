@@ -111,11 +111,11 @@ interface FixtureUi {
 | `AccountId` | `living` 생활비, `emergency` 비상금, `savings` 적금, `invest` 투자, `goal` 목표, `housing` 청약 |
 | `TransferAccountId` | `living`을 뺀 자동이체 대상 5개 |
 | `ExpenseId` | `rent` `phone` `insurance` `transport` `subscription` (고정비), `food` `household` `beauty` `leisure` `family` (변동비) |
-| `Budget` | `{ transfers: Record<TransferAccountId, Won>, expenses: Record<ExpenseId, Won>, livingBuffer: Won }` |
-| `BudgetSummary` | `budgetSummary()` 결과: 자동이체 합계, 지출 합계, 고정/변동 합계, 생활비 입금액, 남은 금액(0이어야 확정), 저축률, 계좌별 비율 |
-| `BudgetIssue` | `over` 초과 / `under` 미달 / `negative` 음수 항목 |
+| `Budget` | `{ transfers: Record<TransferAccountId, Won>, expenses: Record<ExpenseId, Won> }` (2026-11-11: `livingBuffer` 삭제) |
+| `BudgetSummary` | `budgetSummary()` 결과: 자동이체 합계, 지출 합계, 고정/변동 합계, 생활비 입금액(지출 예산 + 남는 돈), 남는 돈 `remaining`(0 이상이어야 확정, 음수면 초과), 저축률, 계좌별 비율 |
+| `BudgetIssue` | `over` 초과 / `negative` 음수 항목 (2026-11-11: `under` 삭제 — 남는 돈은 문제가 아니다) |
 
-생활비 통장 입금액 = 지출 예산 합계 + 여유분. 월급 = 자동이체 합계 + 생활비 입금액이어야 가계부를 확정할 수 있습니다.
+자동이체 합계 + 지출 예산 합계가 월급을 넘지 않아야 가계부를 확정할 수 있습니다. 남는 돈(월급 − 자동이체 − 지출 예산)은 따로 정하지 않고 생활비 통장에 그대로 남아 다음 달로 넘어갑니다. 생활비 통장 입금액 = 월급 − 자동이체 = 지출 예산 + 남는 돈.
 
 ### 3.2 게임 상태 `GameState`
 
@@ -126,7 +126,7 @@ interface FixtureUi {
 | `survey` | 답변, 결과(유형, 점수, 추천 가계부) |
 | `initialBudget`, `budget` | 처음 확정한 가계부, 현재 가계부 |
 | `month`, `step` | 현재 월(1~12)과 그 달 안의 단계 (아래 4.2) |
-| `payday` | 이번 달 월급날 처리 내역: 자동이체, 생활비 입금·지출, 할부 상환, 이자·수익, 상태 효과, 생활비 부족분 |
+| `payday` | 이번 달 돈의 흐름(`PaydayBreakdown`): 월급날의 자동이체·생활비 입금·이자·수익·상태 효과, 월말의 지출·할부 상환·생활비 부족분. `closed`는 월말 마감 여부(마감 전 `spending`·`debtPayments`는 예정액, `livingShortfall`은 0) |
 | `accounts` | 계좌별 `{ balance, contributed, earned }` |
 | `savings` | 적금 납입 횟수, 해지 여부 |
 | `debts` | 할부·카드값·리볼빙 목록 (`remaining`, `monthly`, `monthsLeft`) |
@@ -195,8 +195,7 @@ interface Choice {
 
 | 함수 | 내용 |
 | --- | --- |
-| `rollSalary(random?, base?)` | 기준 월급 ±10%, 1만 원 단위 |
-| `createInitialState(nickname, salary)` | 시작 상태 |
+| `createInitialState(nickname)` | 시작 상태. 월급은 모든 학생이 같다(`BASE_SALARY` 265만 원, 2026-11-11: `rollSalary` 삭제) |
 | `classifySpending(answers)` | 소비 성향 유형과 점수 |
 | `recommendBudget(answers, salary)` | 추천 가계부가 담긴 `SurveyResult` |
 | `emptyBudget()`, `emptyAccounts()` | 빈 값 |
@@ -205,7 +204,7 @@ interface Choice {
 
 `useReducer(step, initial)`에 그대로 연결하는 순수 함수입니다. 구현 결정은 §4.5에 기록했다.
 
-**순수성·결정성.** `step`은 `Math.random`·`Date.now`·I/O를 쓰지 않습니다. 유일한 난수인 월급은 `start` 행동의 `salary` 값으로 **호출자가 주입**합니다(서버는 `rollSalary()`로 정해 넣고 로그에 남깁니다). 같은 `(state, action)`에 대해 항상 같은 결과를 반환하고, 원본 `state`는 고치지 않습니다. 그래서 서버 로그 재생이 곧 상태 복원입니다.
+**순수성·결정성.** `step`은 `Math.random`·`Date.now`·I/O를 쓰지 않습니다. 월급은 모두 같은 `BASE_SALARY`라 난수가 없습니다(2026-11-11 전에는 `start`의 `salary`로 주입했다). 같은 `(state, action)`에 대해 항상 같은 결과를 반환하고, 원본 `state`는 고치지 않습니다. 그래서 서버 로그 재생이 곧 상태 복원입니다.
 
 ```ts
 /** 조건을 어기면 던지는 예외 */
@@ -219,7 +218,7 @@ export type StepErrorCode =
   | 'invalid-step'     // 시뮬레이션 안 단계가 맞지 않음 (예: 장면 없는 상태에서 choose)
   | 'unknown-choice'   // 현재 장면에 없는 선택지
   | 'choice-locked'    // requires 조건을 못 채움
-  | 'budget-invalid'   // 합계가 맞지 않거나 음수 항목
+  | 'budget-invalid'   // 합계가 월급을 넘거나 음수 항목
   | 'payment-invalid'  // 지불 계획 검증 실패 (validatePayment와 같은 이유)
   | 'already-finished'; // phase 'result' 뒤의 행동 (reset 제외)
 
@@ -232,11 +231,11 @@ export function step(state: GameState, action: Action): GameState;
 
 `canStep`과 `step`은 항상 일치해야 합니다: `canStep`이 `true`를 반환하는 행동은 `step`이 예외 없이 처리하고, `false`(문구)를 반환하는 상황에서 `step`은 같은 이유의 `StepError.code`를 던집니다(§4.4 테스트).
 
-**`Action` (2026-11-09 변경).** `start`가 `salary`를 받고, 설문이 `submitSurvey` 하나로 합쳐집니다. `answer`·`finishSurvey`는 **삭제**합니다(설문은 한 화면 7문항 제출로 바뀌었고 아직 이 행동을 쓰는 코드가 없습니다). `goto`는 **유지**하되 허용 범위를 `guide → budget`로 좁힙니다(활동 전이와 `/solo`가 씁니다). `reset`은 `/solo` 전용으로 유지합니다.
+**`Action` (2026-11-09 변경, 2026-11-11 `start`의 `salary` 삭제).** 월급이 모두 같아 `start`는 닉네임만 받습니다(예전 로그의 `salary` 필드는 무시한다). 설문이 `submitSurvey` 하나로 합쳐집니다. `answer`·`finishSurvey`는 **삭제**합니다(설문은 한 화면 7문항 제출로 바뀌었고 아직 이 행동을 쓰는 코드가 없습니다). `goto`는 **유지**하되 허용 범위를 `guide → budget`로 좁힙니다(활동 전이와 `/solo`가 씁니다). `reset`은 `/solo` 전용으로 유지합니다.
 
 ```ts
 export type Action =
-  | { type: 'start'; nickname: string; salary: Won }                    // 변경: salary 필수
+  | { type: 'start'; nickname: string }                                 // 2026-11-11: salary 삭제
   | { type: 'submitSurvey'; answers: Partial<Record<QuestionId, string>> } // 신규
   | { type: 'goto'; phase: 'guide' | 'budget' }                          // 변경: 범위 축소
   | { type: 'setBudget'; budget: Budget; auto?: true }
@@ -269,7 +268,7 @@ stateDiagram-v2
         outcome --> scene: continue (이어지는 장면)
         outcome --> adjust: continue (가계부 변경)
         outcome --> report: continue (끝)
-        adjust --> report: setBudget (합계 일치)
+        adjust --> report: setBudget (월급 안)
         report --> payday: endMonth (다음 달)
     }
     sim --> result: 12월 beginMonth (결산)
@@ -279,12 +278,12 @@ stateDiagram-v2
 
 | Action | 조건 (조건 위반 = StepError) | 효과 |
 | --- | --- | --- |
-| `start { nickname, salary }` | `phase === 'start'`, `salary > 0`, 닉네임 1~10자 | `profile` 채움(월급은 행동 값 그대로), `phase: 'survey'` |
+| `start { nickname }` | `phase === 'start'`, 닉네임 1~10자 | `profile` 채움(월급은 `BASE_SALARY`), `phase: 'survey'` |
 | `submitSurvey { answers }` | `phase === 'survey'`, 7문항 모두 유효한 선택지 id | 답변 저장, `classifySpending`+`recommendBudget`으로 `survey.result`·`budget` 채움, `phase: 'guide'`. 설문 결과 화면은 `phase`와 무관하게 `survey.result`로 그린다 |
 | `goto { phase }` | `phase === 'guide'`에서만, 목표는 `'budget'` | `phase: 'budget'`. 뒤로 가기 없음 |
-| `setBudget { budget }` | `phase === 'budget'`(작성) 또는 `step === 'adjust'`(조정), 모든 항목 ≥ 0 | `budget` 교체. 조정 단계면 `budgetEdits` +1. **조정 단계에서 합계가 월급과 같으면(`isBudgetValid`) `step: 'report'`로 넘어간다** — 조정 완료는 별도의 `continue`가 아니다 |
+| `setBudget { budget }` | `phase === 'budget'`(작성) 또는 `step === 'adjust'`(조정), 모든 항목 ≥ 0 | `budget` 교체(`transfers`·`expenses`만 옮긴다). 조정 단계면 `budgetEdits` +1. **조정 단계에서 합계가 월급 안이면(`isBudgetValid`) `step: 'report'`로 넘어가며 월말 마감한다** — 조정 완료는 별도의 `continue`가 아니다 |
 | `confirmBudget` | `phase === 'budget'` + `isBudgetValid(budget, salary)` | `initialBudget` 고정, `phase: 'sim'`, `month: 1`, `step: 'payday'` |
-| `beginMonth` | `phase === 'sim'`, `step === 'payday'` | 월급날 처리(아래 순서)로 `payday` 채움. 예약 장면(`scheduled`, `when` 판정)과 배치 이벤트를 `queue`에 넣고 `current` 지정. 장면이 있으면 `step: 'scene'`, 없으면 `step: 'report'`. **12월이면**: 월급날 처리 + 적금 만기(`savingsMaturity`) + 12월 결산(`settlement`: 최종 잔고·순자산·엔딩·도전과제·가계부 전후 비교) 후 `phase: 'result'` |
+| `beginMonth` | `phase === 'sim'`, `step === 'payday'` | 월급날 처리(아래 순서)로 `payday` 채움. 예약 장면(`scheduled`, `when` 판정)과 배치 이벤트를 `queue`에 넣고 `current` 지정. 장면이 있으면 `step: 'scene'`, 없으면 `step: 'report'`(월말 마감). **12월이면**: 월급날 처리 + 월말 마감 + 적금 만기(`savingsMaturity`) + 12월 결산(`settlement`: 최종 잔고·순자산·엔딩·도전과제·가계부 전후 비교) 후 `phase: 'result'` |
 | `choose { choiceId, … }` | `step === 'scene'`, `choiceId`가 `current` 장면에 있음, `requires` 충족, `pay`면 `validatePayment` 통과, `deposit`면 `depositTo ∈ targets`, `adjustable`이면 금액이 범위 안 | 선택 효과 적용(계좌·만족도·신용·부채·상태·가계부·플래그), `lastOutcome` 생성, `decisions`에 기록(`auto` 복사). `next`가 있으면 같은 달 장면은 `queue`에, 예약은 `scheduled`에 |
 | `continue` | `step === 'outcome'` | `lastOutcome.next`가 있으면 그 장면으로(`step: 'scene'`), `budgetReason`이 있으면 `step: 'adjust'`, 둘 다 없으면 `step: 'report'` |
 | `statusAction { … }` | `phase === 'sim'`, 상태가 있고 행동이 그 상태에 정의됨, `depositTo` 필요하면 유효 | 상태 행동 적용(운동화 팔기: 시세 입금, 상태 제거), `decisions`에 기록(아래 규칙) |
@@ -299,19 +298,21 @@ stateDiagram-v2
 | `endMonth` | `step === 'report'`, `month < 12` | `history`에 `MonthRecord` 추가, `month` +1, `step: 'payday'`, `payday`·`current`·`queue`·`lastOutcome` 초기화 |
 | `reset` | 어느 phase에서든(`/solo` 전용. 수업 모드 서버는 이 행동을 보내지 않는다) | 새 초기 상태(`phase: 'start'`) |
 
-**월급날 처리 순서** (기획서 5.1~5.3, `beginMonth`가 실행): 월급 입금(생활비 통장) → 자동이체(적금은 `paidMonths` +1, 해지된 적금이면 새 적금 원금) → 생활비 입금(예산 합계 + 여유분, 유효한 가계부면 잔고와 정확히 일치) → 지출(예산 + 할부·카드값·리볼빙 상환 + 물가 상승분 `foodOverspend` 플래그) → 생활비가 모자라면 부족분은 카드값으로 넘기고(다음 달 생활비에서 빠짐) 만족도 -5, `livingShort` 플래그 → 비상금·목표·청약 이자(연율/12), 투자 월 수익률(`MARKET_RETURNS[month]`) → 상태 효과(매달 만족도), 운동화 시세 문구 갱신.
+**월급날 처리 순서** (기획서 5.1~5.3, `beginMonth`가 실행, 2026-11-11 변경): 월급 입금(생활비 통장) → 자동이체(적금은 `paidMonths` +1, 해지된 적금이면 새 적금 원금) → 이번 달 지출 예정액을 정해 둔다(`payday.spending` = 월급날 가계부의 지출 예산 + 물가 상승분 `foodOverspend` 플래그, `payday.debtPayments` = 갚을 할부·카드값 예정액) → 비상금·목표·청약 이자(연율/12), 투자 월 수익률(`MARKET_RETURNS[month]`) → 상태 효과(매달 만족도), 운동화 시세 문구 갱신. 이때 생활비 통장에는 이번 달 생활비 전체(지난달까지 남은 돈 + 월급 − 자동이체)가 있다.
+
+**월말 마감** (`step`이 `report`가 되는 순간 — `beginMonth`에 장면이 없을 때, 마지막 `continue`, 조정 완료 `setBudget`, 12월은 `beginMonth` 안에서): 할부·카드값·리볼빙 상환(이번 달에 만든 부채는 다음 달부터, `debtPaymentDue`) → 지출(`payday.spending`) → 생활비 통장이 모자라면 잔고 0, 만족도 -5, 부족분은 **카드값 부채**(`id: shortfall-<달>`, `cardBill`, 무이자, 다음 달 월말에 전액 결제)가 되고 `livingShort`·`livingShortfall` 플래그를 남긴다 → `payday.closed = true`. 한 달에 한 번만 마감한다. 달 중간에 가계부를 고쳐도 이번 달 지출은 바뀌지 않고 다음 달부터 반영된다.
 
 ### 4.3 기본값·자동 처리 함수 (신규: 2026-11-09)
 
 서버의 기본값 처리와 화면이 같은 규칙을 쓰도록 core가 제공하는 순수 함수들입니다. 근거는 계획 §2.3과 부록 A.
 
 ```ts
-/** 합계 맞추기. 남는 돈은 생활비 여유분에 넣고, 모자라면 여유분에서 뺀다.
- *  여유분이 0이 되어도 모자라면 변동비를 여가 → 의류·미용 → 생활용품 → 경조사 → 식비 순서로 줄인다.
+/** 합계 맞추기. 남는 돈은 그대로 둔다(생활비 통장에 남는다).
+ *  월급을 넘으면 변동비를 여가 → 의류·미용 → 생활용품 → 경조사 → 식비 순서로 줄인다.
  *  고정비와 자동이체는 절대 건드리지 않는다. 결과는 항상 isBudgetValid를 통과한다.
- *  changes는 학생 안내 문구용 ("남는 돈 3만 원이 생활비 여유분으로 들어갔어요"). */
+ *  changes는 학생 안내 문구용 ("월급을 넘은 3만 원을 여가·문화에서 줄였어요"). */
 export interface BudgetChange {
-  key: TransferAccountId | ExpenseId | 'livingBuffer';
+  key: TransferAccountId | ExpenseId;
   before: Won;
   after: Won;
 }
@@ -325,9 +326,9 @@ export function defaultAnswers(answers: Partial<Record<QuestionId, string>>): Re
 export function fallbackChoice(scene: Scene): Choice;
 
 /** 자동 지불 계획: 허용된 수단 중 생활비 → 비상금 → 목표 → 투자 → 적금 → 청약 순서로
- *  잔고만큼, 남으면 카드 일시불(cardMonths에 1이 있을 때, 없으면 가장 짧은 허용 개월).
- *  adjustable이면 금액 = 최솟값. 카드도 허용되지 않아 남는 금액은 shortfall로 돌려준다
- *  (생활비 부족분 규칙: 다음 달 카드값, 만족도 -5 — 엔진이 적용). */
+ *  잔고만큼(생활비는 월말에 나갈 돈을 뺀 livingSpare만큼), 남으면 카드 일시불(cardMonths에 1이 있을 때,
+ *  없으면 가장 짧은 허용 개월). adjustable이면 금액 = 최솟값. 카드도 허용되지 않아 남는 금액은
+ *  shortfall로 돌려준다. */
 export function autoPaymentPlan(state: GameState, pay: PaySpec): { plan: PaymentPlan; shortfall: Won };
 
 /** 자동 입금 계좌: 데이터의 첫 번째 입금 계좌 */
@@ -356,8 +357,8 @@ export function monthChoices(state: GameState, month: MonthNo): DecisionRecord[]
 | 아무것도 안 하는 학생 | `createInitialState`에서 시작해 모든 단계를 §4.3의 기본값 함수로만 채워 1년을 완주. 중간 어느 시점에도 `isBudgetValid` 위반 없음, 예외 없음 |
 | 기본 선택지 정합성 | `EVENTS`의 모든 장면에 `fallback: true` 선택지가 정확히 하나, `requires` 없음 (부록 A 표와 자동 대조) |
 | canStep/StepError 일치 | 무작위 행동 시퀀스에 대해 `canStep`이 `true`인 경우 `step`이 성공, 문구를 돌려주는 경우 대응하는 `code`의 `StepError` |
-| balanceBudget | 남는 돈 / 여유분으로 메우기 / 여유분 0 + 변동비 절감 순서(여가→의류·미용→생활용품→경조사→식비) / 고정비·자동이체 불변 |
-| autoPaymentPlan | 수단 순서, 잔고 한도, 카드 일시불/최소 개월, `shortfall`, adjustable 최솟값 |
+| balanceBudget | 남는 돈은 그대로 / 초과면 변동비 절감 순서(여가→의류·미용→생활용품→경조사→식비) / 고정비·자동이체 불변 |
+| autoPaymentPlan | 수단 순서, 잔고 한도(생활비는 `livingSpare`), 카드 일시불/최소 개월, `shortfall`, adjustable 최솟값 |
 | defaultAnswers | 보기 4개→2번째, 3개→2번째(중간), 이미 답한 문항 보존 |
 | validatePayment | 합계 불일치, 범위 밖 금액, 허용 밖 수단, 잔고 초과, 카드 개월 위반, 음수 |
 | monthChoices | 예약 장면이 실행된 달(4월 `check4`)에 그 달 기록으로 들어옴 |
@@ -367,11 +368,11 @@ export function monthChoices(state: GameState, month: MonthNo): DecisionRecord[]
 구현하며 명세에 없거나 모호했던 규칙. 기획서 5~6장·목업(`fixtures.ts`)과 가장 단순하게 일치하는 쪽을 골랐다.
 
 1. **`continue`와 queue**: `lastOutcome.next`도 `budgetReason`도 없으면 이번 달 `queue`에 남은 장면이 있을 때 그 장면으로 넘어가고(6월: 예약 `check6` → 배치 `rent-hike`), 비어야 `step: 'report'`가 된다. `choose`는 같은 달 연쇄를 `lastOutcome.next`에만 싣는다(queue는 월급날에만 채운다).
-2. **생활비 부족분은 자동 부채가 아니다**: 부족분은 잔고 0 + 만족도 -5 + `livingShort`·`livingShortfall` 플래그로 기록한다(목업 `runPayday`와 동일). 부족분이 실제 부채가 되는 길은 리볼빙 장면뿐이다.
-3. **물가 상승(`foodOverspend`) 플래그**: 플래그가 붙는 순간 이번 달 몫(식비 × 비율)을 즉시 생활비에서 뺀다("이번 달 식비도 이미 8% 더 나왔습니다"). 이후 매달 월급날 지출에도 같은 비율이 붙는다. 목업의 9월 수동 차감과 같은 결과가 나온다.
-4. **부채 상환**: 이번 달에 만든 부채는 다음 달 월급날부터 갚는다(`startedMonth >= m` skip). 매달 이자(할부는 연율/12, 일시불은 이자 없음)가 잔액에 붙고 상환액(`monthly`)이 그 달 이자까지 포함해 빠진다.
+2. **생활비 부족분은 카드값 부채다** (2026-11-11 변경, 이전: 플래그만 남기고 부족분은 사라졌다): 지출이 월말로 옮겨져 달 중간에 생활비 통장의 이번 달 생활비를 사건에 쓸 수 있게 됐다. 부족분이 사라지면 "생활비로 내면 공짜"가 되므로, 기획서 5장 문구("부족분은 카드로 결제되어 다음 달 생활비에서 빠지고")대로 월말 부족분을 무이자 카드값(`shortfall-<달>`, 1개월)으로 만든다. 다음 달 월말에 그 카드값까지 내지 못하면 다시 부족분 카드값이 된다(남는 돈이 없으면 할부 상환만큼 매달 늘어난다). 리볼빙 장면(10월, `when: livingShort`)은 이 카드값을 다룬다: `startRevolving { amount: 'livingShortfall' }`은 남은 부족분 카드값을 지우고 리볼빙 부채로 바꾸며, `pay.amount === 'livingShortfall'`인 지불(전액 결제)은 그 카드값을 지운다 — 이중 부채가 생기지 않는다.
+3. **물가 상승(`foodOverspend`) 플래그**: 플래그가 붙는 순간 이번 달 몫(식비 × 비율)을 즉시 생활비 통장에서 뺀다("이번 달 식비도 이미 8% 더 나왔습니다"). 통장에 없는 몫은 이번 달 월말 지출(`payday.spending`)에 더해 월말 부족분으로 처리된다. 이후 매달 월말 지출에도 같은 비율이 붙는다.
+4. **부채 상환**: 월말 마감 때 갚는다. 이번 달에 만든 부채는 다음 달 월말부터 갚는다(`startedMonth >= m` skip). 매달 이자(할부는 연율/12, 일시불은 이자 없음)가 잔액에 붙고 상환액(`monthly`)이 그 달 이자까지 포함해 빠진다.
 5. **적금 출금 = 중도해지**: 지불 계획에 `savings` 부분이 있으면 적금이 해지된다(`broken`, 이후 이자 연 0.5%). 이후 적금 자동이체는 `restartedPrincipal`에 쌓인다. coin-room `allIn`의 `breakSavings` 효과와 같은 처리를 공유한다.
-6. **오류 코드 배정**: `start`의 인자(닉네임 1~10자, 월급 양의 정수)와 `submitSurvey`의 답안 검증 실패는 `invalid-phase`(별도 코드가 없다). `depositTo` 누락·범위 밖, `fixedPay` 잔고 부족, adjustable 금액 위반은 `payment-invalid`. `statusAction`의 상태/행동이 없으면 `invalid-step`.
+6. **오류 코드 배정**: `start`의 인자(닉네임 1~10자)와 `submitSurvey`의 답안 검증 실패는 `invalid-phase`(별도 코드가 없다). `depositTo` 누락·범위 밖, `fixedPay` 잔고 부족, adjustable 금액 위반은 `payment-invalid`. `statusAction`의 상태/행동이 없으면 `invalid-step`.
 7. **adjustable 지불**: `choose` 검증에서 `action.amount`가 범위·단위에 맞고 지불 계획 합계와 같은지 본다. `validatePayment`는 공개 시그니처에 amount가 없으므로 계획 합계의 범위·단위만 검사한다.
 8. **도전과제 계산 규칙** (엔진이 자동 계산해 `unlocked`에 반영):
    - 선저축 1년: **적금+투자+청약** 자동이체 합계 ≥ 월급의 20%인 월급날이 12회 모두 있어야 한다(청약은 저축성 상품이라 포함, 비상금·목표는 제외).
@@ -381,12 +382,17 @@ export function monthChoices(state: GameState, month: MonthNo): DecisionRecord[]
    - 사기 감별사: 3건의 사기 이벤트를 모두 겪고 `fraudHit` 선택이 없으면 달성.
    - 비상금 지킴이: 비상금을 쓴 시점 잔고를 목표로 저장해 두었다가 다시 채우면 달성.
    - 나머지(든든한 비상금, 가계부 리모델링, 협상의 기술, 적금 완주, 마음 부자, 할부 없는 1년, 흔들리지 않는 투자자)는 각 조건이 처음 참이 되는 순간(혹은 결산)에 달성.
-9. **목업과의 의도적 차이**: 하늘 경로의 5월 만족도는 선택지 효과(+5)를 따른다(목업은 +8로 적어 둠). 바다의 도전과제 목록은 규칙대로 다시 계산했다 — 적금 완주·비상금 지킴이 달성, 선저축 1년 미달(목업 손글씨 목록은 `paySelfFirst`만 적혀 있음). **순자산·엔딩·부채는 두 골든 경로 모두 목업과 정확히 일치한다**(골든 테스트는 5만 원 이내 오차를 허용하지만 실측 오차 0).
-10. **기본값만 고른 학생**: 현재 임시 수치에서는 어떤 월급·답안 조합이든 2월 기본값 `splurge`(12개월 할부) 잔여 2개월 때문에 늘 '빚과의 동거'로 끝난다. 리허설에서 수치를 조정할 때의 기준점으로 삼는다.
+9. **목업과의 의도적 차이**: 하늘 경로의 5월 만족도는 선택지 효과(+5)를 따른다(목업은 +8로 적어 둠). 바다의 도전과제 목록은 규칙대로 다시 계산했다 — 적금 완주·비상금 지킴이 달성, 선저축 1년 미달(목업 손글씨 목록은 `paySelfFirst`만 적혀 있음). **순자산·엔딩·부채는 두 골든 경로 모두 목업과 정확히 일치한다**(골든 테스트는 5만 원 이내 오차를 허용하지만 실측 오차 0, 2026-11-11 월말 지출 변경 뒤에도 0).
+10. **기본값만 고른 학생**: 현재 임시 수치에서는 어떤 답안 조합이든 2월 기본값 `splurge`(12개월 할부) 잔여 2개월 때문에 늘 '빚과의 동거'로 끝난다. 리허설에서 수치를 조정할 때의 기준점으로 삼는다.
 11. **balanceBudget 극단 경우**: 변동비를 모두 줄여도 모자라면(현 데이터로는 불가능) 자동이체에서 충당해 항상 `isBudgetValid`를 통과시킨다.
 12. **만료 상태**: `addStatus`의 `months`는 `until = 시작 달 + months`로 기록하고, 월급날에 만료 달이 지나면 제거한다. 이번 달에 생긴 상태의 매달 효과는 다음 달부터(`since < m`).
 13. **`submitSurvey`의 `auto?: true`**: live-api §9.3이 기본값 처리 표시로 붙여 보낸다. `step`은 이를 무시한다(선택 기록에만 `auto`가 의미를 가진다). 타입에 필드를 추가했다.
 14. **부채 델타의 표시 이름** (2026-11-09 추가): `pay` 선택지에서 카드로 낸 몫이 부채로 기록될 때, 부채와 `{ kind: 'debt' }` 델타의 `label`은 선택지 문구를 그대로 쓰지 않고 부채임을 드러내는 이름을 쓴다 — **`카드 일시불 — <선택지 문구>`**(1개월), **`카드 N개월 할부 — <선택지 문구>`**(2개월 이상). 결과 화면이 부채 델타를 음수(`-N원`)로 표시하기 때문에 "선택지 문구 -250,000원"은 즉시 청구처럼 읽히는 문제가 있었다. `fixedPay`는 데이터의 `fixedPay.label`(예: "12개월 할부 (수수료 연 15%), 매달 약 26.8만 원")을, 리볼빙은 "리볼빙 (일부결제금액 이월약정)"을 그대로 쓴다(이미 부채 전용 문구다).
+15. **같은 월급 · 월말 지출 · 여유분 삭제** (2026-11-11, 운영 전 마지막 손질):
+    - 월급은 모든 학생이 `BASE_SALARY`(265만 원)로 같다. `rollSalary`·`SALARY_SPREAD`·`SALARY_ROUND`·`profile.baseSalary`·`start.salary`를 지웠다. 서버 `init`은 난수를 쓰지 않는다.
+    - 생활비 지출은 월급날이 아니라 **월말 마감**에 나간다(§4.2). 그래서 달 중간 생활비 통장에는 이번 달 생활비 전체가 보이고, 월말에 지출 예산이 빠진 뒤 남는 돈만 다음 달로 넘어간다. 예전에는 월급날에 한 달 지출을 한꺼번에 빼서 잔고가 늘 여유분(대개 0)이었다.
+    - `Budget.livingBuffer`(생활비 여유분)를 지웠다. 여유분은 "합계가 월급과 같아야 한다"는 규칙 때문에만 있던 칸이었다. 이제 합계는 월급 이하면 되고, 남는 돈은 생활비 통장에 그대로 남는다. 예전 로그·초안의 `livingBuffer` 필드는 `setBudget`이 버린다.
+    - 골든 경로의 바다 가계부는 같은 이야기(9월에 처음 생활비가 모자라 10월 리볼빙)가 되도록 월급 265만 원에 맞춰 다시 정했다(남는 돈 12만 원). 하늘은 추천 가계부 그대로다.
 
 ## 5. 선택자와 표기 (`selectors.ts`, `format.ts`)
 
@@ -395,6 +401,9 @@ export function monthChoices(state: GameState, month: MonthNo): DecisionRecord[]
 | `budgetSummary(budget, salary)` | `BudgetSummary` |
 | `budgetIssues(budget, salary)` / `isBudgetValid(...)` | 문제 목록 / 확정 가능 여부 |
 | `expenseTotal(budget)` / `transferTotal(budget)` | 합계 |
+| `debtPaymentDue(debt, month)` | 이 부채가 그 달 월말에 빠지는 금액(이번 달에 만든 부채는 0) |
+| `monthEndDue(state)` | 이번 달 월말에 생활비 통장에서 나갈 `{ spending, debtPayments, total }`. 월급날 전·마감 뒤에는 0 |
+| `livingSpare(state)` | 월말에 나갈 돈을 빼고도 생활비 통장에 남는 돈(0 이상). 지불 패널 경고와 자동 지불 계획이 쓴다 |
 | `netWorth(state)` | 계좌 합 + 보유 운동화 시세 - 부채 |
 | `totalDebt(state)` | 남은 부채 |
 | `emergencyMonths(state)` | 비상금 ÷ 월 지출 예산 |
@@ -460,7 +469,7 @@ await navigator.clipboard.writeText(text);
 | `survey-result` | survey | 소비 성향 결과 | 유형(균형형) + 한 줄 피드백 + 추천 가계부 미리보기 |
 | `guide-1` | guide | 안내 카드 1 | 카드 6장 중 첫 장 |
 | `guide-3` | guide | 안내 카드 3 (통장 쪼개기) | 계좌 6종 소개가 들어가는 가장 정보가 많은 카드 |
-| `budget-ok` | budget | 추천 가계부 (합계 일치) | 합계 = 월급. 다음 단계 버튼 활성 |
+| `budget-ok` | budget | 추천 가계부 (합계 일치) | 합계 ≤ 월급. 남는 돈은 생활비 통장에. 다음 단계 버튼 활성 |
 | `budget-over` | budget | 가계부 초과 | 자동이체를 늘려 12만 원 초과. 경고와 비활성 버튼 |
 | `sim-jan-payday` | sim | 1월 월급날 (튜토리얼) | 월급 입금 → 자동이체 → 생활비 사용 → 이자 순서 연출. 계좌 카드 숫자 증가 |
 | `sim-feb-scene` | sim | 2월 노트북 고장 | 장면 카드 + 선택지 4개 (지불형, 연쇄, 고정 지불형, 무지출형). 비상금 약 52만 원 < 수리비 60만 원 |

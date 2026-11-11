@@ -9,9 +9,10 @@ import {
   ENDINGS,
   EVENT_TYPE_LABEL,
   GUIDE_CARDS,
-  SALARY_SPREAD,
+  BASE_SALARY,
   eventForMonth,
   formatMan,
+  formatWon,
   formatPct,
   monthLabel,
   type AccountId,
@@ -46,7 +47,7 @@ export function Stage(props: StageProps<GameState | null, GagyebuStats>) {
       />
     );
   }
-  if (id === 'salary') return <SalaryStage stats={stats} />;
+  if (id === 'salary') return <SalaryStage />;
   if (id === 'survey') return <SurveyStage progress={progress} />;
   if (id === 'survey-result') return <SurveyResultStage />;
   const guide = /^guide-(\d+)$/.exec(id);
@@ -237,32 +238,11 @@ function ChoiceListTV({ choices }: { choices: Choice[] }) {
 
 // ── 비트별 화면 ──────────────────────────────────────────────────────────────
 
-function SalaryStage({ stats }: { stats: GagyebuStats | null }) {
-  const base = stats?.kind === 'salary' ? stats.baseSalary : null;
-  const salaries = stats?.kind === 'salary' ? stats.salaries : [];
-  const lo = (base ?? 0) * (1 - SALARY_SPREAD);
-  const hi = (base ?? 0) * (1 + SALARY_SPREAD);
+function SalaryStage() {
   return (
-    <StageShell kicker="월급 공개" title="반의 월급">
-      <p className="max-w-[1300px] text-[30px] leading-relaxed text-ink-2">
-        월급은 기준 월급 {base ? formatMan(base) : '—'}의 ±{Math.round(SALARY_SPREAD * 100)}% 안에서 정해졌어요.
-        누구의 월급인지는 나오지 않습니다. 월급이 달라도 결과의 차이는 운이 아니라 선택에서 나옵니다.
-      </p>
-      <div className="mt-[48px]">
-        {base ? (
-          <DotBand
-            values={salaries}
-            lo={lo}
-            hi={hi}
-            loLabel={formatMan(lo)}
-            midLabel={`기준 ${formatMan(base)}`}
-            midValue={base}
-            hiLabel={formatMan(hi)}
-          />
-        ) : (
-          <StatsPending what="월급" />
-        )}
-      </div>
+    <StageShell kicker="월급 공개" title="모두의 첫 월급">
+      <p className="num text-[160px] leading-none font-bold tracking-tight text-in">{formatWon(BASE_SALARY)}</p>
+      <p className="mt-[32px] text-[34px] text-ink-2">세후 실수령 · 모든 학생이 같은 월급으로 시작합니다.</p>
     </StageShell>
   );
 }
@@ -374,7 +354,7 @@ function BudgetStage({ revealed, stats, progress }: { revealed: boolean; stats: 
       <StageShell kicker="가계부 작성" title="가계부 작성 중">
         <div className="grid gap-8">
           <p className="max-w-[1300px] text-[30px] leading-relaxed text-ink-2">
-            월급을 남김없이 나누는 중이에요. 자동이체로 먼저 떼어 둘 돈과 생활비 통장에서 쓸 돈을 정합니다.
+            월급을 어디에 얼마씩 쓸지 나누는 중이에요. 자동이체로 먼저 떼어 둘 돈과 생활비 통장에서 쓸 돈을 정합니다.
           </p>
           <ProgressTiles progress={progress} label="확정" />
           <p className="text-[28px] text-ink-3">공개하면 평균 저축률과 계좌별 배분 분포를 보여 줘요.</p>
@@ -604,7 +584,6 @@ function SettlementStage({ revealed, stats }: { revealed: boolean; stats: Gagyeb
   );
 }
 
-/** 발표 비트: 지정한 학생의 결과 크게 (닉네임은 발표뿐 — PresentationView 안에 있다) */
 /** 발표 비트: 지정한 학생의 결과 크게. 닉네임은 발표 때만 TV에 나온다(계획 §0).
  *  닉네임은 서버가 주는 spotlightName(§14 #132 — rename 반영)을 우선하고, 없으면 상태의 profile.nickname. */
 function PresentStage({ spotlight, spotlightName }: { spotlight: GameState | null; spotlightName: string | null }) {

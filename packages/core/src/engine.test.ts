@@ -1,9 +1,9 @@
 // step 엔진 단위 테스트: 상태 전이, 월급날 처리, 부채·상태·적금, 결산, StepError 코드.
 import { describe, expect, it } from 'vitest';
-import { canStep, createInitialState, defaultAnswers, step, StepError } from './engine.ts';
-import { getScene, totalDebt } from './selectors.ts';
+import { autoPaymentPlan, canStep, createInitialState, defaultAnswers, step, StepError } from './engine.ts';
+import { getScene, livingSpare, monthEndDue, totalDebt } from './selectors.ts';
 import { cloneBudget, deepFreeze, fallbackStep } from './testUtils.ts';
-import type { Action, Budget, GameState, QuestionId, Won } from './types.ts';
+import type { Action, Budget, GameState, QuestionId } from './types.ts';
 
 /** 균형형(점수 4)이 나오는 명시적 답안 — 추천 가계부 수치를 손으로 계산해 두었다 */
 const BALANCED_ANSWERS: Partial<Record<QuestionId, string>> = {
@@ -17,9 +17,9 @@ const BALANCED_ANSWERS: Partial<Record<QuestionId, string>> = {
 };
 
 /** 추천 가계부(균형형 답안)로 시뮬레이션 시작 상태를 만든다 */
-function start(salary: Won = 2_600_000, budget?: Budget): GameState {
-  let s = createInitialState('테스터', salary);
-  s = step(s, { type: 'start', nickname: '테스터', salary });
+function start(budget?: Budget): GameState {
+  let s = createInitialState('테스터');
+  s = step(s, { type: 'start', nickname: '테스터' });
   s = step(s, { type: 'submitSurvey', answers: BALANCED_ANSWERS });
   s = step(s, { type: 'goto', phase: 'budget' });
   if (budget) s = step(s, { type: 'setBudget', budget });
@@ -61,13 +61,13 @@ function runFallbackUntilScene(s: GameState, sceneId: string): GameState {
 
 describe('상태 전이 (phase)', () => {
   it('start → survey → guide → budget → sim 순서로만 간다', () => {
-    let s = createInitialState('', 0);
+    let s = createInitialState('');
     expect(() => step(s, { type: 'submitSurvey', answers: {} })).toThrow(StepError);
-    s = step(s, { type: 'start', nickname: '하늘', salary: 2_600_000 });
+    s = step(s, { type: 'start', nickname: '하늘' });
     expect(s.phase).toBe('survey');
-    expect(s.profile).toEqual({ nickname: '하늘', salary: 2_600_000, baseSalary: 2_600_000 });
+    expect(s.profile).toEqual({ nickname: '하늘', salary: 2_650_000 }); // 월급은 모두 같다
     expect(() => step(s, { type: 'goto', phase: 'budget' })).toThrow(StepError); // survey에서 goto 불가
-    expect(() => step(s, { type: 'start', nickname: '둘', salary: 100 })).toThrow(StepError); // 이미 start 아님
+    expect(() => step(s, { type: 'start', nickname: '둘' })).toThrow(StepError); // 이미 start 아님
     s = step(s, { type: 'submitSurvey', answers: defaultAnswers({}) });
     expect(s.phase).toBe('guide');
     expect(s.survey.result?.type).toBe('planner'); // 중간 답 7문항의 점수는 1 → 계획형
@@ -81,13 +81,11 @@ describe('상태 전이 (phase)', () => {
     expect(s.initialBudget).toEqual(s.budget);
   });
 
-  it('start 인자 검증: 닉네임 1~10자, 월급 양의 정수', () => {
-    const s = createInitialState('', 0);
+  it('start 인자 검증: 닉네임 1~10자', () => {
+    const s = createInitialState('');
     const bad: Action[] = [
-      { type: 'start', nickname: '', salary: 2_600_000 },
-      { type: 'start', nickname: '열글자를넘는닉네임입니다', salary: 2_600_000 },
-      { type: 'start', nickname: '하늘', salary: 0 },
-      { type: 'start', nickname: '하늘', salary: -1 },
+      { type: 'start', nickname: '' },
+      { type: 'start', nickname: '열글자를넘는닉네임입니다' },
     ];
     for (const action of bad) {
       expect(canStep(s, action)).not.toBe(true);
@@ -101,8 +99,8 @@ describe('상태 전이 (phase)', () => {
   });
 
   it('작성 단계에서는 합계가 안 맞는 가계부도 저장되고, 확정은 합계 일치만', () => {
-    let s = createInitialState('테스터', 2_600_000);
-    s = step(s, { type: 'start', nickname: '테스터', salary: 2_600_000 });
+    let s = createInitialState('테스터');
+    s = step(s, { type: 'start', nickname: '테스터' });
     s = step(s, { type: 'submitSurvey', answers: defaultAnswers({}) });
     s = step(s, { type: 'goto', phase: 'budget' });
     const over = cloneBudget(s.budget);
@@ -153,45 +151,82 @@ describe('상태 전이 (phase)', () => {
 });
 
 describe('월급날 처리', () => {
-  it('월급 → 자동이체 → 생활비 지출 → 이자 순서대로 반영한다 (1월, 추천 가계부)', () => {
-    // 중간 답 균형형 추천: 이체 96만(비상금 26·적금 39·투자 13·목표 8·청약 10), 지출 161만, 여유분 3만
+  it('월급날: 월급 → 자동이체 → 이자. 생활비는 통장에 남았다가 월말에 지출된다 (1월, 추천 가계부)', () => {
+    // 균형형 추천 (월급 265만): 이체 98만(비상금 27·적금 40·투자 13·목표 8·청약 10), 지출 161만, 남는 돈 6만
     let s = start();
     s = step(s, { type: 'beginMonth' });
     expect(s.step).toBe('scene'); // 1월 튜토리얼 장면
     const p = s.payday!;
     expect(p.month).toBe(1);
-    expect(p.salary).toBe(2_600_000);
-    expect(p.transfers).toEqual({ emergency: 260_000, savings: 390_000, invest: 130_000, goal: 80_000, housing: 100_000 });
-    expect(p.livingIn).toBe(1_640_000);
-    expect(p.spending).toBe(1_610_000);
+    expect(p.salary).toBe(2_650_000);
+    expect(p.transfers).toEqual({ emergency: 270_000, savings: 400_000, invest: 130_000, goal: 80_000, housing: 100_000 });
+    expect(p.livingIn).toBe(1_670_000);
+    expect(p.spending).toBe(1_610_000); // 월말에 나갈 예정액
     expect(p.debtPayments).toBe(0);
     expect(p.investReturnPct).toBe(0);
     expect(p.livingShortfall).toBe(0);
-    expect(s.accounts.living.balance).toBe(30_000);
-    expect(s.accounts.emergency.balance).toBe(260_000 + Math.round((260_000 * 0.02) / 12));
-    expect(s.accounts.savings.balance).toBe(390_000);
-    expect(s.accounts.savings.contributed).toBe(390_000);
+    expect(p.closed).toBe(false);
+    // 달 중간: 이번 달 생활비 전체가 생활비 통장에 있다
+    expect(s.accounts.living.balance).toBe(1_670_000);
+    expect(monthEndDue(s)).toEqual({ spending: 1_610_000, debtPayments: 0, total: 1_610_000 });
+    expect(livingSpare(s)).toBe(60_000);
+    expect(s.accounts.emergency.balance).toBe(270_000 + Math.round((270_000 * 0.02) / 12));
+    expect(s.accounts.savings.balance).toBe(400_000);
+    expect(s.accounts.savings.contributed).toBe(400_000);
     expect(s.accounts.invest.balance).toBe(130_000);
     expect(s.savings.paidMonths).toBe(1);
+    // 월말(리포트로 넘어갈 때): 지출 예산이 나가고 남는 돈만 남는다
+    s = step(s, { type: 'choose', choiceId: 'ok' });
+    s = step(s, { type: 'continue' });
+    expect(s.step).toBe('report');
+    expect(s.payday!.closed).toBe(true);
+    expect(s.accounts.living.balance).toBe(60_000);
+    expect(monthEndDue(s).total).toBe(0);
+    // 남는 돈은 다음 달로 넘어간다
+    s = step(s, { type: 'endMonth' });
+    s = step(s, { type: 'beginMonth' });
+    expect(s.accounts.living.balance).toBe(60_000 + 1_670_000);
   });
 
-  it('생활비가 모자라면 잔고는 0, 만족도 -5, 플래그 기록 (자동 부채는 없음)', () => {
-    // 여유분 3만을 여가로 옮겨 여유분 0 + splurge 상환으로 부족을 만든다
+  it('월말 생활비가 모자라면 잔고 0, 만족도 -5, 부족분은 카드값(다음 달 월말 결제)이 된다', () => {
+    // 남는 돈 6만을 여가로 옮겨 남는 돈 0 + splurge 상환으로 부족을 만든다
     const b = cloneBudget(start().budget);
-    b.livingBuffer = 0;
-    b.expenses.leisure += 30_000;
-    let s = toFeb(start(2_600_000, b)); // 2월 장면
+    b.expenses.leisure += 60_000;
+    let s = toFeb(start(b)); // 2월 장면
     s = step(s, { type: 'choose', choiceId: 'splurge' });
     s = step(s, { type: 'continue' });
     s = step(s, { type: 'endMonth' });
-    s = step(s, { type: 'beginMonth' }); // 3월: 첫 상환
-    expect(s.payday!.debtPayments).toBe(268_333);
+    s = step(s, { type: 'beginMonth' }); // 3월: 첫 상환은 월말
+    expect(s.payday!.debtPayments).toBe(268_333); // 예정액
+    expect(s.accounts.living.balance).toBe(1_670_000);
+    expect(s.flags.livingShort).toBe(false); // 2월 월말은 모자라지 않았다
+    s = step(s, { type: 'choose', choiceId: 'pass' });
+    s = step(s, { type: 'continue' }); // → report (월말 마감)
     expect(s.accounts.living.balance).toBe(0);
     expect(s.payday!.livingShortfall).toBe(268_333);
     expect(s.flags.livingShort).toBe(true);
     expect(s.flags.livingShortfall).toBe(268_333);
     expect(s.satisfaction).toBe(58); // 60 + 3(splurge) - 5(부족)
-    expect(s.debts).toHaveLength(1); // 부족분이 부채로 늘지 않는다
+    const bill = s.debts.find((d) => d.id === 'shortfall-3')!;
+    expect(bill).toMatchObject({ kind: 'cardBill', remaining: 268_333, monthly: 268_333, monthsLeft: 1, annualRate: 0, startedMonth: 3 });
+    // 4월 월말: 할부 + 3월 부족분 카드값을 함께 낸다 — 남는 돈이 없으면 부족분이 다시 카드값이 된다
+    s = step(s, { type: 'endMonth' });
+    s = step(s, { type: 'beginMonth' }); // 4월(조용한 달) → 바로 월말 마감
+    expect(s.step).toBe('report');
+    expect(s.payday!.debtPayments).toBe(268_333 + 268_333);
+    expect(s.payday!.livingShortfall).toBe(268_333 + 268_333);
+    expect(s.debts.some((d) => d.id === 'shortfall-3')).toBe(false);
+    expect(s.debts.find((d) => d.id === 'shortfall-4')!.remaining).toBe(536_666);
+  });
+
+  it('생활비 통장에서 꺼내 쓴 만큼 월말에 모자라면 카드값이 된다', () => {
+    let s = toFeb(start()); // 2월: 생활비 통장 = 6만(1월 남는 돈) + 167만
+    expect(livingSpare(s)).toBe(120_000);
+    s = step(s, { type: 'choose', choiceId: 'repair', payment: { parts: [{ source: 'living', amount: 600_000 }] } });
+    s = step(s, { type: 'continue' });
+    expect(s.step).toBe('report');
+    expect(s.payday!.livingShortfall).toBe(480_000);
+    expect(s.debts.find((d) => d.id === 'shortfall-2')!.remaining).toBe(480_000);
   });
 
   it('장면 없는 달은 report로, endMonth로 다음 달로', () => {
@@ -229,7 +264,10 @@ describe('부채 (할부·카드값·리볼빙)', () => {
     });
     s = step(s, { type: 'continue' });
     s = step(s, { type: 'endMonth' });
-    s = step(s, { type: 'beginMonth' }); // 3월 첫 상환 (이자 35,000원 포함)
+    s = step(s, { type: 'beginMonth' }); // 3월: 상환은 월말
+    expect(s.debts[0]!.remaining).toBe(2_800_000);
+    s = step(s, { type: 'choose', choiceId: 'pass' });
+    s = step(s, { type: 'continue' }); // 3월 월말 첫 상환 (이자 35,000원 포함)
     expect(s.debts[0]!.remaining).toBe(2_800_000 + 35_000 - 268_333);
     expect(s.debts[0]!.monthsLeft).toBe(11);
   });
@@ -268,9 +306,16 @@ describe('부채 (할부·카드값·리볼빙)', () => {
     expect(s.debts[0]!.annualRate).toBe(0);
     s = step(s, { type: 'continue' });
     s = step(s, { type: 'endMonth' });
-    s = step(s, { type: 'beginMonth' }); // 3월: 전액 결제
-    expect(s.debts).toHaveLength(0);
+    s = step(s, { type: 'beginMonth' }); // 3월: 월말에 전액 결제
+    expect(s.payday!.debtPayments).toBe(600_000); // 예정액
+    expect(s.debts).toHaveLength(1);
+    s = step(s, { type: 'choose', choiceId: 'pass' });
+    s = step(s, { type: 'continue' });
+    expect(s.debts.some((d) => d.sourceEventId === 'laptop-spill')).toBe(false); // 카드값은 다 냈다
     expect(s.payday!.debtPayments).toBe(600_000);
+    // 남는 돈(1·2월 12만)보다 큰 카드값이라 3월 생활비가 42만 원 모자라 다시 카드값이 된다
+    expect(s.payday!.livingShortfall).toBe(420_000); // 179만 − 161만 − 60만
+    expect(s.debts.map((d) => d.id)).toEqual(['shortfall-3']);
     expect(s.flags.usedInstallment).toBeUndefined(); // 일시불은 '할부 없는 1년'을 깨지 않는다
   });
 
@@ -279,21 +324,20 @@ describe('부채 (할부·카드값·리볼빙)', () => {
     s = step(s, { type: 'choose', choiceId: 'repair', payment: { parts: [{ source: 'savings', amount: 600_000 }] } });
     expect(s.savings.broken).toBe(true);
     expect(s.savings.brokenMonth).toBe(2);
-    expect(s.accounts.savings.balance).toBe(780_000 - 600_000);
+    expect(s.accounts.savings.balance).toBe(800_000 - 600_000);
     s = step(s, { type: 'continue' });
     s = step(s, { type: 'endMonth' });
     s = step(s, { type: 'beginMonth' }); // 3월
     expect(s.savings.paidMonths).toBe(2); // 해지 전 납입 횟수 그대로
-    expect(s.savings.restartedPrincipal).toBe(390_000);
+    expect(s.savings.restartedPrincipal).toBe(400_000);
     expect(runFallbackYear(s).unlocked).not.toContain('savingsComplete');
   });
 
   it('리볼빙: 매달 10% 상환, 연 18% 이자, 신용 -40', () => {
-    // 여유분 0 가계부 + splurge로 매달 생활비 부족 → 10월 리볼빙 장면
+    // 남는 돈 0 가계부 + splurge로 매달 생활비 부족 → 10월 리볼빙 장면
     const b = cloneBudget(start().budget);
-    b.livingBuffer = 0;
-    b.expenses.leisure += 30_000;
-    const s = runFallbackYear(start(2_600_000, b));
+    b.expenses.leisure += 60_000;
+    const s = runFallbackYear(start(b));
     expect(s.decisions.some((d) => d.choiceId === 'revolve')).toBe(true);
     const revolving = s.debts.find((d) => d.kind === 'revolving');
     expect(revolving).toBeDefined();
@@ -301,6 +345,31 @@ describe('부채 (할부·카드값·리볼빙)', () => {
     expect(revolving!.monthly).toBe(Math.round(revolving!.principal * 0.1));
     expect(s.credit).toBe(810); // 850 - 40
     expect(s.statuses.some((x) => x.id === 'revolving')).toBe(true);
+    // 리볼빙으로 돌린 9월 부족분 카드값은 리볼빙 부채로 바뀐다 (이중 부채 없음)
+    expect(s.debts.some((d) => d.id === 'shortfall-9')).toBe(false);
+  });
+  it('리볼빙 대신 다른 계좌로 전액 결제하면 9월 부족분 카드값이 끝난다', () => {
+    const b = cloneBudget(start().budget);
+    b.expenses.leisure += 60_000;
+    let s = runFallbackUntilScene(start(b), 'revolving'); // 10월
+    const bill = s.debts.find((d) => d.id === 'shortfall-9')!;
+    expect(bill.remaining).toBe(s.flags.livingShortfall);
+    const payFull = getScene(s.current!).scene.choices.find((c) => c.id === 'payFull')!;
+    const { plan, shortfall } = autoPaymentPlan(s, payFull.pay!);
+    expect(shortfall).toBe(0);
+    s = step(s, { type: 'choose', choiceId: 'payFull', payment: plan });
+    expect(s.debts.some((d) => d.id === 'shortfall-9')).toBe(false);
+    expect(s.debts.some((d) => d.kind === 'revolving')).toBe(false);
+  });
+
+  it('자동 지불 계획은 생활비 통장에서 월말에 나갈 돈을 뺀 만큼만 쓴다', () => {
+    let s = start();
+    s = step(s, { type: 'beginMonth' }); // 1월: 생활비 167만 중 161만은 월말 지출
+    const { plan } = autoPaymentPlan(s, { amount: 100_000, sources: ['living', 'emergency'] });
+    expect(plan.parts).toEqual([
+      { source: 'living', amount: 60_000 },
+      { source: 'emergency', amount: 40_000 },
+    ]);
   });
 });
 
@@ -473,9 +542,8 @@ describe('장면 그래프 (연쇄·예약·조건)', () => {
 
   it('entryVariants: 투자 잔고가 0이면 dropNoInvest 장면으로', () => {
     const b = cloneBudget(start().budget);
-    b.transfers.invest = 0;
-    b.livingBuffer += 130_000;
-    let s = start(2_600_000, b);
+    b.transfers.invest = 0; // 남는 돈은 생활비 통장에
+    let s = start(b);
     s = runFallbackUntilScene(s, 'dropNoInvest'); // 8월
     // tipStock: 카드 3개월 부채 + invest +50만 후 반 토막 -25만 → 25만 (음수 계좌 없음)
     s = step(s, { type: 'choose', choiceId: 'tipStock' });
@@ -551,11 +619,13 @@ describe('12월 결산', () => {
     expect(st.achievements).toHaveLength(13);
     expect(new Set(st.achievements.map((a) => a.id)).size).toBe(13);
     // 가계부 전후 비교: 기본값 경로에서 바뀐 항목은 rent(+7만)과 그 절감 출처뿐
-    expect(st.budgetDiff.map((d) => d.key).sort()).toEqual(['leisure', 'livingBuffer', 'rent']);
+    expect(st.budgetDiff.map((d) => d.key).sort()).toEqual(['leisure', 'rent']);
   });
 
-  it('adjust 단계에서 합계가 맞아야 report로 넘어간다 (조정 완료는 setBudget이다)', () => {
-    let s = start();
+  it('adjust 단계에서 합계가 월급 안이어야 report로 넘어간다 (조정 완료는 setBudget이다)', () => {
+    const b = cloneBudget(start().budget);
+    b.expenses.leisure += 60_000; // 남는 돈 0 — 월세가 오르면 월급을 넘는다
+    let s = start(b);
     s = step(s, { type: 'beginMonth' }); // 1월
     s = step(s, { type: 'choose', choiceId: 'ok' });
     s = step(s, { type: 'continue' });
@@ -584,11 +654,11 @@ describe('12월 결산', () => {
     s = step(s, { type: 'continue' });
     expect(s.step).toBe('adjust');
     expect(s.lastOutcome!.budgetReason).toContain('5만 원');
-    // 합계가 맞지 않은 채 제출 → 여전히 adjust
+    // 월급을 넘은 채 제출 → 여전히 adjust
     s = step(s, { type: 'setBudget', budget: cloneBudget(s.budget) });
     expect(s.step).toBe('adjust');
     expect(s.budgetEdits).toBe(1);
-    // 여가 5만 절감 → 합계 일치 → report (조정 완료는 별도 continue가 아니다)
+    // 여가 5만 절감 → 월급 안 → report (조정 완료는 별도 continue가 아니다)
     const fixed = cloneBudget(s.budget);
     fixed.expenses.leisure -= 50_000;
     s = step(s, { type: 'setBudget', budget: fixed });
@@ -602,7 +672,7 @@ describe('StepError 코드 (canStep과 step이 같은 판정)', () => {
   it('각 오류 상황이 문서의 코드로 나온다', () => {
     const s = start();
     const cases: { action: Action; code: string }[] = [
-      { action: { type: 'start', nickname: 'x', salary: 100 }, code: 'invalid-phase' },
+      { action: { type: 'start', nickname: 'x' }, code: 'invalid-phase' },
       { action: { type: 'submitSurvey', answers: {} }, code: 'invalid-phase' },
       { action: { type: 'goto', phase: 'budget' }, code: 'invalid-phase' },
       { action: { type: 'confirmBudget' }, code: 'invalid-phase' },
@@ -633,7 +703,7 @@ describe('StepError 코드 (canStep과 step이 같은 판정)', () => {
     const sceneCases: { action: Action; code: string }[] = [
       { action: { type: 'choose', choiceId: 'repair', payment: { parts: [{ source: 'living', amount: 1 }] } }, code: 'payment-invalid' },
       { action: { type: 'choose', choiceId: 'repair' }, code: 'payment-invalid' }, // 계획 없음
-      { action: { type: 'choose', choiceId: 'repair', payment: { parts: [{ source: 'living', amount: 600_000 }] } }, code: 'over-balance' },
+      { action: { type: 'choose', choiceId: 'repair', payment: { parts: [{ source: 'emergency', amount: 600_000 }] } }, code: 'over-balance' },
     ];
     for (const { action, code } of sceneCases) {
       expect(canStep(feb, action)).not.toBe(true);
@@ -648,9 +718,8 @@ describe('StepError 코드 (canStep과 step이 같은 판정)', () => {
 
   it('잠긴 선택지는 choice-locked (11월 allIn, 적금 300만 미만)', () => {
     const b = cloneBudget(start().budget);
-    b.transfers.savings = 100_000; // 월 10만 → 11월에 110만 < 300만
-    b.livingBuffer += 290_000;
-    let s = start(2_600_000, b);
+    b.transfers.savings = 100_000; // 월 10만 → 11월에 110만 < 300만 (남는 돈은 생활비 통장에)
+    let s = start(b);
     s = runFallbackUntilScene(s, 'invite'); // 11월
     const scene = getScene(s.current!).scene;
     const allIn = scene.choices.find((c) => c.id === 'allIn')!;

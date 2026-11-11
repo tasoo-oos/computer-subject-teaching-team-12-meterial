@@ -273,7 +273,7 @@ function Result({ state, onPrev, onNext }: { state: ScreenProps['state']; onPrev
               <Spine id="living" className="h-8" />
               <span className="flex-1">
                 <span className="font-semibold">{ACCOUNTS.living.label}</span>
-                <span className="block text-[13px] text-ink-3">지출 예산 + 여유분</span>
+                <span className="block text-[13px] text-ink-3">지출 예산 + 남는 돈</span>
               </span>
               <Money value={sum.livingIn} className="font-semibold" />
             </li>

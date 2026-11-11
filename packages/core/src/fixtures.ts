@@ -1,12 +1,12 @@
-// 목업 스냅숏 상태. 엔진(step)이 아직 없으므로 화면은 이 스냅숏으로 그린다.
+// 목업 스냅숏 상태 (/dev 스냅숏 네비게이터용). 엔진과 같은 규칙(월급날 → 월말 마감)을 단순화해 계산한다.
 // 숫자는 기획서 5장 규칙을 단순화해 계산한 근사값이며, 엔진 구현 후 실제 값과 다를 수 있다.
 import { ACCOUNT_ORDER, EXPENSE_ORDER, TRANSFER_ORDER } from './data/accounts.ts';
 import { ACHIEVEMENT_ORDER } from './data/achievements.ts';
-import { MARKET_RETURNS, RATES, SNEAKER_PRICES } from './data/constants.ts';
+import { BASE_SALARY, MARKET_RETURNS, RATES, SNEAKER_PRICES } from './data/constants.ts';
 import { EVENTS } from './data/events.ts';
 import { STATUSES } from './data/statuses.ts';
 import { createInitialState, recommendBudget } from './engine.ts';
-import { expenseTotal, netWorth, savingsMaturity, totalDebt } from './selectors.ts';
+import { debtPaymentDue, expenseTotal, netWorth, savingsMaturity, totalDebt, transferTotal } from './selectors.ts';
 import type {
   AccountId,
   AchievementId,
@@ -74,31 +74,13 @@ function runPayday(s: GameState, m: MonthNo) {
   if (s.savings.broken) s.savings.restartedPrincipal += b.transfers.savings;
   else s.savings.paidMonths += 1;
 
-  let debtPayments = 0;
-  for (const d of s.debts) {
-    if (d.startedMonth >= m || d.monthsLeft <= 0) continue;
-    const interest = Math.round((d.remaining * d.annualRate) / 12);
-    const pay = Math.min(d.monthly, d.remaining + interest);
-    d.remaining = d.remaining + interest - pay;
-    d.monthsLeft -= 1;
-    debtPayments += pay;
-  }
-  s.debts = s.debts.filter((d) => d.remaining > 0);
-
+  // 월급 − 자동이체가 생활비 통장에 남는다. 지출·상환은 월말(monthEnd)에 나간다
   const overspend = typeof s.flags.foodOverspend === 'number' ? Math.round(b.expenses.food * s.flags.foodOverspend) : 0;
   const spending = expenseTotal(b) + overspend;
-  const livingIn = expenseTotal(b) + b.livingBuffer;
-  const living = s.accounts.living;
-  living.balance += livingIn - spending - debtPayments;
-  living.contributed += livingIn;
-  let shortfall = 0;
-  if (living.balance < 0) {
-    shortfall = -living.balance;
-    living.balance = 0;
-    s.satisfaction -= 5;
-  }
-  s.flags.livingShort = shortfall > 0;
-  s.flags.livingShortfall = shortfall;
+  const debtPayments = s.debts.reduce((a, d) => a + debtPaymentDue(d, m), 0);
+  const livingIn = s.profile.salary - transferTotal(b);
+  s.accounts.living.balance += livingIn;
+  s.accounts.living.contributed += s.profile.salary;
 
   const earnings: Partial<Record<AccountId, Won>> = {};
   for (const id of ['emergency', 'goal', 'housing'] as const) {
@@ -134,8 +116,48 @@ function runPayday(s: GameState, m: MonthNo) {
     earnings,
     investReturnPct: r,
     statusEffects,
-    livingShortfall: shortfall,
+    livingShortfall: 0,
+    closed: false,
   };
+}
+
+/** 월말 마감: 지출 예산 + 할부·카드값을 생활비 통장에서 내고, 모자라면 부족분을 카드값으로 넘긴다 */
+function monthEnd(s: GameState, m: MonthNo) {
+  const p = s.payday!;
+  let debtPayments = 0;
+  for (const d of s.debts) {
+    const pay = debtPaymentDue(d, m);
+    if (d.startedMonth >= m || d.monthsLeft <= 0) continue;
+    const interest = Math.round((d.remaining * d.annualRate) / 12);
+    d.remaining = d.remaining + interest - pay;
+    d.monthsLeft -= 1;
+    debtPayments += pay;
+  }
+  s.debts = s.debts.filter((d) => d.remaining > 0);
+  const living = s.accounts.living;
+  living.balance -= p.spending + debtPayments;
+  let shortfall = 0;
+  if (living.balance < 0) {
+    shortfall = -living.balance;
+    living.balance = 0;
+    s.satisfaction -= 5;
+    s.debts.push({
+      id: `shortfall-${m}`,
+      label: '카드값 — 생활비 부족분',
+      kind: 'cardBill',
+      principal: shortfall,
+      remaining: shortfall,
+      monthly: shortfall,
+      monthsLeft: 1,
+      annualRate: 0,
+      startedMonth: m,
+    });
+  }
+  s.flags.livingShort = shortfall > 0;
+  s.flags.livingShortfall = shortfall;
+  p.debtPayments = debtPayments;
+  p.livingShortfall = shortfall;
+  p.closed = true;
 }
 
 function closeMonth(s: GameState, m: MonthNo) {
@@ -171,6 +193,7 @@ function simulate(base: GameState, upTo: MonthNo, hooks: Partial<Record<MonthNo,
     runPayday(s, m);
     if (m < upTo) {
       hooks[m]?.(s);
+      monthEnd(s, m);
       closeMonth(s, m);
     } else {
       last?.(s);
@@ -228,11 +251,8 @@ function decide(s: GameState, eventId: EventId, sceneId: string, choiceId: strin
   });
 }
 
-function editBudget(s: GameState, changes: Partial<Record<keyof Budget['expenses'] | 'livingBuffer', number>>) {
-  for (const [k, v] of Object.entries(changes)) {
-    if (k === 'livingBuffer') s.budget.livingBuffer += v;
-    else s.budget.expenses[k as keyof Budget['expenses']] += v;
-  }
+function editBudget(s: GameState, changes: Partial<Record<keyof Budget['expenses'], number>>) {
+  for (const [k, v] of Object.entries(changes)) s.budget.expenses[k as keyof Budget['expenses']] += v;
   s.budgetEdits += 1;
 }
 
@@ -243,6 +263,7 @@ function scene(s: GameState, eventId: EventId, sceneId: string, queue: string[] 
 }
 
 function settle(s: GameState, unlocked: AchievementId[]) {
+  monthEnd(s, 12);
   const maturity = savingsMaturity(s.budget.transfers.savings, s.savings.paidMonths, s.savings.broken);
   s.accounts.savings.balance += maturity.interestNet;
   s.accounts.savings.earned += maturity.interestNet;
@@ -255,8 +276,6 @@ function settle(s: GameState, unlocked: AchievementId[]) {
     if (init.transfers[id] !== s.budget.transfers[id]) diff.push({ key: id, before: init.transfers[id], after: s.budget.transfers[id] });
   for (const id of EXPENSE_ORDER)
     if (init.expenses[id] !== s.budget.expenses[id]) diff.push({ key: id, before: init.expenses[id], after: s.budget.expenses[id] });
-  if (init.livingBuffer !== s.budget.livingBuffer)
-    diff.push({ key: 'livingBuffer', before: init.livingBuffer, after: s.budget.livingBuffer });
   s.settlement = {
     maturity,
     finalBalances: Object.fromEntries(ACCOUNT_ORDER.map((id) => [id, s.accounts[id].balance])) as Record<AccountId, Won>,
@@ -307,12 +326,10 @@ const HANEUL_ANSWERS: Partial<Record<QuestionId, string>> = {
   weekend: '5to15',
   impulse: 'think',
 };
-const HANEUL_SALARY = 2_630_000;
-
 function haneulBase(): GameState {
-  const s = createInitialState('하늘', HANEUL_SALARY);
+  const s = createInitialState('하늘');
   s.survey.answers = { ...HANEUL_ANSWERS };
-  s.survey.result = recommendBudget(HANEUL_ANSWERS, HANEUL_SALARY);
+  s.survey.result = recommendBudget(HANEUL_ANSWERS, BASE_SALARY);
   s.budget = clone(s.survey.result.recommended);
   s.initialBudget = clone(s.budget);
   return s;
@@ -362,9 +379,9 @@ const BADA_ANSWERS: Partial<Record<QuestionId, string>> = {
   weekend: 'gt30',
   impulse: 'buy',
 };
-const BADA_SALARY = 2_410_000;
+/** 월급 265만 원 중 253만 원을 나누고 12만 원이 생활비 통장에 남는 가계부 */
 const BADA_BUDGET: Budget = {
-  transfers: { emergency: 150_000, savings: 200_000, invest: 100_000, goal: 50_000, housing: 20_000 },
+  transfers: { emergency: 150_000, savings: 240_000, invest: 100_000, goal: 50_000, housing: 20_000 },
   expenses: {
     rent: 550_000,
     phone: 80_000,
@@ -373,17 +390,16 @@ const BADA_BUDGET: Budget = {
     subscription: 55_000,
     food: 520_000,
     household: 60_000,
-    beauty: 150_000,
-    leisure: 195_000,
+    beauty: 200_000,
+    leisure: 355_000,
     family: 30_000,
   },
-  livingBuffer: 130_000,
 };
 
 function badaBase(): GameState {
-  const s = createInitialState('바다', BADA_SALARY);
+  const s = createInitialState('바다');
   s.survey.answers = { ...BADA_ANSWERS };
-  s.survey.result = recommendBudget(BADA_ANSWERS, BADA_SALARY);
+  s.survey.result = recommendBudget(BADA_ANSWERS, BASE_SALARY);
   s.budget = clone(BADA_BUDGET);
   s.initialBudget = clone(BADA_BUDGET);
   return s;
@@ -412,7 +428,7 @@ const badaHooks: Partial<Record<MonthNo, Hook>> = {
   6: (s) => {
     decide(s, 'sneaker-resell', 'check6', 'hold');
     decide(s, 'rent-hike', 'notice', 'accept');
-    editBudget(s, { rent: 50_000, livingBuffer: -50_000 });
+    editBudget(s, { rent: 50_000 }); // 남는 돈 12만 원 → 7만 원
   },
   7: (s) => {
     decide(s, 'scratch-lottery', 'win', 'more');
@@ -428,17 +444,17 @@ const badaHooks: Partial<Record<MonthNo, Hook>> = {
   9: (s) => {
     decide(s, 'price-rise', 'notice', 'ignore');
     s.flags.foodOverspend = 0.08;
-    // 이번 달 식비도 이미 8% 더 나갔다
-    s.accounts.living.balance -= Math.round(s.budget.expenses.food * 0.08);
-    if (s.accounts.living.balance < 0) {
-      s.flags.livingShort = true;
-      s.flags.livingShortfall = -s.accounts.living.balance;
-      s.accounts.living.balance = 0;
-    }
+    // 이번 달 식비도 이미 8% 더 나갔다 (생활비 통장에서 바로)
+    const over = Math.round(s.budget.expenses.food * 0.08);
+    const paid = Math.min(s.accounts.living.balance, over);
+    s.accounts.living.balance -= paid;
+    s.payday!.spending += over - paid;
   },
   10: (s) => {
     decide(s, 'price-rise', 'revolving', 'revolve');
     const short = typeof s.flags.livingShortfall === 'number' ? s.flags.livingShortfall : 0;
+    // 9월 부족분 카드값이 리볼빙으로 바뀐다
+    s.debts = s.debts.filter((d) => !d.id.startsWith('shortfall-'));
     s.debts.push({
       id: 'revolving-10',
       label: '리볼빙 (일부결제금액 이월약정)',
@@ -463,17 +479,17 @@ const badaHooks: Partial<Record<MonthNo, Hook>> = {
 // 스냅숏
 
 function startName(): GameState {
-  return createInitialState('', 0);
+  return createInitialState('');
 }
 function startReveal(): GameState {
-  return createInitialState('하늘', HANEUL_SALARY);
+  return createInitialState('하늘');
 }
 function surveyAt(n: number): GameState {
   const s = startReveal();
   s.phase = 'survey';
   const keys = Object.keys(HANEUL_ANSWERS) as QuestionId[];
   for (const k of keys.slice(0, n)) s.survey.answers[k] = HANEUL_ANSWERS[k];
-  if (n >= keys.length) s.survey.result = recommendBudget(HANEUL_ANSWERS, HANEUL_SALARY);
+  if (n >= keys.length) s.survey.result = recommendBudget(HANEUL_ANSWERS, BASE_SALARY);
   return s;
 }
 function guide(): GameState {
@@ -504,7 +520,7 @@ function build(): Fixture[] {
   const add = (f: Fixture) => list.push(f);
 
   add({ id: 'start-name', screen: 'start', label: '닉네임 입력', note: '수업 첫 화면. "여러분은 오늘 첫 월급을 받았습니다" 상황 제시', state: startName(), ui: { startStage: 'name' } });
-  add({ id: 'start-reveal', screen: 'start', label: '월급 공개', note: '"축하합니다! 하늘님의 첫 월급은 2,630,000원입니다" 연출', state: startReveal(), ui: { startStage: 'reveal' } });
+  add({ id: 'start-reveal', screen: 'start', label: '월급 공개', note: '"축하합니다! 하늘님의 첫 월급은 2,650,000원입니다" 연출', state: startReveal(), ui: { startStage: 'reveal' } });
 
   add({ id: 'survey-q1', screen: 'survey', label: '설문 1번', note: '한 화면에 질문 하나. 진행 표시(1/7)', state: surveyAt(0), ui: { surveyIndex: 0 } });
   add({ id: 'survey-q7', screen: 'survey', label: '설문 7번', note: '마지막 질문 (소비 성향 질문)', state: surveyAt(6), ui: { surveyIndex: 6 } });
@@ -513,14 +529,14 @@ function build(): Fixture[] {
   add({ id: 'guide-1', screen: 'guide', label: '안내 카드 1', note: '카드 6장 중 첫 장', state: guide(), ui: { guideIndex: 0 } });
   add({ id: 'guide-3', screen: 'guide', label: '안내 카드 3 (통장 쪼개기)', note: '계좌 6종 소개가 들어가는 가장 정보가 많은 카드', state: guide(), ui: { guideIndex: 2 } });
 
-  add({ id: 'budget-ok', screen: 'budget', label: '추천 가계부 (합계 일치)', note: '합계 = 월급. 다음 단계 버튼 활성', state: budgetRecommended(), ui: {} });
-  add({ id: 'budget-over', screen: 'budget', label: '가계부 초과', note: '자동이체를 늘려 12만 원 초과. 경고와 비활성 버튼', state: budgetOver(), ui: {} });
+  add({ id: 'budget-ok', screen: 'budget', label: '추천 가계부 (합계 일치)', note: '합계 ≤ 월급. 남는 돈은 생활비 통장에. 다음 단계 버튼 활성', state: budgetRecommended(), ui: {} });
+  add({ id: 'budget-over', screen: 'budget', label: '가계부 초과', note: '자동이체를 늘려 6만 원 초과. 경고와 비활성 버튼', state: budgetOver(), ui: {} });
 
   add({
     id: 'sim-jan-payday',
     screen: 'sim',
     label: '1월 월급날 (튜토리얼)',
-    note: '월급 입금 → 자동이체 → 생활비 사용 → 이자 순서 연출. 계좌 카드 숫자 증가',
+    note: '월급 입금 → 자동이체 → 이자 순서 연출. 생활비는 통장에 남고 월말에 나감. 계좌 카드 숫자 증가',
     state: (() => {
       const s = simulate(H(), 1, haneulHooks);
       s.step = 'payday';
@@ -605,13 +621,13 @@ function build(): Fixture[] {
     id: 'sim-jun-adjust',
     screen: 'sim',
     label: '6월 가계부 조정 (월세 +5만)',
-    note: '가계부 변경형 선택 뒤 조정 단계. 5만 원 초과 상태에서 다른 항목을 줄여야 함',
+    note: '가계부 변경형 선택 뒤 조정 단계. 월세 +5만이 남는 돈(12만) 안이라 그대로 조정 완료할 수 있음',
     state: simulate(B(), 6, badaHooks, (s) => {
       decide(s, 'sneaker-resell', 'check6', 'hold');
       decide(s, 'rent-hike', 'notice', 'accept');
       s.budget.expenses.rent += 50_000;
       outcome(s, 'rent-hike', 'notice', 'accept', [{ kind: 'budget', key: 'rent', amount: 50_000 }], {
-        budgetReason: '월세가 5만 원 올랐습니다. 다른 항목을 줄여 합계를 맞추세요.',
+        budgetReason: '월세가 5만 원 올랐습니다. 가계부를 확인하고, 월급을 넘으면 다른 항목을 줄이세요.',
       });
       s.step = 'adjust';
     }),
@@ -651,6 +667,7 @@ function build(): Fixture[] {
     note: '이벤트 없는 달의 월말 리포트. 생활비 부족, 상태(리볼빙, 노트북 할부, 운동화), 신용점수 하락',
     state: simulate(B(), 10, badaHooks, (s) => {
       badaHooks[10]!(s);
+      monthEnd(s, 10);
       s.step = 'report';
     }),
     ui: {},

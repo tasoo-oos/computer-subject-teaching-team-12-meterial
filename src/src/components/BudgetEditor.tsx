@@ -13,7 +13,7 @@ import { Money } from './Money.tsx';
 import { Spine } from './Spine.tsx';
 import { Stepper } from './Stepper.tsx';
 
-export type BudgetKey = TransferAccountId | ExpenseId | 'livingBuffer';
+export type BudgetKey = TransferAccountId | ExpenseId;
 
 interface BudgetEditorProps {
   budget: Budget;
@@ -25,14 +25,14 @@ interface BudgetEditorProps {
 }
 
 function setKey(b: Budget, key: BudgetKey, v: number): Budget {
-  if (key === 'livingBuffer') return { ...b, livingBuffer: v };
   if ((TRANSFER_ORDER as string[]).includes(key)) return { ...b, transfers: { ...b.transfers, [key]: v } };
   return { ...b, expenses: { ...b.expenses, [key]: v } };
 }
 
 const GROUP_LABEL: Record<ExpenseGroup, string> = { fixed: '고정비', variable: '변동비' };
 
-/** 가계부 편집기. 가계부 작성 화면과 시뮬레이션 조정 단계에서 함께 쓴다 */
+/** 가계부 편집기. 가계부 작성 화면과 시뮬레이션 조정 단계에서 함께 쓴다.
+ *  월급 − 자동이체 − 지출 예산(남는 돈)은 따로 정하지 않는다 — 생활비 통장에 그대로 남는다(합계 표시는 BudgetTotals) */
 export function BudgetEditor({ budget, onChange, marks = {}, layout = 'stack' }: BudgetEditorProps) {
   const row = (key: BudgetKey, title: string, sub: string, value: number, lead?: ReactNode) => (
     <li key={key} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2">
@@ -80,13 +80,6 @@ export function BudgetEditor({ budget, onChange, marks = {}, layout = 'stack' }:
     </section>
   );
 
-  const buffer = (
-    <section aria-labelledby="be-buffer">
-      <SectionHead id="be-buffer" title="생활비 여유분" note="쓰지 않으면 다음 달로 넘어가는 완충 돈" />
-      <ul>{row('livingBuffer', '생활비 통장에 남겨 둘 돈', '예상 못 한 작은 지출 대비', budget.livingBuffer, <Spine id="living" />)}</ul>
-    </section>
-  );
-
   if (layout === 'split') {
     return (
       <div className="grid gap-x-8 gap-y-5 lg:grid-cols-2">
@@ -96,7 +89,6 @@ export function BudgetEditor({ budget, onChange, marks = {}, layout = 'stack' }:
         </div>
         <div className="space-y-5">
           {expenseSection('variable')}
-          {buffer}
         </div>
       </div>
     );
@@ -107,7 +99,6 @@ export function BudgetEditor({ budget, onChange, marks = {}, layout = 'stack' }:
       {transfers}
       {expenseSection('fixed')}
       {expenseSection('variable')}
-      {buffer}
     </div>
   );
 }

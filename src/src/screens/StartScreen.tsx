@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CheckCircle2 } from 'lucide-react';
-import { BASE_SALARY, SALARY_SPREAD, formatMan, formatWon } from '@gagyebu/core';
+import { formatWon } from '@gagyebu/core';
 import type { ScreenProps } from '@gagyebu/draft-kit';
 import { FlowHeader } from '../components/FlowHeader.tsx';
 import { useCountUp } from '../lib/motion.ts';
@@ -25,7 +25,7 @@ export function StartScreen({ state, dispatch, mode, beat, ui }: ScreenProps) {
     <div className="paper-texture min-h-dvh">
       <FlowHeader current="start" />
       {stage === 'name' ? (
-        <NameStage salary={state.profile.salary} onSubmit={(nickname) => dispatch({ type: 'start', nickname, salary: state.profile.salary })} />
+        <NameStage onSubmit={(nickname) => dispatch({ type: 'start', nickname })} />
       ) : (
         <RevealStage state={state} onNext={() => dispatch({ type: 'continue' })} />
       )}
@@ -53,7 +53,7 @@ function JoinedNotice({ nickname }: { nickname: string }) {
   );
 }
 
-function NameStage({ salary, onSubmit }: { salary: number; onSubmit: (name: string) => void }) {
+function NameStage({ onSubmit }: { onSubmit: (name: string) => void }) {
   const [name, setName] = useState('');
   const valid = name.trim().length > 0;
   return (
@@ -97,11 +97,8 @@ function NameStage({ salary, onSubmit }: { salary: number; onSubmit: (name: stri
 }
 
 function RevealStage({ state, onNext }: { state: ScreenProps['state']; onNext?: () => void }) {
-  const { nickname, salary, baseSalary } = state.profile;
+  const { nickname, salary } = state.profile;
   const shown = useCountUp(salary, 1400, 250);
-  const lo = baseSalary * (1 - SALARY_SPREAD);
-  const hi = baseSalary * (1 + SALARY_SPREAD);
-  const pos = Math.min(1, Math.max(0, (salary - lo) / (hi - lo)));
   return (
     <main className="mx-auto grid max-w-[1200px] items-center gap-10 px-5 py-10 sm:px-8 md:min-h-[calc(100dvh-56px)] md:grid-cols-[1fr_1.1fr] md:py-6">
       <div>
@@ -113,26 +110,6 @@ function RevealStage({ state, onNext }: { state: ScreenProps['state']; onNext?: 
             <span className="ml-1 align-baseline text-[0.42em] font-bold tracking-normal text-ink">입니다</span>
           </span>
         </h1>
-        <div className="mt-8 max-w-[30rem]">
-          <p className="text-[15px] text-ink-2">
-            월급은 기준 평균소득 {formatMan(BASE_SALARY)}의 ±{Math.round(SALARY_SPREAD * 100)}% 안에서 정해졌어요. 친구와 월급이 달라도, 결과의
-            차이는 운이 아니라 선택에서 나옵니다.
-          </p>
-          <div className="mt-4" role="img" aria-label={`월급 범위 ${formatMan(lo)}에서 ${formatMan(hi)} 사이, ${nickname}님은 ${formatMan(salary)}`}>
-            <div className="relative h-2 rounded-full bg-rule">
-              <span className="absolute top-1/2 h-4 w-px -translate-y-1/2 bg-ink-3" style={{ left: '50%' }} />
-              <span
-                className="absolute top-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white bg-in shadow"
-                style={{ left: `${pos * 100}%` }}
-              />
-            </div>
-            <div className="num mt-2 flex justify-between text-[13px] text-ink-3">
-              <span>{formatMan(lo)}</span>
-              <span>기준 {formatMan(baseSalary)}</span>
-              <span>{formatMan(hi)}</span>
-            </div>
-          </div>
-        </div>
         {onNext ? (
           <button type="button" onClick={onNext} className="btn btn-primary mt-8 h-12 px-6 text-[17px]">
             내 소비습관 알아보기

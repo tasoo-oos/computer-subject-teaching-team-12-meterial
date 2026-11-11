@@ -34,9 +34,7 @@ function validateStats(st: GagyebuStats, beatId: string, total: number): void {
       expect(st.nicknames).toHaveLength(total);
       return;
     case 'salary':
-      expect(st.baseSalary).toBe(2_600_000);
-      expect(st.salaries.length).toBeLessThanOrEqual(total);
-      expect(st.salaries.every((x) => x > 0)).toBe(true);
+      expect(st.salary).toBe(2_650_000); // 모두 같은 월급
       return;
     case 'budget':
       expect(st.savingsRates).toHaveLength(st.shares.length);

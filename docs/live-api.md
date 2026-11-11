@@ -957,7 +957,7 @@ export interface GagyebuConfig {
 | # | id | 라벨 | mode | reveal | notes(예) |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `join` | 입장 | work | | QR·링크 안내 |
-| 2 | `salary` | 월급 공개 | show | | 기준 ±10% 설명 |
+| 2 | `salary` | 월급 공개 | show | | 모두 같은 월급 265만 원 (#166) |
 | 3 | `survey` | 소비습관 설문 | work | | 7문항 한 화면 |
 | 4 | `survey-result` | 설문 결과 | show | | 분포 없음 |
 | 5~10 | `guide-1`..`guide-6` | 안내 n | show | | 카드별 발표자 노트 (cfg.guide) |
@@ -994,15 +994,14 @@ export interface GagyebuConfig {
 5. `step === 'adjust'` → `setBudget { budget: balanceBudget(초안 ?? state.budget, salary).budget, auto: true }`.
 
 - **초안**: `budget`·`adjust`에서만 쓴다(§9.5). `GagyebuDraft`가 있으면 그 안에서, 없으면 `state.budget`에서 `balanceBudget`로 합계를 맞춘다. 편집을 한 번도 안 한 학생의 `state.budget`은 추천 가계부다.
-- **notice 문구**는 활동이 만든다: 선택지 fallback은 `"시간 안에 고르지 못해 '<선택지 라벨>'이(가) 자동으로 선택됐어요"`, 가계부는 balanceBudget의 `changes`로 `"제출하지 않아 남는 돈 3만 원이 생활비 여유분으로 들어갔어요"` / `"제출하지 않아 여유 부족분 3만 원을 여가에서 줄였어요"` 형태.
+- **notice 문구**는 활동이 만든다: 선택지 fallback은 `"시간 안에 고르지 못해 '<선택지 라벨>'이(가) 자동으로 선택됐어요"`, 가계부는 balanceBudget의 `changes`로 `"제출하지 않아 월급을 넘은 3만 원을(를) 여가·문화에서 줄였어요"` 형태(남는 돈은 그대로 두므로 안내가 없다, #166).
 
 **fallback notice 문구 전체 목록 (S4 구현 → S5 2단계 개정, §14 #123 — 순수 절차적 걸음의 notice는 빈 문구 `''`다. 서버·클라이언트는 빈 문구를 무시한다(S8))**:
 
 | 걸음 | notice |
 | --- | --- |
 | 설문 제출 | `제출하지 않아 모든 문항이 기본 답안으로 제출됐어요` |
-| 가계부 setBudget — 남는 돈 | `제출하지 않아 남는 돈 <formatMan(남는금액)>이(가) 생활비 여유분으로 들어갔어요` |
-| 가계부 setBudget — 부족분 | `제출하지 않아 여유 부족분 <formatMan(부족금액)>을(를) <생활비 여유분 \| 절감 항목 라벨(예: 여가·문화)>에서 줄였어요` |
+| 가계부 setBudget — 초과분 | `제출하지 않아 월급을 넘은 <formatMan(초과금액)>을(를) <절감 항목 라벨(예: 여가·문화)>에서 줄였어요` (월급보다 적게 나눈 안은 setBudget 없이 그대로 확정, #166) |
 | 가계부 확정 | `제출하지 않아 지금 가계부가 자동으로 확정됐어요` |
 | beginMonth (1~12월) | `''` — 절차적 걸음 |
 | choose (대안이 있는 장면 선택) | `시간 안에 고르지 못해 '<선택지 라벨>'이(가) 자동으로 선택됐어요` |
@@ -1040,7 +1039,7 @@ export interface MonthEntryTally {
 export type GagyebuStats =
   | { kind: 'none' } // survey, survey-result, guide-*, present, 슬라이드 — 집계 없음
   | { kind: 'join'; joined: number; connected: number; nicknames: string[] }
-  | { kind: 'salary'; baseSalary: Won; salaries: Won[] } // 기준 ±10% 띠 위 점들
+  | { kind: 'salary'; salary: Won } // 모든 학생이 같은 월급 (#166)
   | {
       kind: 'budget';
       savingsRates: number[];               // 학생별 저축률 (평균은 Stage에서)
@@ -1269,7 +1268,7 @@ export function DraftShell(props: {
 ### 10.10 `/solo` 로컬 모드
 
 - 서버 없이 같은 화면 자산으로 혼자 진행. `useReducer(step, createInitialState(...))`로 로컬 상태를 굴리고, `mode: 'solo'`로 `ScreenProps`를 만든다.
-- show 비트에는 "다음" 버튼이 있고(로컬 커서만 이동), work 비트는 `dispatch`로 진행한다. 공개(reveal) 토글·확인 대화상자·대기 화면 없음(넘길 때 자동으로 공개 상태). 월급은 `rollSalary(Math.random)`.
+- show 비트에는 "다음" 버튼이 있고(로컬 커서만 이동), work 비트는 `dispatch`로 진행한다. 공개(reveal) 토글·확인 대화상자·대기 화면 없음(넘길 때 자동으로 공개 상태). 월급은 모두 같다(`BASE_SALARY`, #166).
 - 가계부 초안 전송 없음, 기본값 루프 없음. 학생이 직접 모든 단계를 마쳐야 한다.
 
 ### 10.11 기기 대응 (노트북 우선, 모든 기기 가능)
@@ -1569,7 +1568,7 @@ scripts/lab.sh up | status | logs [창] | open | bots | test | down | attach
 96. **`previewFallback`은 §9.4 정의 그대로.** 장면 단계에서만 기본 선택지 라벨을 돌려주고, 그 외 단계(월급날·결과·조정·리포트·설문·가계부)는 `null`. 통제의 기본값 미리보기가 장면 밖 단계에서 비어 보이는 것은 의도된 동작이다(미완료 인원은 progress·fallbackPreview 옆의 pending 수로 보여 준다).
 97. **`allowed` 세부 규칙.** 월 비트 `m1`..`m11`은 `state.month === N`일 때만 `beginMonth`·`choose`·`continue`·`statusAction`(그리고 `step === 'adjust'`일 때만 `setBudget`)를 받는다. `m12` 비트는 `beginMonth`만 받는다(운동화 판매 등 statusAction도 11월 비트에서 하게 한다). `reset`·`goto`·`endMonth`는 모든 비트에서 학생이 보낼 수 없고, `auto` 표시가 붙은 학생 행동은 무조건 거부한다.
 98. **`cfg.guide=false`일 때 가계부로 들어가는 전이.** §9.3의 `guide-6 → budget`와 같은 규칙이 `survey-result → budget`에도 적용된다(`phase === 'guide'`인 학생에게 `goto`). 전이는 항상 "가계부 비트로 들어가는 한 걸음"에 붙는다.
-99. **`init` 기저 상태.** `createInitialState(nickname, 0)` — 월급 0인 결정적 기저에 `start { nickname, salary: rollSalary(ctx.random) }` 행동을 얹는다(§4.2 "기저 + 로그의 actions" 재생 규칙). 난수 소비는 `rollSalary` 호출 한 번뿐이다.
+99. **`init` 기저 상태.** `createInitialState(nickname)` 결정적 기저에 `start { nickname }` 행동을 얹는다(§4.2 "기저 + 로그의 actions" 재생 규칙). 2026-11-11부터 월급이 모두 같아 난수를 쓰지 않는다(#166, 예전: `start.salary = rollSalary(ctx.random)`).
 100. **`locate` 문구.** 시뮬레이션 중 `"N월 · 장면이름"`(장면 title ?? speaker ?? 이벤트 제목), 단계별로 `"N월 · 월급날"`/`"N월 · 결과 확인"`/`"N월 · 가계부 조정"`/`"N월 · 월말 리포트"`. 밖은 `"소비습관 설문"`/`"안내 카드"`/`"가계부 작성"`/`"1년 결산 완료"`. (S5·S6의 미완료 명단 표시 그대로 쓴다.)
 
 ### S6(통제·전면) 구현 중 확정 (2026-11-08, M6)
@@ -1599,7 +1598,7 @@ scripts/lab.sh up | status | logs [창] | open | bots | test | down | attach
 117. **리포트 = 라이브 대기, 월급날 버튼 문구.** 라이브에서 `step === 'report'`가 되면 done → Audience가 대기 화면(112번)으로 바꾸므로 학생은 "다음 달로" 버튼을 보지 않는다(`endMonth`는 서버 전이 전용, `allowed`가 학생 행동을 거부). SimScreen의 리포트 방어 렌더도 라이브에서는 읽기 전용. solo는 "다음 달로"가 `endMonth` 行動 자체를 dispatch한다. 월급날 버튼 문구는 라이브·solo에서 "확인"(12월은 "결과 보기"), dev는 기존 문구("이번 달 시작하기"/"2월로 넘어가기") 그대로.
 118. **autoApplied 안내 표시는 StudentPage 소유.** 자동 처리 안내는 `src/src/live/StudentPage.tsx`(S3 소유)가 상단 고정 `role="status"` 띠로 이미 보여 주며 커서 비트가 바뀌면 비워진다. "닫기" 버튼을 붙이려면 S5 소유 밖 파일을 고쳐야 하므로 그대로 두었다. S5의 Audience는 act 거부 안내(109번)만 별도의 하단 일시 표시로 추가했다. 자동 선택 구분은 결과 화면 선택 기록에 중립 태그("자동 선택", 테두리+종이색 배경 — 색 판단 없음)로 표시한다. **→ S8에서 해결(#134)**: 자동 처리 안내는 정상 흐름 맨 위의 중립 카드(제목 + 글머리 목록 + "닫기")로 바뀌었고 빈 문구는 표시되지 않는다.
 119. **결과 화면의 단계 이동 버튼은 모드별로.** 라이브: "발표용 크게 보기"·"처음부터 다시" 모두 없음(§8-2). solo: "처음부터 다시"(reset, §10.10)만. dev: 둘 다(기존 그대로). 발표용 크게 보기(PresentationView)는 dev 전용 `ui.presentation`으로 유지한다.
-120. **/solo 커서 규칙.** `SoloPage`는 `useReducer(step, …)`로 상태를 굴리고 커서는 `gagyebuLogic.beats(lesson 설정)` 위를 로컬로 움직인다. show 비트는 오른쪽 아래 "다음" 버튼(누르면 `transition()` 行動 — 안내 마지막 → 가계부의 `goto` 포함 — 을 적용해 한 칸 전진). work 비트는 "지나쳤을 때" 자동 전진한다: 설문(result ≠ null), 가계부(phase sim), m1~m11(`state.month > N` — 리포트에서 "다음 달로"를 눌렀을 때), m12는 자동 전진 없음(결과 화면이 종점, "처음부터 다시"로 재시작). `join` 비트는 SoloPage의 닉네임 양식이 대신하므로 건너뛰고 `salary` 비트부터 시작하며, 월급은 `rollSalary(Math.random)`. 같은 클릭 안의 연속 행동(setBudget → confirmBudget)을 위해 상태 미러 ref를 두어 항상 최신 상태에 대해 `step`을 검증한다.
+120. **/solo 커서 규칙.** `SoloPage`는 `useReducer(step, …)`로 상태를 굴리고 커서는 `gagyebuLogic.beats(lesson 설정)` 위를 로컬로 움직인다. show 비트는 오른쪽 아래 "다음" 버튼(누르면 `transition()` 行動 — 안내 마지막 → 가계부의 `goto` 포함 — 을 적용해 한 칸 전진). work 비트는 "지나쳤을 때" 자동 전진한다: 설문(result ≠ null), 가계부(phase sim), m1~m11(`state.month > N` — 리포트에서 "다음 달로"를 눌렀을 때), m12는 자동 전진 없음(결과 화면이 종점, "처음부터 다시"로 재시작). `join` 비트는 SoloPage의 닉네임 양식이 대신하므로 건너뛰고 `salary` 비트부터 시작하며, 월급은 모두 같다(`BASE_SALARY`, #166). 같은 클릭 안의 연속 행동(setBudget → confirmBudget)을 위해 상태 미러 ref를 두어 항상 최신 상태에 대해 `step`을 검증한다.
 
 ### S5 활동 화면 2단계 확정 (2026-11-08, Stage·ControlPanel·월급날 UX)
 
@@ -1653,3 +1652,4 @@ scripts/lab.sh up | status | logs [창] | open | bots | test | down | attach
 > 앞 목록이 164번까지 썼으므로 이 목록은 165번부터 센다(merge 시 순서 유지).
 
 165. **복원된 Room의 `openedAt`은 로그 `open` 줄의 ts다.** `restoreRoom`이 Room을 새로 만들 때 생성 시각(재시작한 시각)을 그대로 쓰면, 열린 수업이 여러 개 남은 채 재시작했을 때 통제·전면 소켓의 자동 선택("가장 최근에 연 수업", §5.8, #102)과 `classes` 목록 순서가 복원 완료 순서(readdirSync)로 뒤바뀐다 — 리허설 수업을 닫지 않고 재시작하면 교사가 엉뚱한 수업을 조종하게 된다. `RoomOptions.openedAt`을 추가해 `restoreRoom`은 open 줄의 ts를 넘기고, 새로 여는 수업은 지금과 같이 생성 시각을 쓴다. 서버 테스트(`restore-order.test.ts`): 수업 두 개를 열고 재시작 → 나중에 연 수업이 자동 선택되고, `openedAt`은 로그의 ts 그대로, `classes`는 열린 시각 오름차순.
+166. **같은 월급 · 월말 지출 · 여유분 삭제 (2026-11-11, 운영 전 마지막 손질).** core-api §4.5 #15. (1) 월급은 모든 학생이 265만 원(`BASE_SALARY`)이다. `start` 행동에 `salary`가 없고 `init`은 난수를 쓰지 않는다. 월급 공개 비트의 TV는 분포 띠 대신 "모두의 첫 월급 2,650,000원"을 크게 보여 주고(`SalaryStats = { kind: 'salary'; salary }`), 학생 화면의 "±10%·운이 아니라 선택" 문구와 눈금을 지웠다. (2) 생활비 지출은 월말 마감(리포트 단계로 넘어가는 순간)에 나간다 — 달 중간의 생활비 통장에는 이번 달 생활비 전체가 보인다. 월급날 화면은 "월말에 나갈 돈"을 예고하고, 이벤트 없는 달·12월은 월급날 화면에 실제 지출 줄을 함께 보인다. 월말 부족분은 카드값 부채(`shortfall-<달>`)가 된다. 지불 패널의 생활비 통장 경고가 "월말에 X이 빠져나갑니다. Y보다 많이 쓰면 카드값"을 알려 준다(`livingSpare`). 자동 지불 계획(기본값)은 생활비 통장의 `livingSpare`만 쓴다. (3) 가계부의 "생활비 여유분" 칸을 지웠다. 합계는 월급 이하면 확정할 수 있고 남는 돈은 생활비 통장에 남는다(합계 패널: "생활비 통장에 남는 돈"). 가계부 비트 기본값: 월급 안이면 그대로 `confirmBudget`, 넘으면 `balanceBudget`(변동비 절감) 뒤 확정. 예전 로그·초안의 `salary`·`livingBuffer` 필드는 무시한다 — 다만 2026-11-11 이전 세션 로그는 월급이 달라 재생 결과가 달라질 수 있으므로 운영 전 리허설 로그는 새로 만든다.

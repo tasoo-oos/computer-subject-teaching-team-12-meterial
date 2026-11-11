@@ -39,8 +39,11 @@ export function ReportStage({ state, onNext }: { state: GameState; onNext?: () =
           <div>
             <dt className="text-[12px] text-ink-2">생활비 지출</dt>
             <dd className="text-[17px] font-bold">
-              <Money value={-(p?.spending ?? 0)} unit="man" />
+              <Money value={-((p?.spending ?? 0) + (p?.debtPayments ?? 0))} unit="man" />
             </dd>
+            {p && p.debtPayments > 0 ? (
+              <dd className="text-[11px] leading-tight text-ink-3">할부·카드값 {formatMan(p.debtPayments)} 포함</dd>
+            ) : null}
           </div>
           <div>
             <dt className="text-[12px] text-ink-2">이자·투자 수익</dt>
@@ -58,7 +61,7 @@ export function ReportStage({ state, onNext }: { state: GameState; onNext?: () =
         </dl>
         {short > 0 ? (
           <p className="mx-5 mb-4 rounded-[8px] bg-seal-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-seal">
-            생활비 통장이 {formatMan(short)} 모자라 카드값으로 넘어갔습니다. 다음 달 생활비에서 빠지고, 만족도가 떨어졌어요.
+            생활비 통장이 {formatMan(short)} 모자라 카드값으로 넘어갔습니다. 다음 달 월말에 생활비 통장에서 빠지고, 만족도가 떨어졌어요.
           </p>
         ) : null}
         <div className="border-t border-rule px-5 py-3">

@@ -25,7 +25,7 @@ export function deepFreeze<T>(x: T): T {
 }
 
 export function cloneBudget(b: Budget): Budget {
-  return { transfers: { ...b.transfers }, expenses: { ...b.expenses }, livingBuffer: b.livingBuffer };
+  return { transfers: { ...b.transfers }, expenses: { ...b.expenses } };
 }
 
 export function play(s: GameState, actions: Action[]): GameState {

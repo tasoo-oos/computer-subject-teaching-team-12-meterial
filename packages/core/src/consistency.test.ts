@@ -11,16 +11,17 @@ import {
   step,
   StepError,
 } from './engine.ts';
+import { BASE_SALARY } from './data/constants.ts';
 import { getScene } from './selectors.ts';
 import { cloneBudget, deepFreeze, fallbackStep, mulberry32 } from './testUtils.ts';
 import type { Action, GameState, PaymentPlan, Won } from './types.ts';
 
-const SALARIES: Won[] = [2_340_000, 2_600_000, 2_860_000];
+const SALARIES: Won[] = [BASE_SALARY];
 
 function newGame(rand: () => number): GameState {
   const salary = SALARIES[Math.floor(rand() * SALARIES.length)] as Won;
-  let s = createInitialState('씨앗', salary);
-  s = step(s, { type: 'start', nickname: '씨앗', salary });
+  let s = createInitialState('씨앗');
+  s = step(s, { type: 'start', nickname: '씨앗' });
   s = step(s, { type: 'submitSurvey', answers: defaultAnswers(rand() < 0.5 ? {} : { meal: 'gt15', impulse: 'buy' }) });
   s = step(s, { type: 'goto', phase: 'budget' });
   s = step(s, { type: 'setBudget', budget: balanceBudget(s.budget, salary).budget });
@@ -47,7 +48,7 @@ function randomAction(rand: () => number, s: GameState): Action {
   const type = pick(types);
   switch (type) {
     case 'start':
-      return { type: 'start', nickname: pick(['하늘', '', '열글자를넘는닉네임입니다', '바']), salary: pick([2_600_000, 0, -1]) };
+      return { type: 'start', nickname: pick(['하늘', '', '열글자를넘는닉네임입니다', '바']) };
     case 'submitSurvey':
       return {
         type: 'submitSurvey',
@@ -58,7 +59,7 @@ function randomAction(rand: () => number, s: GameState): Action {
     case 'setBudget': {
       const b = cloneBudget(s.budget);
       if (rand() < 0.3) b.expenses.food = -1; // 음수 항목
-      else if (rand() < 0.5) b.livingBuffer += 100_000; // 합계 깨기
+      else if (rand() < 0.5) b.expenses.leisure += 3_000_000; // 월급 초과
       return { type: 'setBudget', budget: b };
     }
     case 'confirmBudget':

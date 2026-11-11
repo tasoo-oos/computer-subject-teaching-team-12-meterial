@@ -1,12 +1,14 @@
 // 아무것도 안 하는 학생: 모든 단계를 §4.3 기본값 함수로만 채워 1년을 완주한다 (§4.4).
 // live-api §9.3의 fallback 루프를 그대로 흉내 낸다.
 import { describe, expect, it } from 'vitest';
+import { BASE_SALARY } from './data/constants.ts';
 import { balanceBudget, createInitialState, defaultAnswers, step } from './engine.ts';
 import { isBudgetValid, totalDebt } from './selectors.ts';
 import { fallbackStep } from './testUtils.ts';
 import type { EndingId, GameState, QuestionId, Won } from './types.ts';
 
-const SALARIES: Won[] = [2_340_000, 2_600_000, 2_860_000];
+// 월급은 모두 같다 (BASE_SALARY)
+const SALARIES: Won[] = [BASE_SALARY];
 
 const ANSWER_SETS: { label: string; answers: Partial<Record<QuestionId, string>> }[] = [
   { label: '모두 중간 답', answers: {} },
@@ -39,8 +41,8 @@ const ANSWER_SETS: { label: string; answers: Partial<Record<QuestionId, string>>
 
 /** 기본값만으로 1년을 돌린다. 중간에 isBudgetValid 위반이 없어야 한다 */
 function autoYear(salary: Won, answers: Partial<Record<QuestionId, string>>): GameState {
-  let s = createInitialState('무응답', salary);
-  s = step(s, { type: 'start', nickname: '무응답', salary });
+  let s = createInitialState('무응답');
+  s = step(s, { type: 'start', nickname: '무응답' });
   s = step(s, { type: 'submitSurvey', answers: defaultAnswers(answers), auto: true });
   s = step(s, { type: 'goto', phase: 'budget' });
   s = step(s, { type: 'setBudget', budget: balanceBudget(s.budget, salary).budget, auto: true });
@@ -81,8 +83,8 @@ describe('아무것도 안 하는 학생 (기본값 함수만으로 1년 완주)
   }
 
   it('같은 입력은 항상 같은 1년이 된다 (결정성)', () => {
-    const a = autoYear(2_600_000, {});
-    const b = autoYear(2_600_000, {});
+    const a = autoYear(BASE_SALARY, {});
+    const b = autoYear(BASE_SALARY, {});
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 });

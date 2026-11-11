@@ -41,12 +41,9 @@ describe('stats — 비트별 kind (§9.4)', () => {
     expect(st).toEqual({ kind: 'join', joined: 2, connected: 2, nicknames: ['봇1', '봇2'] });
   });
 
-  it('salary: 기준 월급과 학생별 월급', () => {
+  it('salary: 모든 학생이 같은 월급', () => {
     const st = statsOf([student('봇1'), student('봇2')], 'salary');
-    if (st.kind !== 'salary') throw new Error('kind salary 아님');
-    expect(st.baseSalary).toBe(2_600_000);
-    expect(st.salaries).toHaveLength(2);
-    expect(st.salaries.every((x) => x > 0)).toBe(true);
+    expect(st).toEqual({ kind: 'salary', salary: 2_650_000 });
   });
 
   it('survey·survey-result·guide·present는 { kind: "none" } — 설문 답은 분포로 나오지 않는다', () => {
@@ -199,7 +196,7 @@ describe('stats — 결정성·모양', () => {
 
   it('빈 학생 목록에서도 예외 없이 모양이 유효하다', () => {
     expect(stats([], at('join'), cfg)).toEqual({ kind: 'join', joined: 0, connected: 0, nicknames: [] });
-    expect(stats([], at('salary'), cfg)).toEqual({ kind: 'salary', baseSalary: 2_600_000, salaries: [] });
+    expect(stats([], at('salary'), cfg)).toEqual({ kind: 'salary', salary: 2_650_000 });
     expect(stats([], at('budget'), cfg)).toMatchObject({ kind: 'budget', autoCount: 0 });
     // 조용한 달(4월)은 entry도 null — 이벤트 달(2월)은 기록이 없어도 entry 골격이 나온다
     expect(stats([], at('m4'), cfg)).toMatchObject({ kind: 'month', month: 4, entry: null, chained: [], scheduled: [], inChained: 0, autoCount: 0 });

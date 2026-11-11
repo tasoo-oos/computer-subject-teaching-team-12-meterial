@@ -1,6 +1,7 @@
 // 골든 경로: 하늘(신중)·바다(즉흥)의 12개월을 행동으로 재생해 결산이 목업(result-balanced·result-debt)과
 // 근사하는지 확인한다. 허용 오차와 의도적 차이는 docs/core-api.md §4.5에 기록했다.
 import { describe, expect, it } from 'vitest';
+import { BASE_SALARY } from './data/constants.ts';
 import { createInitialState, step } from './engine.ts';
 import { FIXTURES } from './fixtures.ts';
 import { isBudgetValid, netWorth, totalDebt } from './selectors.ts';
@@ -16,12 +17,12 @@ const HANEUL_ANSWERS: Partial<Record<QuestionId, string>> = {
   weekend: '5to15',
   impulse: 'think',
 };
-const HANEUL_SALARY: Won = 2_630_000;
+const SALARY: Won = BASE_SALARY;
 
 /** 하늘: 신중하게 고르는 경로 (fixtures.ts의 haneulHooks를 행동으로 옮긴 것) */
 function haneulGame(): GameState {
-  let s = createInitialState('하늘', HANEUL_SALARY);
-  s = step(s, { type: 'start', nickname: '하늘', salary: HANEUL_SALARY });
+  let s = createInitialState('하늘');
+  s = step(s, { type: 'start', nickname: '하늘' });
   s = step(s, { type: 'submitSurvey', answers: HANEUL_ANSWERS });
   s = step(s, { type: 'goto', phase: 'budget' });
   s = step(s, { type: 'confirmBudget' });
@@ -120,9 +121,9 @@ const BADA_ANSWERS: Partial<Record<QuestionId, string>> = {
   weekend: 'gt30',
   impulse: 'buy',
 };
-const BADA_SALARY: Won = 2_410_000;
+/** 월급 265만 원 중 253만 원을 나누고 12만 원이 생활비 통장에 남는 가계부 (fixtures.ts와 같다) */
 const BADA_BUDGET: Budget = {
-  transfers: { emergency: 150_000, savings: 200_000, invest: 100_000, goal: 50_000, housing: 20_000 },
+  transfers: { emergency: 150_000, savings: 240_000, invest: 100_000, goal: 50_000, housing: 20_000 },
   expenses: {
     rent: 550_000,
     phone: 80_000,
@@ -131,19 +132,18 @@ const BADA_BUDGET: Budget = {
     subscription: 55_000,
     food: 520_000,
     household: 60_000,
-    beauty: 150_000,
-    leisure: 195_000,
+    beauty: 200_000,
+    leisure: 355_000,
     family: 30_000,
   },
-  livingBuffer: 130_000,
 };
 
 /** 바다: 즉흥적인 경로 (fixtures.ts의 badaHooks를 행동으로 옮긴 것).
  *  목업이 계획한 지불 수단 중 잔고가 모자라는 것(5월 사기 50만 원)은 검증을 통과하는
  *  유효한 계획(비상금+목표+카드 일시불)으로 바꿨다 — 총지출은 같다. */
 function badaGame(): GameState {
-  let s = createInitialState('바다', BADA_SALARY);
-  s = step(s, { type: 'start', nickname: '바다', salary: BADA_SALARY });
+  let s = createInitialState('바다');
+  s = step(s, { type: 'start', nickname: '바다' });
   s = step(s, { type: 'submitSurvey', answers: BADA_ANSWERS });
   s = step(s, { type: 'goto', phase: 'budget' });
   s = step(s, { type: 'setBudget', budget: cloneBudget(BADA_BUDGET) });
@@ -186,15 +186,13 @@ function badaGame(): GameState {
   s = step(s, { type: 'continue' });
   s = step(s, { type: 'endMonth' });
 
-  // 6월: 시세 하락에도 보유 → 월세 5만 원 인상 수용 (여유분 -5만)
+  // 6월: 시세 하락에도 보유 → 월세 5만 원 인상 수용 (남는 돈 12만 → 7만, 가계부는 그대로 확인)
   s = step(s, { type: 'beginMonth' });
   s = step(s, { type: 'choose', choiceId: 'hold' }); // check6 (예약 장면)
   s = step(s, { type: 'continue' }); // → rent-hike notice (queue)
   s = step(s, { type: 'choose', choiceId: 'accept' });
   s = step(s, { type: 'continue' }); // → adjust (rent +5만 이미 반영됨)
-  const b6 = cloneBudget(s.budget);
-  b6.livingBuffer -= 50_000;
-  s = step(s, { type: 'setBudget', budget: b6 });
+  s = step(s, { type: 'setBudget', budget: cloneBudget(s.budget) });
   s = step(s, { type: 'endMonth' });
 
   // 7월: 복권 10장 → 한 장 더 (다 잃음)
@@ -252,7 +250,7 @@ describe('골든 경로: 하늘 (신중, result-balanced 목업과 비교)', () 
     expect(a.phase).toBe('result');
     expect(a.settlement).not.toBeNull();
     expect(a.history).toHaveLength(12);
-    expect(isBudgetValid(a.budget, HANEUL_SALARY)).toBe(true);
+    expect(isBudgetValid(a.budget, SALARY)).toBe(true);
 
     // 순자산: 목업과 정확히 일치 (같은 규칙으로 근사 계산된 목업, §4.5)
     const engineNw = netWorth(a);
@@ -276,10 +274,10 @@ describe('골든 경로: 하늘 (신중, result-balanced 목업과 비교)', () 
 
   it('원본 상태를 고치지 않는다 (모든 행동에 결정성·불변성)', () => {
     // haneulGame 내부의 모든 step 호출이 불변성을 지키는지 대표 경로로 확인한다
-    let s = createInitialState('하늘', HANEUL_SALARY);
+    let s = createInitialState('하늘');
     const frozen = deepFreeze(JSON.parse(JSON.stringify(s)) as GameState);
     const snap = JSON.stringify(frozen);
-    s = step(frozen, { type: 'start', nickname: '하늘', salary: HANEUL_SALARY });
+    s = step(frozen, { type: 'start', nickname: '하늘' });
     expect(JSON.stringify(frozen)).toBe(snap);
     expect(s.phase).toBe('survey');
     expect(frozen.phase).toBe('start');

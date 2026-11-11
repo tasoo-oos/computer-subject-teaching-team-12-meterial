@@ -18,21 +18,22 @@ export function issueText(issue: BudgetIssue): string {
   switch (issue.kind) {
     case 'over':
       return `월급보다 ${formatMan(issue.amount)} 많이 나눴어요. 어느 항목을 줄일지 정하세요.`;
-    case 'under':
-      return `${formatMan(issue.amount)}이 아직 이름표 없이 남았어요. 남은 돈도 어느 통장에 둘지 정하세요.`;
     case 'negative': {
       const name =
-        issue.key === 'livingBuffer'
-          ? '생활비 여유분'
-          : issue.key in EXPENSES
-            ? EXPENSES[issue.key as keyof typeof EXPENSES].label
-            : ACCOUNTS[issue.key as keyof typeof ACCOUNTS].label;
+        issue.key in EXPENSES ? EXPENSES[issue.key as keyof typeof EXPENSES].label : ACCOUNTS[issue.key as keyof typeof ACCOUNTS].label;
       return `${name}이 0원보다 적어요.`;
     }
   }
 }
 
-/** 가계부 실시간 합계: 월급, 나눈 돈, 남은 금액, 저축률, 계좌별 비율 */
+/** 월급 안에 들어온 가계부의 안내 문구. 남는 돈은 생활비 통장에 그대로 남는다 */
+function okText(remaining: Won): string {
+  return remaining > 0
+    ? `남는 ${formatMan(remaining)}은 생활비 통장에 그대로 남아 다음 달로 넘어가요.`
+    : '월급을 남김없이 나눴어요.';
+}
+
+/** 가계부 실시간 합계: 월급, 나눈 돈, 남는 돈(생활비 통장), 저축률, 계좌별 비율 */
 export function BudgetTotals({ budget, salary, children }: { budget: Budget; salary: Won; children?: ReactNode }) {
   const s = budgetSummary(budget, salary);
   const issues = budgetIssues(budget, salary);
@@ -48,13 +49,13 @@ export function BudgetTotals({ budget, salary, children }: { budget: Budget; sal
         <dd className="text-right">
           <Money value={s.transferTotal} />
         </dd>
-        <dt className="text-ink-2">생활비 통장 입금</dt>
+        <dt className="text-ink-2">지출 예산 합계</dt>
         <dd className="text-right">
-          <Money value={s.livingIn} />
+          <Money value={s.expenseTotal} />
         </dd>
-        <dt className="pl-3 text-[13px] text-ink-3">고정비 / 변동비 / 여유분</dt>
+        <dt className="pl-3 text-[13px] text-ink-3">고정비 / 변동비</dt>
         <dd className="num text-right text-[13px] text-ink-3">
-          {formatMan(s.fixedTotal)} / {formatMan(s.variableTotal)} / {formatMan(budget.livingBuffer)}
+          {formatMan(s.fixedTotal)} / {formatMan(s.variableTotal)}
         </dd>
       </dl>
 
@@ -64,7 +65,7 @@ export function BudgetTotals({ budget, salary, children }: { budget: Budget; sal
       >
         <span className={`flex items-center gap-1.5 font-semibold ${ok ? 'text-in' : 'text-seal'}`}>
           {ok ? <CircleCheck size={18} aria-hidden /> : <TriangleAlert size={18} aria-hidden />}
-          {s.remaining === 0 ? '남은 금액' : s.remaining < 0 ? '초과한 금액' : '남은 금액'}
+          {s.remaining < 0 ? '초과한 금액' : '생활비 통장에 남는 돈'}
         </span>
         <span className={`num text-[26px] font-bold leading-none ${ok ? 'text-in' : 'text-seal'}`}>
           {s.remaining === 0 ? '0원' : formatMan(Math.abs(s.remaining))}
@@ -77,7 +78,7 @@ export function BudgetTotals({ budget, salary, children }: { budget: Budget; sal
           ))}
         </ul>
       ) : (
-        <p className="mt-2 text-[14px] text-ink-2">월급을 남김없이 나눴어요. 이대로 확정할 수 있어요.</p>
+        <p className="mt-2 text-[14px] text-ink-2">{okText(s.remaining)} 이대로 확정할 수 있어요.</p>
       )}
 
       <div className="mt-4 flex items-baseline justify-between">
@@ -113,8 +114,8 @@ export function InlineTotals({ budget, salary, children }: { budget: Budget; sal
             <dd className="num font-semibold">{formatMan(s.transferTotal)}</dd>
           </div>
           <div className="flex items-baseline gap-1.5">
-            <dt className="text-ink-2">생활비 입금</dt>
-            <dd className="num font-semibold">{formatMan(s.livingIn)}</dd>
+            <dt className="text-ink-2">지출 예산</dt>
+            <dd className="num font-semibold">{formatMan(s.expenseTotal)}</dd>
           </div>
           <div className="flex items-baseline gap-1.5">
             <dt className="text-ink-2">저축률</dt>
@@ -122,14 +123,18 @@ export function InlineTotals({ budget, salary, children }: { budget: Budget; sal
           </div>
         </dl>
         <p className={`ml-auto flex items-baseline gap-2 rounded-[6px] px-3 py-1 ${ok ? 'bg-in-soft' : 'bg-seal-soft'}`} aria-live="polite">
-          <span className={`text-[13px] font-semibold ${ok ? 'text-in' : 'text-seal'}`}>{ok ? '남은 금액' : s.remaining < 0 ? '초과' : '아직 남은 돈'}</span>
+          <span className={`text-[13px] font-semibold ${ok ? 'text-in' : 'text-seal'}`}>{ok ? '남는 돈' : s.remaining < 0 ? '초과' : '남는 돈'}</span>
           <span className={`num text-[22px] font-bold leading-none ${ok ? 'text-in' : 'text-seal'}`}>
             {s.remaining === 0 ? '0원' : formatMan(Math.abs(s.remaining))}
           </span>
         </p>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-        {ok ? <p className="text-[13px] text-ink-2">합계가 맞았습니다. 이대로 다음 달부터 적용됩니다.</p> : <p className="text-[13px] text-seal">{issueText(issues[0]!)}</p>}
+        {ok ? (
+          <p className="text-[13px] text-ink-2">{okText(s.remaining)} 이대로 다음 달부터 적용됩니다.</p>
+        ) : (
+          <p className="text-[13px] text-seal">{issueText(issues[0]!)}</p>
+        )}
         {children ? <div className="ml-auto flex items-center gap-2">{children}</div> : null}
       </div>
     </div>

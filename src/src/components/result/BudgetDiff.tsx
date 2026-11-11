@@ -1,12 +1,11 @@
 import { ACCOUNTS, EXPENSES, TRANSFER_ORDER, type ExpenseId, type Settlement, type TransferAccountId } from '@gagyebu/core';
 import { Money } from '../Money.tsx';
 
-type DiffKey = ExpenseId | TransferAccountId | 'livingBuffer';
+type DiffKey = ExpenseId | TransferAccountId;
 
 const LABEL: Record<DiffKey, string> = {
   ...(Object.fromEntries(Object.entries(EXPENSES).map(([k, v]) => [k, v.label])) as Record<ExpenseId, string>),
   ...(Object.fromEntries(TRANSFER_ORDER.map((id) => [id, ACCOUNTS[id].label])) as Record<TransferAccountId, string>),
-  livingBuffer: '생활비 여유분',
 };
 
 /** 처음 가계부와 12월 가계부 비교 */

@@ -49,10 +49,8 @@ export interface ExpenseMeta {
 export interface Budget {
   /** 월급날 각 계좌로 보내는 자동이체 금액 */
   transfers: Record<TransferAccountId, Won>;
-  /** 생활비 통장에서 나가는 항목별 예산 */
+  /** 생활비 통장에서 월말에 나가는 항목별 예산. 월급 − 자동이체 − 지출 예산(남는 돈)은 생활비 통장에 그대로 남는다 */
   expenses: Record<ExpenseId, Won>;
-  /** 생활비 통장에 남겨 두는 여유분 (쓰지 않으면 이월) */
-  livingBuffer: Won;
 }
 
 export interface BudgetSummary {
@@ -61,9 +59,9 @@ export interface BudgetSummary {
   expenseTotal: Won;
   fixedTotal: Won;
   variableTotal: Won;
-  /** 생활비 통장 입금액 = 지출 예산 + 여유분 */
+  /** 생활비 통장에 남는 월급 = 지출 예산 + 남는 돈(0 이상일 때). 합계가 맞으면 월급 − 자동이체 */
   livingIn: Won;
-  /** 월급 - (자동이체 + 생활비 입금). 0이어야 확정 가능 */
+  /** 월급 − (자동이체 + 지출 예산). 0 이상이어야 확정 가능하고, 남는 돈은 생활비 통장에 그대로 남는다 */
   remaining: Won;
   /** (적금 + 투자 + 청약 + 비상금 + 목표) / 월급 */
   savingsRate: number;
@@ -73,8 +71,7 @@ export interface BudgetSummary {
 
 export type BudgetIssue =
   | { kind: 'over'; amount: Won }
-  | { kind: 'under'; amount: Won }
-  | { kind: 'negative'; key: TransferAccountId | ExpenseId | 'livingBuffer' };
+  | { kind: 'negative'; key: TransferAccountId | ExpenseId };
 
 // ---------------------------------------------------------------------------
 // 계좌 상태, 부채, 지속 효과
@@ -104,7 +101,7 @@ export interface Debt {
   kind: DebtKind;
   principal: Won;
   remaining: Won;
-  /** 매달 생활비에서 빠지는 금액 */
+  /** 매달 월말에 생활비 통장에서 빠지는 금액 */
   monthly: Won;
   monthsLeft: number;
   annualRate: number;
@@ -432,19 +429,25 @@ export interface Outcome {
   budgetReason: string | null;
 }
 
+/** 이번 달 돈의 흐름. 월급날(beginMonth)에 만들고, 월말(리포트 단계로 넘어갈 때)에 closed로 마감한다 */
 export interface PaydayBreakdown {
   month: MonthNo;
   salary: Won;
   transfers: Record<TransferAccountId, Won>;
+  /** 월급 − 자동이체 = 생활비 통장에 들어온 이번 달 생활비 */
   livingIn: Won;
+  /** 월말에 생활비 통장에서 나가는 지출(월급날 가계부의 지출 예산 + 물가 상승분). 마감 전에는 예정액 */
   spending: Won;
+  /** 월말에 생활비 통장에서 나가는 할부·카드값·리볼빙 상환. 마감 전에는 월급날 기준 예정액 */
   debtPayments: Won;
   /** 이번 달에 붙은 이자·수익 */
   earnings: Partial<Record<AccountId, Won>>;
   investReturnPct: number;
   statusEffects: { status: StatusId; satisfaction: number }[];
-  /** 생활비가 모자라 카드값으로 넘어간 금액 */
+  /** 월말에 생활비가 모자라 카드값(다음 달 월말 결제)으로 넘어간 금액. 마감 전에는 0 */
   livingShortfall: Won;
+  /** 월말 마감(지출·상환·부족분 처리)을 마쳤는지 */
+  closed: boolean;
 }
 
 export interface MonthRecord {
@@ -487,13 +490,14 @@ export interface Settlement {
   debt: Won;
   ending: EndingId;
   achievements: { id: AchievementId; unlocked: boolean }[];
-  budgetDiff: { key: ExpenseId | TransferAccountId | 'livingBuffer'; before: Won; after: Won }[];
+  budgetDiff: { key: ExpenseId | TransferAccountId; before: Won; after: Won }[];
 }
 
 export interface GameState {
   version: 1;
   phase: Phase;
-  profile: { nickname: string; salary: Won; baseSalary: Won };
+  /** 월급은 모든 학생이 같다(BASE_SALARY) */
+  profile: { nickname: string; salary: Won };
   survey: { answers: Partial<Record<QuestionId, string>>; result: SurveyResult | null };
   initialBudget: Budget | null;
   budget: Budget;
@@ -525,11 +529,11 @@ export interface GameState {
   settlement: Settlement | null;
 }
 
-/** step(state, action)에 넣는 행동 (2026-11-09 변경, docs/core-api.md §4.2).
- *  start가 salary를 받고, 설문은 submitSurvey 하나로 합쳐진다(answer·finishSurvey 삭제).
+/** step(state, action)에 넣는 행동 (2026-11-11 변경, docs/core-api.md §4.2).
+ *  월급은 모두 같아 start가 salary를 받지 않는다. 설문은 submitSurvey 하나다(answer·finishSurvey 삭제).
  *  auto?: true는 서버·활동의 기본값 처리만 붙이고, step이 DecisionRecord.auto로 옮긴다. */
 export type Action =
-  | { type: 'start'; nickname: string; salary: Won }
+  | { type: 'start'; nickname: string }
   | { type: 'submitSurvey'; answers: Partial<Record<QuestionId, string>>; auto?: true }
   | { type: 'goto'; phase: 'guide' | 'budget' }
   | { type: 'setBudget'; budget: Budget; auto?: true }
@@ -546,7 +550,7 @@ export type Action =
 
 /** 합계 맞추기(balanceBudget)로 바뀐 가계부 항목. 학생 안내 문구용 */
 export interface BudgetChange {
-  key: TransferAccountId | ExpenseId | 'livingBuffer';
+  key: TransferAccountId | ExpenseId;
   before: Won;
   after: Won;
 }
@@ -564,6 +568,6 @@ export type StepErrorCode =
   | 'invalid-step' // 시뮬레이션 안 단계가 맞지 않음 (예: 장면 없는 상태에서 choose)
   | 'unknown-choice' // 현재 장면에 없는 선택지
   | 'choice-locked' // requires 조건을 못 채움
-  | 'budget-invalid' // 합계가 맞지 않거나 음수 항목
+  | 'budget-invalid' // 합계가 월급을 넘거나 음수 항목
   | 'payment-invalid' // 지불 계획 검증 실패 (validatePayment와 같은 이유)
   | 'already-finished'; // phase 'result' 뒤의 행동 (reset 제외)

@@ -94,7 +94,7 @@ describe('beats(cfg)', () => {
     const list = beats(full);
     const byId = Object.fromEntries(list.map((b) => [b.id, b.notes] as const));
     expect(byId['join']).toBe('QR·링크 안내');
-    expect(byId['salary']).toBe('기준 ±10% 설명');
+    expect(byId['salary']).toBe('모두 같은 월급 265만 원');
     expect(byId['survey']).toBe('7문항 한 화면');
     expect(byId['survey-result']).toBe('분포 없음');
     expect(byId['budget']).toBe('추천값·프롬프트 안내');

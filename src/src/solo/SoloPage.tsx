@@ -1,10 +1,10 @@
 // /solo 혼자하기 페이지 (docs/live-api.md §10.10). 서버 없이 같은 화면 자산으로 혼자 1년을 진행한다.
-//   - useReducer(step, …)로 게임 상태를 로컬에서 굴린다. 월급은 rollSalary(Math.random).
+//   - useReducer(step, …)로 게임 상태를 로컬에서 굴린다. 월급은 모두 같다(BASE_SALARY).
 //   - 커서는 가계부 비트 목록 위를 로컬로 움직인다: show 비트는 "다음" 버튼, work 비트는 학생이 끝내면 넘어간다.
 //   - 비트 사이 전이(guide-6 → budget의 goto, m(N) → m(N+1)의 endMonth)는 활동 로직의 transition 그대로 쓴다.
 //   - 공개(reveal) 토글·대기 화면·초안 전송·기본값 루프가 없다. 학생이 모든 단계를 직접 마친다.
 import { useReducer, useRef, useState } from 'react';
-import { createInitialState, rollSalary, step, type Action, type GameState } from '@gagyebu/core';
+import { createInitialState, step, type Action, type GameState } from '@gagyebu/core';
 import { gagyebuLogic, type GagyebuConfig } from '@gagyebu/activity-gagyebu';
 import { lesson } from '@gagyebu/lesson';
 import type { Beat } from '@gagyebu/live';
@@ -30,7 +30,7 @@ function passed(beatId: string, s: GameState): boolean {
 }
 
 export function SoloPage() {
-  const [state, dispatchRaw] = useReducer(step, undefined, () => createInitialState('', 0));
+  const [state, dispatchRaw] = useReducer(step, undefined, () => createInitialState(''));
   const [cursor, setCursor] = useState(0);
   // 같은 클릭 안에서 연속 行動(가계부 setBudget → confirmBudget)도 최신 상태를 보게 하는 미러
   const stateRef = useRef(state);
@@ -39,7 +39,7 @@ export function SoloPage() {
   const started = state.phase !== 'start';
 
   const start = (nickname: string) => {
-    dispatch({ type: 'start', nickname, salary: rollSalary(Math.random) });
+    dispatch({ type: 'start', nickname });
     cursorRef.current = SALARY_BEAT;
     setCursor(SALARY_BEAT);
   };
@@ -102,7 +102,7 @@ export function SoloPage() {
   );
 }
 
-/** 혼자하기 시작: 닉네임을 정하면 rollSalary로 월급을 정해 1년을 시작한다 */
+/** 혼자하기 시작: 닉네임을 정하면 1년을 시작한다 */
 function SoloStart({ onSubmit }: { onSubmit: (nickname: string) => void }) {
   const [name, setName] = useState('');
   const valid = name.trim().length > 0 && name.trim().length <= 10;
@@ -118,7 +118,7 @@ function SoloStart({ onSubmit }: { onSubmit: (nickname: string) => void }) {
         <p className="text-[15px] font-semibold text-ink-2">혼자하기 · 네트워크 없이</p>
         <h1 className="display mt-2 text-[33px]">첫 월급 1년, 혼자 해 보기</h1>
         <p className="mt-2 text-[14px] leading-relaxed text-ink-2">
-          선생님이 없이 내 속도로 진행해요. 월급은 기준 월급 ±10% 안에서 무작위로 정해집니다. 닉네임(1~10자)을 정하고 시작하세요.
+          선생님이 없이 내 속도로 진행해요. 닉네임(1~10자)을 정하고 시작하세요.
         </p>
         <label className="mt-5 block">
           <span className="mb-1.5 block text-[15px] font-semibold">닉네임</span>

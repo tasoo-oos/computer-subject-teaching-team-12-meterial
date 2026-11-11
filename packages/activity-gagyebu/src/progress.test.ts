@@ -57,22 +57,17 @@ function runFallback(s: GameState, beat: number, draft?: unknown): GameState {
 }
 
 describe('init (§4.2)', () => {
-  it('기저 상태는 결정적이고 월급은 행동에 박힌다', () => {
+  it('기저 상태는 결정적이고 월급은 모두 같다', () => {
     const a = initState({ nickname: '하늘', random: () => 0.3 }, cfg);
-    const b = initState({ nickname: '하늘', random: () => 0.3 }, cfg);
-    expect(a.state).toEqual(b.state);
     expect(a.state.phase).toBe('start');
-    expect(a.state.profile.salary).toBe(0); // 난수는 상태가 아니라 행동에
-    expect(a.actions).toHaveLength(1);
-    expect(a.actions[0]).toMatchObject({ type: 'start', nickname: '하늘' });
-    expect((a.actions[0] as { salary: number }).salary).toBeGreaterThan(0);
+    expect(a.state.profile.salary).toBe(2_650_000);
+    expect(a.actions).toEqual([{ type: 'start', nickname: '하늘' }]);
   });
 
-  it('같은 닉네임·다른 난수면 행동의 월급만 달라진다', () => {
+  it('난수가 달라도 기저 상태와 행동이 같다 (난수를 쓰지 않는다)', () => {
     const a = initState({ nickname: '하늘', random: () => 0.9 }, cfg);
     const b = initState({ nickname: '하늘', random: () => 0.1 }, cfg);
-    expect(a.state).toEqual(b.state);
-    expect((a.actions[0] as { salary: number }).salary).not.toBe((b.actions[0] as { salary: number }).salary);
+    expect(a).toEqual(b);
   });
 });
 
@@ -232,7 +227,7 @@ describe('fallback (§9.3 + 월 비트 규칙 1~5)', () => {
     const draft = { kind: 'budget' as const, budget: over };
     const r1 = fallback(edited, at('budget'), cfg, draft);
     expect(r1.action.type).toBe('setBudget');
-    expect(r1.notice).toContain('여유 부족분');
+    expect(r1.notice).toContain('월급을 넘은');
     expect(r1.notice).toContain('10만 원');
     const s2 = step(edited, r1.action);
     expect(done(s2, at('budget'), cfg)).toBe(false); // 아직 확정 전
@@ -243,16 +238,26 @@ describe('fallback (§9.3 + 월 비트 규칙 1~5)', () => {
 
   it('가계부: 초안이 없으면 state.budget(마지막 편집)으로 맞춘다', () => {
     const s = apply(student(), { type: 'submitSurvey', answers: defaultAnswers({}) }, { type: 'goto', phase: 'budget' });
-    const under = clone(s.budget);
-    under.expenses.leisure = Math.max(0, under.expenses.leisure - 80_000); // 8만 원 남는 돈
-    const edited = step(s, { type: 'setBudget', budget: under });
+    const over = clone(s.budget);
+    over.expenses.food += 80_000; // 기본 답안의 추천은 남는 돈 0 → 8만 원 초과
+    const edited = step(s, { type: 'setBudget', budget: over });
     const r = fallback(edited, at('budget'), cfg, undefined);
     expect(r.action.type).toBe('setBudget');
-    expect(r.notice).toContain('남는 돈');
     expect(r.notice).toContain('8만 원');
+    expect(r.notice).toContain('여가·문화');
     const s2 = step(edited, r.action);
     expect(done(s2, at('budget'), cfg)).toBe(false);
     expect(fallback(s2, at('budget'), cfg, undefined).action.type).toBe('confirmBudget');
+  });
+
+  it('가계부: 월급보다 적게 나눈 안은 그대로 확정된다 — 남는 돈은 생활비 통장에', () => {
+    const s = apply(student(), { type: 'submitSurvey', answers: defaultAnswers({}) }, { type: 'goto', phase: 'budget' });
+    const under = clone(s.budget);
+    under.expenses.leisure = Math.max(0, under.expenses.leisure - 80_000);
+    const edited = step(s, { type: 'setBudget', budget: under });
+    const r = fallback(edited, at('budget'), cfg, undefined);
+    expect(r.action.type).toBe('confirmBudget');
+    expect(step(edited, r.action).initialBudget).toEqual(under);
   });
 
   it('월급날: beginMonth — 절차적 걸음이라 안내가 없다 (§14 #123)', () => {

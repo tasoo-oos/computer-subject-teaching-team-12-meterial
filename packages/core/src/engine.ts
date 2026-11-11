@@ -6,8 +6,6 @@ import {
   BASE_SALARY,
   MARKET_RETURNS,
   RATES,
-  SALARY_ROUND,
-  SALARY_SPREAD,
   SETTLEMENT_MONTH,
   SNEAKER_PRICES,
   START_CREDIT,
@@ -17,6 +15,7 @@ import { EVENTS, SCHEDULE } from './data/events.ts';
 import { STATUSES } from './data/statuses.ts';
 import { BASE_EXPENSES, RECOMMENDED_TRANSFERS, SPENDING_TYPE_THRESHOLDS, SURVEY } from './data/survey.ts';
 import {
+  debtPaymentDue,
   emergencyMonths,
   entrySceneId,
   evalCondition,
@@ -24,6 +23,7 @@ import {
   expenseTotal,
   getScene,
   isBudgetValid,
+  livingSpare,
   netWorth,
   resolveAmount,
   savingsMaturity,
@@ -83,7 +83,6 @@ export function emptyBudget(): Budget {
   return {
     transfers: { emergency: 0, savings: 0, invest: 0, goal: 0, housing: 0 },
     expenses: Object.fromEntries(EXPENSE_ORDER.map((id) => [id, 0])) as Record<ExpenseId, Won>,
-    livingBuffer: 0,
   };
 }
 
@@ -94,17 +93,12 @@ export function emptyAccounts(): Record<AccountId, AccountState> {
   >;
 }
 
-/** 기준 평균소득 ±10%, 1만 원 단위 반올림 */
-export function rollSalary(random: () => number = Math.random, base: Won = BASE_SALARY): Won {
-  const factor = 1 + (random() * 2 - 1) * SALARY_SPREAD;
-  return roundTo(base * factor, SALARY_ROUND);
-}
-
-export function createInitialState(nickname: string, salary: Won): GameState {
+/** 처음 상태. 월급은 모든 학생이 같다(BASE_SALARY) */
+export function createInitialState(nickname: string): GameState {
   return {
     version: 1,
     phase: 'start',
-    profile: { nickname, salary, baseSalary: BASE_SALARY },
+    profile: { nickname, salary: BASE_SALARY },
     survey: { answers: {}, result: null },
     initialBudget: null,
     budget: emptyBudget(),
@@ -141,7 +135,7 @@ export function classifySpending(answers: Partial<Record<QuestionId, string>>): 
   return { type, score };
 }
 
-/** 설문 답과 월급으로 추천 가계부를 만든다. 남는 돈은 생활비 여유분으로 둔다 */
+/** 설문 답과 월급으로 추천 가계부를 만든다. 남는 돈은 생활비 통장에 그대로 남는다 */
 export function recommendBudget(answers: Partial<Record<QuestionId, string>>, salary: Won): SurveyResult {
   const { type, score } = classifySpending(answers);
   const expenses = { ...BASE_EXPENSES };
@@ -158,18 +152,15 @@ export function recommendBudget(answers: Partial<Record<QuestionId, string>>, sa
     housing: r.housing,
   };
   const spent = Object.values(transfers).reduce((a, b) => a + b, 0) + Object.values(expenses).reduce((a, b) => a + b, 0);
-  let livingBuffer = salary - spent;
-  if (livingBuffer < 0) {
+  let left = salary - spent;
+  if (left < 0) {
     // 모자라면 적금부터 줄인다
-    const cut = Math.min(transfers.savings, -livingBuffer);
+    const cut = Math.min(transfers.savings, -left);
     transfers.savings -= cut;
-    livingBuffer += cut;
-    if (livingBuffer < 0) {
-      expenses.leisure = Math.max(0, expenses.leisure + livingBuffer);
-      livingBuffer = 0;
-    }
+    left += cut;
+    if (left < 0) expenses.leisure = Math.max(0, expenses.leisure + left);
   }
-  return { type, impulseScore: score, recommended: { transfers, expenses, livingBuffer } };
+  return { type, impulseScore: score, recommended: { transfers, expenses } };
 }
 
 // ---------------------------------------------------------------------------
@@ -190,8 +181,6 @@ function validate(state: GameState, action: Action): Rejection | null {
       if (state.phase !== 'start') return { code: 'invalid-phase', message: '시작 화면에서만 시작할 수 있습니다.' };
       if (typeof action.nickname !== 'string' || action.nickname.length < 1 || action.nickname.length > 10)
         return { code: 'invalid-phase', message: '닉네임은 1~10자여야 합니다.' };
-      if (!Number.isInteger(action.salary) || action.salary <= 0)
-        return { code: 'invalid-phase', message: '월급은 0보다 큰 정수여야 합니다.' };
       return null;
     }
     case 'submitSurvey': {
@@ -214,7 +203,7 @@ function validate(state: GameState, action: Action): Rejection | null {
       const inAdjust = state.phase === 'sim' && state.step === 'adjust';
       if (!inWrite && !inAdjust) return { code: 'invalid-phase', message: '가계부 작성·조정 단계에서만 가계부를 바꿀 수 있습니다.' };
       const b = action.budget;
-      if (!b || typeof b !== 'object' || !b.transfers || !b.expenses || typeof b.livingBuffer !== 'number')
+      if (!b || typeof b !== 'object' || !b.transfers || !b.expenses)
         return { code: 'budget-invalid', message: '가계부 형식이 올바르지 않습니다.' };
       for (const id of TRANSFER_ORDER)
         if (typeof b.transfers[id] !== 'number' || b.transfers[id] < 0)
@@ -222,13 +211,12 @@ function validate(state: GameState, action: Action): Rejection | null {
       for (const id of EXPENSE_ORDER)
         if (typeof b.expenses[id] !== 'number' || b.expenses[id] < 0)
           return { code: 'budget-invalid', message: '지출 예산은 0 이상이어야 합니다.' };
-      if (b.livingBuffer < 0) return { code: 'budget-invalid', message: '생활비 여유분은 0 이상이어야 합니다.' };
       return null;
     }
     case 'confirmBudget': {
       if (state.phase !== 'budget') return { code: 'invalid-phase', message: '가계부 작성 단계에서만 확정할 수 있습니다.' };
       if (!isBudgetValid(state.budget, state.profile.salary))
-        return { code: 'budget-invalid', message: '가계부 합계가 월급과 같지 않거나 음수 항목이 있습니다.' };
+        return { code: 'budget-invalid', message: '가계부 합계가 월급보다 많거나 음수 항목이 있습니다.' };
       return null;
     }
     case 'beginMonth': {
@@ -335,10 +323,10 @@ export class StepError extends Error {
 function applyAction(s: GameState, action: Action): GameState {
   switch (action.type) {
     case 'reset':
-      return createInitialState('', 0);
+      return createInitialState('');
     case 'start':
       s.profile.nickname = action.nickname;
-      s.profile.salary = action.salary;
+      s.profile.salary = BASE_SALARY;
       s.phase = 'survey';
       return s;
     case 'submitSurvey':
@@ -352,11 +340,12 @@ function applyAction(s: GameState, action: Action): GameState {
       return s;
     case 'setBudget': {
       const wasAdjust = s.phase === 'sim' && s.step === 'adjust';
-      s.budget = clone(action.budget);
+      // 알려진 필드만 옮긴다(예전 로그의 livingBuffer 같은 필드는 버린다)
+      s.budget = { transfers: clone(action.budget.transfers), expenses: clone(action.budget.expenses) };
       if (wasAdjust) {
         s.budgetEdits += 1;
         // 조정 단계에서 합계가 맞으면 조정 완료 — 별도 continue가 없다 (§4.2)
-        if (isBudgetValid(s.budget, s.profile.salary)) s.step = 'report';
+        if (isBudgetValid(s.budget, s.profile.salary)) toReport(s);
       }
       checkAchievements(s);
       return s;
@@ -384,7 +373,7 @@ function applyAction(s: GameState, action: Action): GameState {
         s.step = 'scene';
       } else {
         s.current = null;
-        s.step = 'report';
+        toReport(s);
       }
       return s;
     }
@@ -420,7 +409,9 @@ function monthRecord(s: GameState): MonthRecord {
 }
 
 // ---------------------------------------------------------------------------
-// 월급날 처리 (기획서 5.1~5.3, §4.2의 순서)
+// 월급날 처리와 월말 마감 (기획서 5.1~5.3, §4.2의 순서)
+// 월급날: 월급 입금 → 자동이체 → 이자·수익 → 상태 효과. 생활비 통장에는 이번 달 생활비(월급 − 자동이체)가 남는다.
+// 월말(리포트 단계로 넘어갈 때): 지출 예산 + 할부·카드값이 생활비 통장에서 나가고, 모자라면 부족분이 카드값이 된다.
 
 function runPayday(s: GameState) {
   const m = s.month;
@@ -450,34 +441,13 @@ function runPayday(s: GameState) {
     s.flags.paySelfFirstOk = false;
   }
 
-  // 3. 부채 상환 (이번 달에 만든 부채는 다음 달부터 갚는다, §4.5)
-  let debtPayments = 0;
-  for (const d of s.debts) {
-    if (d.startedMonth >= m || d.monthsLeft <= 0) continue;
-    const interest = Math.round((d.remaining * d.annualRate) / 12);
-    const pay = Math.min(d.monthly, d.remaining + interest);
-    d.remaining = d.remaining + interest - pay;
-    d.monthsLeft -= 1;
-    debtPayments += pay;
-  }
-  s.debts = s.debts.filter((d) => d.remaining > 0);
-
-  // 4. 지출 (예산 + 물가 상승분 foodOverspend 플래그)
+  // 3. 월말에 나갈 지출을 월급날 가계부로 정해 둔다 (예산 + 물가 상승분 foodOverspend 플래그).
+  //    달 중간에 가계부를 고쳐도 이번 달 지출은 바뀌지 않고 다음 달부터 반영된다 (§4.5)
   const overspend = typeof s.flags.foodOverspend === 'number' ? Math.round(b.expenses.food * s.flags.foodOverspend) : 0;
   const spending = expenseTotal(b) + overspend;
-  s.accounts.living.balance -= spending + debtPayments;
+  const debtPayments = sum(s.debts.map((d) => debtPaymentDue(d, m)));
 
-  // 5. 생활비 부족분: 카드값으로 넘어간다고 기록(플래그). 자동 부채는 만들지 않는다 (§4.5)
-  let shortfall = 0;
-  if (s.accounts.living.balance < 0) {
-    shortfall = -s.accounts.living.balance;
-    s.accounts.living.balance = 0;
-    s.satisfaction = clamp(s.satisfaction - 5, 0, 100);
-  }
-  s.flags.livingShort = shortfall > 0;
-  s.flags.livingShortfall = shortfall;
-
-  // 6. 이자·투자 수익
+  // 4. 이자·투자 수익
   const earnings: Partial<Record<AccountId, Won>> = {};
   for (const id of ['emergency', 'goal', 'housing'] as const) {
     const e = Math.round((s.accounts[id].balance * RATES[id]) / 12);
@@ -491,7 +461,7 @@ function runPayday(s: GameState) {
   s.accounts.invest.earned += gain;
   earnings.invest = gain;
 
-  // 7. 상태 효과 (이번 달에 생긴 상태는 다음 달부터, 만료 달 지나면 제거)
+  // 5. 상태 효과 (이번 달에 생긴 상태는 다음 달부터, 만료 달 지나면 제거)
   const statusEffects: { status: StatusId; satisfaction: number }[] = [];
   for (const st of s.statuses) {
     const delta = STATUSES[st.id].monthly?.satisfaction;
@@ -507,20 +477,88 @@ function runPayday(s: GameState) {
     month: m,
     salary,
     transfers,
-    livingIn: expenseTotal(b) + b.livingBuffer,
+    livingIn: salary - transferTotal(b),
     spending,
     debtPayments,
     earnings,
     investReturnPct,
     statusEffects,
-    livingShortfall: shortfall,
+    livingShortfall: 0,
+    closed: false,
   };
+}
+
+/** 생활비 부족분 카드값의 부채 id 접두사. 리볼빙 장면이 이 카드값을 다룬다 */
+const SHORTFALL_DEBT_PREFIX = 'shortfall-';
+const SHORTFALL_DEBT_LABEL = '카드값 — 생활비 부족분';
+
+/** 월말 마감: 지출 예산과 할부·카드값을 생활비 통장에서 내고, 모자라면 부족분을 카드값(다음 달 월말 결제)으로 넘긴다 */
+function closeMonth(s: GameState) {
+  const p = s.payday;
+  if (!p || p.closed || p.month !== s.month) return;
+  const m = s.month;
+
+  // 1. 부채 상환 (이번 달에 만든 부채는 다음 달부터 갚는다, §4.5)
+  let debtPayments = 0;
+  for (const d of s.debts) {
+    const pay = debtPaymentDue(d, m);
+    if (d.startedMonth >= m || d.monthsLeft <= 0) continue;
+    const interest = Math.round((d.remaining * d.annualRate) / 12);
+    d.remaining = d.remaining + interest - pay;
+    d.monthsLeft -= 1;
+    debtPayments += pay;
+  }
+  s.debts = s.debts.filter((d) => d.remaining > 0);
+
+  // 2. 지출 (월급날에 정한 예산 + 물가 상승분)
+  s.accounts.living.balance -= p.spending + debtPayments;
+
+  // 3. 생활비 부족분: 카드값으로 넘어가 다음 달 월말에 생활비 통장에서 빠진다. 만족도 -5
+  let shortfall = 0;
+  if (s.accounts.living.balance < 0) {
+    shortfall = -s.accounts.living.balance;
+    s.accounts.living.balance = 0;
+    s.satisfaction = clamp(s.satisfaction - 5, 0, 100);
+    s.debts.push({
+      id: `${SHORTFALL_DEBT_PREFIX}${m}`,
+      label: SHORTFALL_DEBT_LABEL,
+      kind: 'cardBill',
+      principal: shortfall,
+      remaining: shortfall,
+      monthly: shortfall,
+      monthsLeft: 1,
+      annualRate: 0,
+      startedMonth: m,
+    });
+  }
+  s.flags.livingShort = shortfall > 0;
+  s.flags.livingShortfall = shortfall;
+
+  p.debtPayments = debtPayments;
+  p.livingShortfall = shortfall;
+  p.closed = true;
+}
+
+/** 리포트 단계로 넘어가며 이번 달을 마감한다 */
+function toReport(s: GameState) {
+  s.current = null;
+  s.step = 'report';
+  closeMonth(s);
+  checkAchievements(s);
+}
+
+/** 아직 갚지 않은 생활비 부족분 카드값을 없앤다(리볼빙으로 바꾸거나 다른 계좌로 갚았을 때) */
+function clearShortfallDebts(s: GameState) {
+  s.debts = s.debts.filter((d) => !d.id.startsWith(SHORTFALL_DEBT_PREFIX));
 }
 
 function beginMonth(s: GameState): GameState {
   runPayday(s);
   checkAchievements(s);
   if (s.month === SETTLEMENT_MONTH) {
+    // 결산 달에는 장면이 없다: 월급날 바로 월말 마감 후 결산
+    closeMonth(s);
+    checkAchievements(s);
     settle(s);
     return s;
   }
@@ -540,7 +578,8 @@ function beginMonth(s: GameState): GameState {
   if (event) queue.push({ eventId: event.id, sceneId: entrySceneId(s, event) });
   s.queue = queue;
   s.current = queue.length > 0 ? (queue.shift() as SceneRef) : null;
-  s.step = s.current ? 'scene' : 'report';
+  if (s.current) s.step = 'scene';
+  else toReport(s);
   return s;
 }
 
@@ -597,8 +636,6 @@ function settle(s: GameState) {
     for (const id of EXPENSE_ORDER)
       if (init.expenses[id] !== s.budget.expenses[id])
         budgetDiff.push({ key: id, before: init.expenses[id], after: s.budget.expenses[id] });
-    if (init.livingBuffer !== s.budget.livingBuffer)
-      budgetDiff.push({ key: 'livingBuffer', before: init.livingBuffer, after: s.budget.livingBuffer });
   }
 
   s.settlement = {
@@ -751,18 +788,16 @@ function applyEffects(s: GameState, effects: NonNullable<Choice['effects']>, del
         break;
       case 'flag':
         s.flags[e.key] = e.value;
-        // 물가 상승 플래그: "이번 달 식비도 이미 8% 더 나왔다"를 즉시 반영한다 (§4.5).
-        // 이후 매달 월급날 지출에도 같은 비율이 붙는다.
+        // 물가 상승 플래그: "이번 달 식비도 이미 8% 더 나왔다"를 생활비 통장에 즉시 반영한다 (§4.5).
+        // 통장에 없는 몫은 이번 달 월말 지출에 더해 월말 부족분(카드값)으로 처리된다.
+        // 이후 매달 월말 지출에도 같은 비율이 붙는다.
         if (e.key === 'foodOverspend' && typeof e.value === 'number' && e.value > 0) {
           const overspendNow = Math.round(s.budget.expenses.food * e.value);
           const before = s.accounts.living.balance;
-          s.accounts.living.balance = Math.max(0, before - overspendNow);
-          deltas.push({ kind: 'account', account: 'living', amount: s.accounts.living.balance - before });
-          if (before < overspendNow) {
-            s.flags.livingShort = true;
-            s.flags.livingShortfall = overspendNow - before;
-            s.satisfaction = clamp(s.satisfaction - 5, 0, 100);
-          }
+          const paid = Math.min(before, overspendNow);
+          s.accounts.living.balance = before - paid;
+          if (paid > 0) deltas.push({ kind: 'account', account: 'living', amount: -paid });
+          if (overspendNow > paid && s.payday && !s.payday.closed) s.payday.spending += overspendNow - paid;
         }
         break;
       case 'sellAllInvest':
@@ -777,6 +812,8 @@ function applyEffects(s: GameState, effects: NonNullable<Choice['effects']>, del
         break;
       case 'startRevolving': {
         const amount = resolveAmount(s, e.amount);
+        // 생활비 부족분 카드값을 리볼빙으로 돌린다: 원래 카드값은 리볼빙 부채로 바뀐다
+        if (e.amount === 'livingShortfall') clearShortfallDebts(s);
         if (amount > 0) {
           s.debts.push({
             id: `revolving-${s.month}`,
@@ -834,6 +871,8 @@ function choose(s: GameState, action: Extract<Action, { type: 'choose' }>): Game
         ),
       );
     }
+    // 생활비 부족분을 다른 계좌로 갚으면 그 카드값은 끝난다
+    if (pay.amount === 'livingShortfall') clearShortfallDebts(s);
     if (pay.to) {
       s.accounts[pay.to].balance += amount;
       s.accounts[pay.to].contributed += amount;
@@ -967,8 +1006,8 @@ function statusAction(s: GameState, action: Extract<Action, { type: 'statusActio
 // ---------------------------------------------------------------------------
 // 기본값·자동 처리 함수 (§4.3)
 
-/** 합계 맞추기. 남는 돈은 생활비 여유분에 넣고, 모자라면 여유분에서 뺀다.
- *  여유분이 0이 되어도 모자라면 변동비를 여가 → 의류·미용 → 생활용품 → 경조사 → 식비 순서로 줄인다.
+/** 합계 맞추기. 남는 돈은 그대로 둔다(생활비 통장에 남는다).
+ *  월급을 넘으면 변동비를 여가 → 의류·미용 → 생활용품 → 경조사 → 식비 순서로 줄인다.
  *  고정비는 절대 건드리지 않는다(변동비를 다 줄여도 모자라는 극단적인 경우만 자동이체에서 충당, §4.5).
  *  결과는 항상 isBudgetValid를 통과한다. changes는 학생 안내 문구용. */
 const BALANCE_CUT_ORDER: ExpenseId[] = ['leisure', 'beauty', 'household', 'family', 'food'];
@@ -979,19 +1018,9 @@ export function balanceBudget(budget: Budget, salary: Won): { budget: Budget; ch
   const track = (key: BudgetChange['key'], before: Won, after: Won) => {
     if (before !== after) changes.push({ key, before, after });
   };
-  const allocated = transferTotal(b) + expenseTotal(b) + b.livingBuffer;
-  const diff = salary - allocated; // 양수면 남는 돈, 음수면 모자람
-  if (diff > 0) {
-    const before = b.livingBuffer;
-    b.livingBuffer += diff;
-    track('livingBuffer', before, b.livingBuffer);
-  } else if (diff < 0) {
+  const diff = salary - transferTotal(b) - expenseTotal(b); // 음수면 모자람
+  if (diff < 0) {
     let need = -diff;
-    const bufBefore = b.livingBuffer;
-    const bufCut = Math.min(b.livingBuffer, need);
-    b.livingBuffer -= bufCut;
-    need -= bufCut;
-    track('livingBuffer', bufBefore, b.livingBuffer);
     for (const id of BALANCE_CUT_ORDER) {
       if (need <= 0) break;
       const before = b.expenses[id];
@@ -1039,7 +1068,7 @@ export function fallbackChoice(scene: Scene): Choice {
 const AUTO_SOURCE_ORDER: AccountId[] = ['living', 'emergency', 'goal', 'invest', 'savings', 'housing'];
 
 /** 자동 지불 계획: 허용된 수단 중 생활비 → 비상금 → 목표 → 투자 → 적금 → 청약 순서로
- *  잔고만큼, 남으면 카드 일시불(cardMonths에 1이 있을 때, 없으면 가장 짧은 허용 개월).
+ *  잔고만큼(생활비는 월말에 나갈 돈을 뺀 livingSpare만큼), 남으면 카드 일시불(cardMonths에 1이 있을 때, 없으면 가장 짧은 허용 개월).
  *  adjustable이면 금액 = 최솟값. 카드도 허용되지 않아 남는 금액은 shortfall로 돌려준다. */
 export function autoPaymentPlan(state: GameState, pay: PaySpec): { plan: PaymentPlan; shortfall: Won } {
   const amount = pay.adjustable ? pay.adjustable.min : resolveAmount(state, pay.amount);
@@ -1048,7 +1077,7 @@ export function autoPaymentPlan(state: GameState, pay: PaySpec): { plan: Payment
   for (const src of AUTO_SOURCE_ORDER) {
     if (left <= 0) break;
     if (!pay.sources.includes(src)) continue;
-    const balance = state.accounts[src].balance;
+    const balance = src === 'living' ? livingSpare(state) : state.accounts[src].balance;
     if (balance <= 0) continue;
     const take = Math.min(balance, left);
     parts.push({ source: src, amount: take });
