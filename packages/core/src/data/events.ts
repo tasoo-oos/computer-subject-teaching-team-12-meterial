@@ -21,7 +21,7 @@ const tutorial: GameEvent = {
   month: 1,
   title: '첫 월급',
   summary: '월급이 들어오고 자동이체가 실행되는 과정을 따라가 봅니다.',
-  lesson: '월급날 자동이체가 먼저 돈을 나눠 주면, 생활비 통장 잔고만 보고 생활할 수 있습니다.',
+  lesson: '월급날 자동이체로 돈을 먼저 나눠 두면, 생활비 통장 잔고만 보고 생활하면 됩니다.',
   entry: 'welcome',
   scenes: {
     welcome: {
@@ -49,14 +49,14 @@ const laptopSpill: GameEvent = {
   month: 2,
   title: '노트북에 커피를 쏟음',
   summary: '공부하던 노트북의 메인보드가 고장 났습니다.',
-  lesson: '수리, 중고, 새것의 총비용을 비교하고, 비상금이 부족하면 작은 고장도 할부로 번집니다. 중고거래는 안전결제로.',
+  lesson: '고장 나면 수리 · 중고 · 새것의 총비용부터 비교합니다. 비상금이 모자라면 작은 고장도 할부 빚이 됩니다. 중고거래는 안전결제로만 합니다.',
   promptId: 'emergency',
   entry: 'start',
   scenes: {
     start: {
       id: 'start',
       channel: 'narration',
-      text: '퇴근 후 자격증 공부를 하던 노트북에 커피를 쏟았습니다. 서비스센터에서는 메인보드가 고장 났다고 합니다. 수리비는 60만 원. 비상금 통장에는 아직 두 달 치만 쌓여 있습니다.',
+      text: '퇴근하고 자격증 공부를 하다가 노트북에 커피를 쏟았습니다. 서비스센터에서는 메인보드가 고장 났다며 수리비로 60만 원을 말합니다. 비상금 통장에는 아직 두 달 동안 모은 돈뿐입니다.',
       choices: [
         {
           id: 'repair',
@@ -103,7 +103,7 @@ const laptopSpill: GameEvent = {
           id: 'wait',
           kind: 'free',
           label: '당분간 휴대폰으로 버틴다',
-          detail: '돈은 안 들지만 불편함',
+          detail: '돈은 안 들지만 불편하다',
           effects: [{ kind: 'addStatus', status: 'noLaptop' }],
           next: { scene: 'again', delayMonths: 2 },
           tags: ['deferred'],
@@ -151,12 +151,12 @@ const laptopSpill: GameEvent = {
       id: 'scammed',
       channel: 'narration',
       title: '중고거래 사기',
-      text: '33만 원을 잃었고 노트북도 없습니다. 은행에 지급정지를 요청하고 경찰(112)에 신고했지만, 돈을 돌려받기까지는 오래 걸립니다. 이제 어떻게 할까요?',
+      text: '33만 원을 보냈는데 노트북은 오지 않았습니다. 은행에 지급정지를 요청하고 경찰(112)에 신고했지만, 돈을 돌려받으려면 오래 걸립니다. 이제 어떻게 할까요?',
       choices: [
         {
           id: 'repair',
           kind: 'pay',
-          label: '그냥 서비스센터에서 수리한다',
+          label: '이번엔 서비스센터에서 수리한다',
           detail: '60만 원',
           pay: { amount: 600_000, sources: ANY, cardMonths: [1, 3] },
           feedback: '돌고 돌아 수리했습니다. 원래보다 33만 원을 더 쓴 셈입니다.',
@@ -200,8 +200,8 @@ const laptopSpill: GameEvent = {
     again: {
       id: 'again',
       channel: 'narration',
-      title: '노트북 문제, 다시',
-      text: '휴대폰으로 버틴 지 두 달. 보고서 마감이 다가오는데 작은 화면으로는 도저히 안 되겠습니다. 이번에는 결정해야 합니다.',
+      title: '다시 노트북 문제',
+      text: '휴대폰으로 버틴 지 두 달이 지났습니다. 보고서 마감은 다가오는데 작은 화면으로는 도저히 안 되겠습니다. 이번에는 정해야 합니다.',
       choices: [
         {
           id: 'repair',
@@ -260,7 +260,7 @@ const sneakerResell: GameEvent = {
   month: 3,
   title: '한정판 운동화 리셀',
   summary: '"사서 되팔면 두 배"라는 친구의 제안',
-  lesson: '투자처럼 보이는 소비입니다. 시세는 내 계획대로 움직이지 않고, 언제 팔지 정하지 않은 도박은 손해로 끝나기 쉽습니다.',
+  lesson: '리셀은 투자처럼 보여도 소비입니다. 시세는 내 계획대로 움직이지 않아서, 언제 팔지 정하지 않고 사면 손해로 끝나기 쉽습니다.',
   promptId: 'temptation',
   entry: 'start',
   scenes: {
@@ -309,7 +309,7 @@ const sneakerResell: GameEvent = {
           id: 'wear',
           kind: 'pay',
           label: '신으려고 1켤레만 산다',
-          detail: '30만 원, 되팔지 않음',
+          detail: '30만 원, 내가 신을 것',
           pay: { amount: 300_000, sources: ['goal', 'living', 'card'], cardMonths: [1, 3], goalBonus: 4 },
           effects: [{ kind: 'satisfaction', delta: 4 }],
           tags: ['plannedJoy'],
@@ -318,7 +318,7 @@ const sneakerResell: GameEvent = {
         {
           id: 'pass',
           kind: 'free',
-          label: '패스한다',
+          label: '사지 않는다',
           feedback: '"사서 되팔면 두 배"는 확실한 이야기가 아닙니다. 지켜보기로 했습니다.',
         },
       ],
@@ -328,9 +328,9 @@ const sneakerResell: GameEvent = {
       channel: 'app',
       speaker: '리셀 앱 알림',
       title: '시세 알림',
-      text: '보유한 운동화의 시세가 올랐습니다. 지금 팔면 수수료 10%를 떼고 받습니다.',
+      text: '가지고 있는 운동화 시세가 올랐습니다. 지금 팔면 수수료 10%를 떼고 받습니다.',
       reveal: [
-        { label: '현재 시세 (1켤레)', value: '42만 원' },
+        { label: '지금 시세(1켤레)', value: '42만 원' },
         { label: '산 가격', value: '30만 원' },
         { label: '판매 수수료', value: '10%' },
       ],
@@ -347,7 +347,7 @@ const sneakerResell: GameEvent = {
         {
           id: 'hold',
           kind: 'gamble',
-          label: '60만 원 될 때까지 기다린다',
+          label: '60만 원이 될 때까지 기다린다',
           fallback: true,
           next: { scene: 'check6', delayMonths: 2 },
           feedback: '조금만 더 기다려 보기로 했습니다.',
@@ -369,9 +369,9 @@ const sneakerResell: GameEvent = {
       channel: 'app',
       speaker: '리셀 앱 알림',
       title: '시세 알림',
-      text: '재발매 소식이 돌면서 시세가 떨어졌습니다. 상태 카드에서는 언제든 그 달 시세로 팔 수 있습니다.',
+      text: '재발매 소식이 돌면서 시세가 떨어졌습니다. 앞으로도 상태 카드에서 그 달 시세로 언제든 팔 수 있습니다.',
       reveal: [
-        { label: '현재 시세 (1켤레)', value: '24만 원' },
+        { label: '지금 시세(1켤레)', value: '24만 원' },
         { label: '산 가격', value: '30만 원' },
         { label: '판매 수수료', value: '10%' },
       ],
@@ -413,7 +413,7 @@ const familyMonth: GameEvent = {
   month: 5,
   title: '가정의 달',
   summary: '어버이날 선물과 가족 외식, 그리고 수상한 메시지',
-  lesson: '가족 지출은 금액보다 계획이 중요합니다. 돈을 보내기 전에는 원래 번호로 전화해 확인합니다.',
+  lesson: '가족에게 쓰는 돈은 액수보다 계획이 중요합니다. 돈을 보내기 전에는 원래 번호로 전화해 확인합니다.',
   promptId: 'fraud',
   entry: 'gift',
   scenes: {
@@ -426,7 +426,7 @@ const familyMonth: GameEvent = {
         {
           id: 'luxury',
           kind: 'fixedPay',
-          label: '명품 선물과 호텔 뷔페로 특별하게',
+          label: '명품 선물에 호텔 뷔페까지 한다',
           detail: '100만 원, 6개월 할부',
           fallback: true,
           fixedPay: { amount: 1_000_000, source: 'card', cardMonths: 6, interestFree: false, label: '6개월 할부 (수수료 포함), 매달 약 19.2만 원' },
@@ -437,7 +437,7 @@ const familyMonth: GameEvent = {
         {
           id: 'big',
           kind: 'pay',
-          label: '선물과 외식을 넉넉하게',
+          label: '선물과 외식에 넉넉하게 쓴다',
           detail: '30만 원',
           pay: { amount: 300_000, sources: ['goal', 'living', 'emergency', 'card'], cardMonths: [1, 3], goalBonus: 3 },
           effects: [{ kind: 'satisfaction', delta: 8 }],
@@ -447,7 +447,7 @@ const familyMonth: GameEvent = {
         {
           id: 'mid',
           kind: 'pay',
-          label: '15만 원으로 정해서 준비',
+          label: '15만 원 안에서 준비한다',
           detail: '15만 원',
           pay: { amount: 150_000, sources: ['goal', 'living', 'emergency', 'card'], cardMonths: [1], goalBonus: 3 },
           effects: [{ kind: 'satisfaction', delta: 5 }],
@@ -457,7 +457,7 @@ const familyMonth: GameEvent = {
         {
           id: 'letter',
           kind: 'pay',
-          label: '손편지와 꽃 한 다발',
+          label: '손편지와 꽃 한 다발을 드린다',
           detail: '5만 원',
           pay: { amount: 50_000, sources: ['goal', 'living', 'card'], cardMonths: [1], goalBonus: 3 },
           effects: [{ kind: 'satisfaction', delta: 4 }],
@@ -486,7 +486,7 @@ const familyMonth: GameEvent = {
         {
           id: 'call',
           kind: 'free',
-          label: '엄마의 원래 번호로 전화한다',
+          label: '엄마 원래 번호로 전화해 본다',
           effects: [{ kind: 'satisfaction', delta: 3 }],
           tags: ['fraudAvoided'],
           feedback: '"엄마 폰 멀쩡한데?" 가족 사칭 사기였습니다. 번호를 신고했습니다.',
@@ -504,7 +504,7 @@ const familyMonth: GameEvent = {
       id: 'aftermath',
       channel: 'narration',
       title: '가족 사칭 사기',
-      text: '엄마에게 전화해 보니 폰은 멀쩡했습니다. 상품권은 이미 사용되어 돌려받기 어렵습니다. 바로 은행과 경찰(112)에 신고했습니다.',
+      text: '엄마에게 전화해 보니 폰은 멀쩡했습니다. 상품권은 누군가 이미 써 버려서 돌려받기 어렵습니다. 바로 은행과 경찰(112)에 신고했습니다.',
       choices: [
         {
           id: 'ok',
@@ -525,7 +525,7 @@ const rentHike: GameEvent = {
   month: 6,
   title: '월세 인상',
   summary: '재계약 때 월세를 5만 원 올리겠다는 통보',
-  lesson: '고정비는 매달 쌓입니다. 한 번 드는 비용과 매달 아끼는 금액을 함께 계산합니다.',
+  lesson: '고정비는 오르면 매달 쌓입니다. 이사처럼 한 번 드는 돈과 매달 아끼는 돈을 함께 따져 봅니다.',
   entry: 'notice',
   scenes: {
     notice: {
@@ -541,7 +541,7 @@ const rentHike: GameEvent = {
         {
           id: 'accept',
           kind: 'budget',
-          label: '받아들이고 가계부를 조정한다',
+          label: '받아들이고 가계부를 고친다',
           detail: '월세 +5만 원',
           effects: [
             { kind: 'budget', expense: 'rent', delta: 50_000 },
@@ -552,7 +552,7 @@ const rentHike: GameEvent = {
         {
           id: 'ignore',
           kind: 'budget',
-          label: '문자를 무시하고 답하지 않는다',
+          label: '문자에 답하지 않는다',
           fallback: true,
           effects: [
             { kind: 'budget', expense: 'rent', delta: 70_000 },
@@ -605,7 +605,7 @@ const rentHike: GameEvent = {
         {
           id: 'accept30',
           kind: 'budget',
-          label: '좋아요, 3만 원 인상으로 계약한다',
+          label: '3만 원 인상으로 계약한다',
           effects: [
             { kind: 'budget', expense: 'rent', delta: 30_000 },
             { kind: 'openBudget', reason: '월세가 3만 원 올랐습니다. 가계부를 다시 맞추세요.' },
@@ -639,7 +639,7 @@ const scratchLottery: GameEvent = {
   month: 7,
   title: '즉석복권 당첨',
   summary: '5천 원짜리 즉석복권이 5만 원에 당첨',
-  lesson: '복권 1장의 기대값은 산 가격의 절반쯤입니다. 공돈도 계획이 필요합니다.',
+  lesson: '복권 1장의 기대값은 산 가격의 절반쯤입니다. 공돈도 쓸 곳을 미리 정해야 합니다.',
   entry: 'win',
   scenes: {
     win: {
@@ -686,7 +686,7 @@ const scratchLottery: GameEvent = {
         {
           id: 'stop',
           kind: 'deposit',
-          label: '여기서 그만두고 5천 원을 넣는다',
+          label: '여기서 멈추고 당첨금 5천 원을 통장에 넣는다',
           deposit: { amount: 5_000, targets: ['living', 'emergency', 'goal'] },
           feedback: '5만 원이 5천 원이 됐습니다. 그래도 여기서 멈췄습니다.',
         },
@@ -819,8 +819,8 @@ const priceRise: GameEvent = {
         {
           id: 'adjust',
           kind: 'budget',
-          label: '가계부를 조정한다',
-          detail: '식비 +8%, 다른 항목을 줄여 맞춤',
+          label: '가계부를 고친다',
+          detail: '식비 +8%, 다른 항목을 줄여 맞춘다',
           effects: [
             { kind: 'budgetPct', expense: 'food', pct: 0.08 },
             { kind: 'openBudget', reason: '식비 예산이 8% 늘었습니다. 가계부를 확인하고, 월급을 넘으면 다른 항목을 줄이세요.' },
@@ -887,7 +887,7 @@ const coinRoom: GameEvent = {
   month: 11,
   title: '코인 리딩방 초대',
   summary: '"월 300% 수익, 원금 보장" 단톡방',
-  lesson: '"원금 보장 + 고수익"은 존재하지 않습니다. 출금하려면 돈을 더 내라는 요구는 전형적인 사기 수법입니다.',
+  lesson: '"원금 보장에 고수익"은 없습니다. 출금하려면 돈을 더 내라는 말은 전형적인 사기 수법입니다.',
   promptId: 'fraud',
   entry: 'invite',
   scenes: {
@@ -935,7 +935,7 @@ const coinRoom: GameEvent = {
       speaker: '리딩방 매니저',
       text: '회원님 수익 20만 원 축하드립니다! 출금하시려면 보안 인증 수수료 100만 원을 먼저 입금하셔야 합니다. 입금 확인 즉시 원금과 수익 전부 출금해 드립니다.',
       reveal: [
-        { label: '화면상 잔고', value: '30만 원' },
+        { label: '화면에 보이는 잔고', value: '30만 원' },
         { label: '요구한 수수료', value: '100만 원' },
       ],
       choices: [
@@ -952,7 +952,7 @@ const coinRoom: GameEvent = {
         {
           id: 'refuse',
           kind: 'free',
-          label: '이상하다. 더는 돈을 보내지 않고 신고한다',
+          label: '이상하다, 더는 돈을 보내지 않고 신고한다',
           feedback: '10만 원은 잃었지만 더 큰 피해를 막았습니다. 112에 신고했습니다.',
         },
       ],
@@ -961,7 +961,7 @@ const coinRoom: GameEvent = {
       id: 'vanished',
       channel: 'narration',
       title: '단톡방이 사라졌다',
-      text: '다음 날 아침, 단톡방이 통째로 사라졌습니다. 매니저의 연락처도 없는 번호가 됐습니다. 보낸 돈은 모두 잃었습니다.',
+      text: '다음 날 아침, 단톡방이 통째로 사라졌습니다. 매니저 번호도 없는 번호로 나옵니다. 보낸 돈은 모두 잃었습니다.',
       choices: [
         {
           id: 'ok',
