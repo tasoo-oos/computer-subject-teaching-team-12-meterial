@@ -41,7 +41,7 @@ export function beats(cfg: GagyebuConfig): Beat[] {
   const beats: Beat[] = [
     beat('join', '입장', 'work', { notes: 'QR·링크 안내' }),
     ...(cfg.openingDeck ? deckBeats(cfg.openingDeck).map((b) => ({ ...b, id: deckBeatId(cfg.openingDeck!.id, b.id) })) : []),
-    beat('salary', '월급 공개', 'show', { notes: '모두 같은 월급 265만 원' }),
+    ...(cfg.salary === false ? [] : [beat('salary', '월급 공개', 'show', { notes: '모두 같은 월급 265만 원' })]),
     ...(cfg.deck ? deckSlideBeats(cfg.deck, true) : []),
     beat('survey', '소비습관 설문', 'work', { notes: '7문항 한 화면' }),
     beat('survey-result', '설문 결과', 'show', { notes: '분포 없음' }),

@@ -43,8 +43,10 @@ export function navOf(segmentId: string, beatId: string): NavInfo | null {
       return n <= 7 ? { stop: null, who: '최유빈' } : conceptNav(n);
     }
     if (beatId === 'join') return { stop: null, who: '최유빈' }; // 입장 QR(맨 앞) — 출발 전
-    // 원장 11-12: 월급 공개부터 안내 · 12월 결산까지 박태수(사이의 개념 장은 원래 발표자), 발표(순위표)부터 김홍준
-    if (['salary', 'survey', 'survey-result'].includes(beatId)) return { stop: 0, who: '박태수' };
+    // 원장 11-12: 도입 · 설문 · 설문 결과 · 개념 1은 최유빈, 가계부 · 안내 · 12월 결산은 박태수, 발표(순위표)부터 김홍준
+    if (['survey', 'survey-result'].includes(beatId)) return { stop: 0, who: '최유빈' };
+    // 월급 공개는 이 흐름에서 뺐지만, 기본 설정 레슨에서는 게임 시작이라 박태수
+    if (beatId === 'salary') return { stop: 0, who: '박태수' };
     // 안내 카드: 개념 장을 넣은 흐름에서는 15장(AI와 가계부) 뒤 꿀팁 카드 한 장만 남으므로 노선도가 뒤로 가지 않게 그 정거장에 둔다
     if (beatId === 'guide-6') return { stop: 2, who: '박태수' };
     if (beatId.startsWith('guide-')) return { stop: 1, who: '박태수' };

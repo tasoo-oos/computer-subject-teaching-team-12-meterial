@@ -17,6 +17,8 @@ export interface GagyebuConfig {
   deck?: GuideDeck;
   /** 입장 바로 뒤에 둘 도입 덱(선택, 12조). 입장 QR이 수업의 맨 앞에 오게 한다 */
   openingDeck?: DeckManifest;
+  /** 월급 공개 비트 포함 (기본 true). false면 입장(또는 도입 덱) 다음이 바로 설문 안내 장이다 */
+  salary?: boolean;
   /** N월 비트의 공개 토글 (기본 true). false면 reveal 없는 work 비트 */
   monthReveal: boolean;
   /** 발표 비트 포함 (기본 true) */

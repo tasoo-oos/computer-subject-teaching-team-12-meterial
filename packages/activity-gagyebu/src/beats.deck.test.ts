@@ -50,3 +50,15 @@ describe('openingDeck', () => {
     expect(ids2.slice(0, 6)).toEqual(['join', 'deck:intro:s01', 'deck:intro:s03--0', 'deck:intro:s03--1', 'salary', 'deck:concepts:s08']);
   });
 });
+
+describe('월급 공개 · 안내 카드 빼기', () => {
+  it('salary: false · keepGuides: []면 그 비트 없이 흐른다', () => {
+    const ids3 = beats({ ...cfg, salary: false, deck: { manifest: deck, beforeSurvey: ['s08'], keepGuides: [] } }).map((b) => b.id);
+    expect(ids3.slice(0, 9)).toEqual([
+      'join', 'deck:concepts:s08', 'survey', 'survey-result',
+      'deck:concepts:s09', 'deck:concepts:s10--0', 'deck:concepts:s10--1', 'deck:concepts:s15', 'budget',
+    ]);
+    expect(ids3).not.toContain('salary');
+    expect(ids3.filter((i) => /^guide-/.test(i))).toEqual([]);
+  });
+});
