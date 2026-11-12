@@ -13,6 +13,8 @@ import { PromptCopy } from '../../components/PromptCopy.tsx';
 import { AccountsPanel } from '../../components/sim/AccountsPanel.tsx';
 import { ReportStage } from '../../components/sim/ReportStage.tsx';
 import { WaitingScreen } from '../../live/WaitingScreen.tsx';
+import { parseDeckBeat } from '@gagyebu/activity-gagyebu';
+import { SLIDE_H, SLIDE_W, SlideSurface, slideOfBeat } from '../slides/SlideCanvas.tsx';
 import { ActBusyContext } from '../../lib/actBusy.tsx';
 import { actRejectText } from '../../lib/actNotice.ts';
 import { SimFlowContext, type SimFlow } from '../../lib/simFlow.tsx';
@@ -100,6 +102,24 @@ export function Audience({ state, beat, revealed, submitted, mode, dispatch, dra
   // 상태를 못 받은 학생(degraded, §14 S2-#68): 화면이 깨지지 않게 안내만 보여 준다
   if (!state) {
     return <DegradedScreen beat={beat} />;
+  }
+
+  // 12조: 게임 안에 넣은 발표 자료 장(입장 뒤 도입 · 안내 자리 개념) — 폰에도 같은 장을 작게 보이고 앞 화면을 보게 한다
+  const deckBeat = parseDeckBeat(beat.id);
+  if (deckBeat) {
+    const { slideId, step } = slideOfBeat(deckBeat.slideBeatId);
+    return (
+      <div className="paper-texture min-h-dvh">
+        <div className="mx-auto grid max-w-[880px] gap-5 px-5 py-10 sm:px-8">
+          <div className="rounded-panel bg-sheet p-6 shadow-[0_0_0_1px_var(--color-rule)] sm:p-8">
+            <p className="text-[15px] font-semibold text-ink-3">발표 중</p>
+            <h1 className="display mt-2 text-[33px] sm:text-[42px]">앞 화면을 봐 주세요</h1>
+            <p className="mt-3 text-[15px] text-ink-2">선생님이 넘기면 폰 화면도 함께 넘어가요.</p>
+          </div>
+          <FitSlide deckId={deckBeat.deckId} slideId={slideId} step={step} />
+        </div>
+      </div>
+    );
   }
 
   // 12월 결산·발표 비트: 결과 화면이 곧 비트 내용이다(라이브에서는 단계 이동 버튼이 없다)
@@ -196,6 +216,31 @@ function DegradedScreen({ beat }: { beat: Beat }) {
           지금 단계({beat.label})의 내용을 불러오지 못했어요. 수업은 계속 진행되고 다음 단계로 넘어가면 자동으로 이어집니다.
         </p>
       </div>
+    </div>
+  );
+}
+
+/** 12조: 칸 폭에 맞춰 줄어드는 슬라이드(SlideCanvas는 화면 전체를 덮어서 폰 안내 상자 아래에 쓸 수 없다) */
+function FitSlide({ deckId, slideId, step }: { deckId: string; slideId: string; step: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setW(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const scale = w / SLIDE_W;
+  return (
+    <div ref={ref} className="w-full overflow-hidden rounded-panel bg-sheet shadow-[0_0_0_1px_var(--color-rule)]" style={{ height: SLIDE_H * scale }}>
+      {w > 0 ? (
+        <div style={{ width: SLIDE_W, height: SLIDE_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+          <SlideSurface deckId={deckId} slideId={slideId} step={step} />
+        </div>
+      ) : null}
     </div>
   );
 }

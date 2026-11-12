@@ -2,9 +2,8 @@
 // lesson/decks/*.ts는 DeckManifest만 내보낸다.
 import type { GagyebuConfig } from '@gagyebu/activity-gagyebu';
 import type { Lesson } from '@gagyebu/live';
-import { introDeck } from './decks/intro.ts';
+import { conceptsDeck, introDeck, wrapupDeck } from './decks/intro.ts';
 import { sampleDeck } from './decks/sample.ts';
-import { wrapUpDeck } from './decks/wrap-up.ts';
 
 const gagyebuConfig: GagyebuConfig = { guide: true, monthReveal: true, spotlight: true, confirmForce: true };
 
@@ -12,15 +11,19 @@ export const lesson: Lesson = {
   id: 'first-salary',
   title: '내 첫 월급, 1년 살아 보기',
   settings: { showProgressOnStage: false },
+  // 발표 순서(팀 대본): 입장 QR(맨 앞) → 표지 · 팀 · 오프닝 · 학습 목표 · 오늘의 길 → 8장 소비습관 · 설문 · 결과 → 개념 9~15장 → 가계부 · 1년 → 마무리.
+  // 도입 덱은 게임의 입장 바로 뒤(openingDeck), 개념 장은 게임의 「안내」 자리(deck, 태수님 안)에 들어간다. '다음'만 눌러도 이 순서로 흐른다.
+  //  - 월급 공개와 안내 6(꿀팁) 카드는 이 흐름에서 뺀다(salary: false · keepGuides: []).
+  //  - 8장(질문 7개에 답하면 나의 유형은?)은 설문 바로 앞, 9~15장은 설문 결과 뒤.
+  //  - 안내 카드 1~5는 개념 9~13장과 같은 내용이라 빼고, 남길 카드가 없어 guide 비트를 두지 않는다.
   segments: [
-    { kind: 'slides', id: 'intro', deck: introDeck }, // 슬라이드가 들어오기 전까지 slides: [] 로 비워 둠
     {
       kind: 'activity',
       id: 'game',
       activity: 'gagyebu',
-      config: gagyebuConfig,
+      config: { ...gagyebuConfig, salary: false, openingDeck: introDeck, deck: { manifest: conceptsDeck, beforeSurvey: ['s08'], keepGuides: [] } },
     },
-    { kind: 'slides', id: 'wrap-up', deck: wrapUpDeck },
+    { kind: 'slides', id: 'wrap-up', deck: wrapupDeck },
   ],
 };
 
@@ -37,6 +40,6 @@ export const rehearsalLesson: Lesson = {
       activity: 'gagyebu',
       config: gagyebuConfig,
     },
-    { kind: 'slides', id: 'wrap-up', deck: wrapUpDeck },
+    { kind: 'slides', id: 'wrap-up', deck: wrapupDeck },
   ],
 };

@@ -7,6 +7,11 @@
 import type { Beat, BeatRef, ClassState, Lesson, StatsPayload } from '@gagyebu/live';
 import { ACTIVITY_VIEWS } from '../activities/registry.ts';
 import { SlideSurface, slideOfBeat } from '../activities/slides/SlideCanvas.tsx';
+import { navOf } from './navigator.ts';
+import { StageMat, type MatLook } from './StageMat.tsx';
+
+/** TV를 종이 매트(b) 위에 올린다. ?mat=off 면 끄고, ?mat=a|c 는 시안 비교용 */
+const MAT = ((typeof location !== 'undefined' ? new URLSearchParams(location.search).get('mat') : null) ?? 'b') as MatLook | 'off';
 
 export function sameBeat(a: BeatRef, b: BeatRef): boolean {
   return a.segment === b.segment && a.beat === b.beat;
@@ -26,7 +31,20 @@ export interface StageContentProps {
   spotlightName: string | null;
 }
 
-export function StageContent({ classState, lesson, beats, stats, spotlight, spotlightName }: StageContentProps) {
+export function StageContent(props: StageContentProps) {
+  const inner = <StageInner {...props} />;
+  if (MAT === 'off') return inner;
+  const cursor = props.classState.cursor;
+  const beat = props.beats?.[cursor.segment]?.beats[cursor.beat];
+  const seg = props.lesson.segments[cursor.segment];
+  return (
+    <StageMat look={MAT} nav={beat && seg ? navOf(seg.id, beat.id) : null}>
+      {inner}
+    </StageMat>
+  );
+}
+
+function StageInner({ classState, lesson, beats, stats, spotlight, spotlightName }: StageContentProps) {
   const cursor = classState.cursor;
   const beat = beats?.[cursor.segment]?.beats[cursor.beat] ?? null;
   const segment = lesson.segments[cursor.segment] ?? null;

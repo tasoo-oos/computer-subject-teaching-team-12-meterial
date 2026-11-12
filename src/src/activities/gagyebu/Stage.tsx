@@ -31,10 +31,23 @@ import { JoinWall } from '../../stage/JoinWall.tsx';
 import { StageMessage } from '../../stage/StageContent.tsx';
 import { StatTile } from '../../stage/StatTile.tsx';
 import type { StageProps } from '../registry.ts';
+import { LOOK, a2Screen } from './StageLooks.tsx';
+import { parseDeckBeat } from '@gagyebu/activity-gagyebu';
+import { SlideSurface, slideOfBeat } from '../slides/SlideCanvas.tsx';
 
 export function Stage(props: StageProps<GameState | null, GagyebuStats>) {
   const { beat, revealed, stats, spotlight, spotlightName, progress, code } = props;
   const id = beat.id;
+  // 12조: 안내 카드 자리에 넣은 발표 자료 장은 슬라이드 그대로
+  const deckBeat = parseDeckBeat(id);
+  if (deckBeat) {
+    const { slideId, step } = slideOfBeat(deckBeat.slideBeatId);
+    return <SlideSurface deckId={deckBeat.deckId} slideId={slideId} step={step} />;
+  }
+  if (LOOK !== 'old') {
+    const a2 = a2Screen(id, revealed, stats);
+    if (a2) return a2;
+  }
 
   if (id === 'join') {
     if (!code) return <StageMessage title="입장" sub="수업 코드를 확인하는 중이에요" />;
